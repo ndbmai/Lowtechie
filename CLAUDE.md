@@ -2,7 +2,7 @@
 
 Mai Lowtechie là trợ lý AI chief-of-staff cá nhân của Mai. **Nguồn sự thật sản phẩm là `docs/PRD.md` (v0.7)** cùng hai prototype trong `docs/prototypes/`. Khi PRD và code lệch nhau, ưu tiên PRD hoặc hỏi Mai.
 
-Ghi chú một mâu thuẫn nội bộ của PRD v0.7 và cách code xử lý: bảng category §5.2.1 coi "Học tập (tiếng Thái)" là category dưới Cá nhân và thêm dự án "Admin chung", trong khi §5.3 vẫn liệt kê Học tập là dự án mặc định. Code giữ **cả hai**: 7 dự án (6 cũ + Admin chung), Học tập vẫn là dự án riêng không có category — đổi cách nào thì hỏi Mai.
+Quyết định của Mai (21/9/2026), đã sửa bảng §5.2.1 trong PRD cho khớp: **Học tập là dự án riêng** với category Tiếng Thái (`hoctap:tiengthai`), không phải category dưới Cá nhân. Tổng cộng 7 dự án: 5 của mockup + Học tập + Admin chung.
 
 ## Ngôn ngữ & giọng điệu
 

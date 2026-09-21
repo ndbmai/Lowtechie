@@ -42,8 +42,8 @@ export const RULES: Rule[] = [
   // Edge
   [/newsletter|bản tin|viết bài/i, "edge", "edge:vietbai"],
   [/subscriber|intelligent edge|\bedge\b/i, "edge"],
-  // Học tập (giữ theo PRD §5.3 — dự án riêng, không phải category Cá nhân)
-  [/tiếng thái|học tiếng/i, "hoctap"],
+  // Học tập — dự án riêng theo quyết định của Mai (không phải category Cá nhân)
+  [/tiếng thái|học tiếng/i, "hoctap", "hoctap:tiengthai"],
   // Cá nhân
   [/\bspa\b|làm tóc|nail|khám|bác sĩ|gym|yoga/i, "canhan", "canhan:suckhoe"],
   [/\bvisa\b|hộ chiếu|passport|căn cước|giấy tờ/i, "canhan", "canhan:giayto"],

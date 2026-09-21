@@ -317,7 +317,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -329,6 +329,23 @@ export const useStore = create<LowtechieState>()(
           ];
           s.feedback = s.feedback ?? [];
           s.triageImages = s.triageImages ?? {};
+        }
+        if (version < 3) {
+          // v3: Học tập thành dự án riêng — category "canhan:hoctap" cũ
+          // chuyển sang hoctap/hoctap:tiengthai (quyết định của Mai).
+          const remap = <T extends { projectId: Task["projectId"]; categoryId?: string }>(
+            x: T,
+          ): T =>
+            x.categoryId === "canhan:hoctap"
+              ? { ...x, projectId: "hoctap", categoryId: "hoctap:tiengthai" }
+              : x;
+          s.tasks = (s.tasks ?? []).map(remap);
+          s.triage = (s.triage ?? []).map((t) => ({ ...t, draft: remap(t.draft) }));
+          s.feedback = (s.feedback ?? []).map((f) =>
+            f.categoryId === "canhan:hoctap"
+              ? { ...f, projectId: "hoctap", categoryId: "hoctap:tiengthai" }
+              : f,
+          );
         }
         return s as LowtechieState;
       },

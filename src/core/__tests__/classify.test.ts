@@ -42,6 +42,11 @@ describe("phân loại 2 tầng (PRD §5.2.1)", () => {
       projectId: "canhan",
       categoryId: "canhan:giayto",
     });
+    // Học tập là dự án riêng (quyết định của Mai), không phải category Cá nhân.
+    expect(classify("Học tiếng Thái 20 phút")).toMatchObject({
+      projectId: "hoctap",
+      categoryId: "hoctap:tiengthai",
+    });
   });
 
   it("không tín hiệu → Cá nhân, chắc chắn thấp, có 2 lựa chọn thay thế", () => {

@@ -18,7 +18,11 @@ export const DEFAULT_PROJECTS: Project[] = [
   { id: "admin", name: "Admin chung", color: "#7D8AA5", weight: 0, targetHoursPerWeek: 0, goal: "Thuế, hóa đơn, công cụ" },
 ];
 
-/** Category mặc định theo bảng PRD §5.2.1 (Học tập giữ theo §5.3, không có category). */
+/**
+ * Category mặc định theo bảng PRD §5.2.1. Quyết định của Mai (21/9/2026):
+ * Học tập là DỰ ÁN RIÊNG với category Tiếng Thái — không phải category
+ * dưới Cá nhân.
+ */
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: "sorene:sanpham", projectId: "sorene", name: "Sản phẩm" },
   { id: "sorene:goivon", projectId: "sorene", name: "Gọi vốn" },
@@ -37,10 +41,10 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: "edge:phanphoi", projectId: "edge", name: "Phân phối" },
   { id: "edge:congdong", projectId: "edge", name: "Cộng đồng" },
   { id: "canhan:suckhoe", projectId: "canhan", name: "Sức khỏe & làm đẹp" },
-  { id: "canhan:hoctap", projectId: "canhan", name: "Học tập (tiếng Thái)" },
   { id: "canhan:chuyendi", projectId: "canhan", name: "Chuyến đi" },
   { id: "canhan:nhacua", projectId: "canhan", name: "Nhà cửa" },
   { id: "canhan:giayto", projectId: "canhan", name: "Giấy tờ & tài chính cá nhân" },
+  { id: "hoctap:tiengthai", projectId: "hoctap", name: "Tiếng Thái" },
   { id: "admin:thue", projectId: "admin", name: "Thuế & hạn pháp lý" },
   { id: "admin:hoadon", projectId: "admin", name: "Hóa đơn" },
   { id: "admin:congcu", projectId: "admin", name: "Công cụ & tài khoản" },

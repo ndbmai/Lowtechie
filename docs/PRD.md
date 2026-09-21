@@ -128,7 +128,8 @@ flowchart LR
 | The Circle Technology | Khách hàng & bán hàng · Delivery dự án · Đào tạo · Marketing & nội dung · Hợp đồng |
 | Favstay / Favultimate | Khách sạn & vận hành · OTA · Marketing · Đối tác |
 | The Intelligent Edge | Viết bài · Phân phối · Cộng đồng |
-| Cá nhân | Sức khỏe & làm đẹp · Học tập (tiếng Thái) · Chuyến đi · Nhà cửa · Giấy tờ & tài chính cá nhân |
+| Cá nhân | Sức khỏe & làm đẹp · Chuyến đi · Nhà cửa · Giấy tờ & tài chính cá nhân |
+| Học tập | Tiếng Thái |
 | Admin chung | Thuế & hạn pháp lý · Hóa đơn · Công cụ & tài khoản |
 
   Mai thêm, đổi tên, gộp category bằng chat/voice ("tạo category Tuyển dụng cho Circle").
