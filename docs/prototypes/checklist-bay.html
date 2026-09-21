@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checklist bay của Mai</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#EEF1F8;--surface:#fff;--surface-2:#F6F7FC;--ink:#1E2150;--ink-2:#5A5E86;--line:#DDE1EF;--mai:#FFC93C;--mai-deep:#C98C00;--leaf:#2FA97C;--petal:#FF8FA3;--note:#FFF4D6;--note-ink:#6B4A00}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151733;--surface:#1F2247;--surface-2:#282B55;--ink:#F1F2FF;--ink-2:#AEB2D8;--line:#363A6B;--note:#3F3417;--note-ink:#FFE08A;--mai-deep:#FFC93C}}
+:root[data-theme="dark"]{--bg:#151733;--surface:#1F2247;--surface-2:#282B55;--ink:#F1F2FF;--ink-2:#AEB2D8;--line:#363A6B;--note:#3F3417;--note-ink:#FFE08A;--mai-deep:#FFC93C}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+h1,h2,.num{font-family:"Baloo 2","Be Vietnam Pro",system-ui,sans-serif;line-height:1.1;margin:0}
+.wrap{max-width:760px;margin:0 auto;padding:28px 16px 80px}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--mai-deep);outline-offset:2px;border-radius:8px}
+
+header{display:flex;gap:16px;align-items:center}
+header svg{width:72px;height:72px;flex:0 0 72px}
+header h1{font-size:clamp(30px,7vw,44px);font-weight:800}
+header p{color:var(--ink-2);margin:4px 0 0}
+.petal{fill:var(--mai)}
+
+.sticky{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 0 10px;margin-top:16px}
+.progress{display:flex;align-items:center;gap:12px}
+.bar{flex:1;height:14px;border-radius:10px;background:var(--line);overflow:hidden}
+.bar span{display:block;height:100%;width:0;background:var(--leaf);border-radius:10px;transition:width .3s}
+.num{font-size:22px;font-weight:700;min-width:72px;text-align:right}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+.seg{display:flex;background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:3px}
+.seg button{border:0;background:transparent;padding:7px 14px;border-radius:999px;font-weight:600;font-size:14px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.tabs{display:flex;gap:8px}
+.tabs button{border:1.5px solid var(--line);background:var(--surface);padding:7px 14px;border-radius:999px;font-weight:600;font-size:14px}
+.tabs button[aria-selected="true"]{background:var(--mai);border-color:var(--mai);color:#1E2150}
+.reset{margin-left:auto;border:0;background:transparent;color:var(--ink-2);text-decoration:underline;font-size:14px}
+
+section.group{background:var(--surface);border-radius:22px;padding:16px 16px 10px;margin-top:14px;border:1.5px solid var(--line)}
+section.group h2{font-size:22px;font-weight:700;display:flex;justify-content:space-between;align-items:baseline}
+section.group h2 small{font-family:"Be Vietnam Pro",sans-serif;font-size:13px;color:var(--ink-2);font-weight:500}
+.sub{color:var(--ink-2);font-size:14px;margin:2px 0 6px}
+ul{list-style:none;margin:0;padding:0}
+li label{display:flex;gap:12px;align-items:flex-start;padding:10px 4px;border-top:1px solid var(--line);cursor:pointer}
+li:first-child label{border-top:0}
+input[type=checkbox]{appearance:none;width:22px;height:22px;flex:0 0 22px;border:2px solid var(--line);border-radius:8px;margin:1px 0 0;display:grid;place-items:center;background:var(--surface)}
+input[type=checkbox]:checked{background:var(--leaf);border-color:var(--leaf)}
+input[type=checkbox]:checked::after{content:"";width:6px;height:11px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.txt b{font-weight:600}
+.txt .hint{display:block;font-size:13px;color:var(--ink-2)}
+li.done .txt b{text-decoration:line-through;color:var(--ink-2)}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:var(--petal);color:#1E2150;margin-left:6px;vertical-align:2px}
+.del{margin-left:auto;border:0;background:transparent;color:var(--ink-2);font-size:13px}
+
+.add{display:flex;gap:8px;margin-top:6px;padding-top:10px;border-top:1px dashed var(--line)}
+.add input{flex:1;min-width:0;font:inherit;padding:9px 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink)}
+.add button{border:0;background:var(--mai);color:#1E2150;font-weight:700;padding:9px 14px;border-radius:12px}
+
+.note{background:var(--note);color:var(--note-ink);border-radius:16px;padding:12px 14px;margin-top:14px;font-size:14px}
+.hidden{display:none}
+@media (prefers-reduced-motion:reduce){.bar span{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <svg viewBox="0 0 100 100" aria-hidden="true">
+      <g class="petal">
+        <ellipse cx="50" cy="24" rx="17" ry="22"/><ellipse cx="50" cy="24" rx="17" ry="22" transform="rotate(72 50 52)"/><ellipse cx="50" cy="24" rx="17" ry="22" transform="rotate(144 50 52)"/><ellipse cx="50" cy="24" rx="17" ry="22" transform="rotate(216 50 52)"/><ellipse cx="50" cy="24" rx="17" ry="22" transform="rotate(288 50 52)"/>
+      </g>
+      <circle cx="50" cy="52" r="19" fill="#FFF3C4"/><circle cx="43" cy="50" r="3" fill="#1E2150"/><circle cx="57" cy="50" r="3" fill="#1E2150"/>
+      <path d="M44 57 Q50 62 56 57" stroke="#1E2150" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>Checklist bay của Mai</h1>
+      <p>Chọn điểm đến, tick dần. Lần bay sau bấm “Bắt đầu chuyến mới”.</p>
+    </div>
+  </header>
+
+  <div class="sticky">
+    <div class="progress"><div class="bar" aria-hidden="true"><span id="bar"></span></div><span class="num" id="num">0/0</span></div>
+    <div class="controls">
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="pack">Đồ mang theo</button>
+        <button role="tab" aria-selected="false" data-tab="todo">Việc trước khi bay</button>
+      </div>
+      <div class="seg" aria-label="Điểm đến">
+        <button data-dest="tokyo" aria-pressed="true">Tokyo</button>
+        <button data-dest="hcmc" aria-pressed="false">HCMC</button>
+        <button data-dest="bkk" aria-pressed="false">Về Bangkok</button>
+      </div>
+      <button class="reset" id="reset">Bắt đầu chuyến mới</button>
+    </div>
+  </div>
+
+  <main id="root"></main>
+
+  <div class="note">Giấy tờ nhập cảnh (visa, tờ khai điện tử) tùy quốc tịch và thay đổi theo thời gian. Kiểm tra lại trên trang chính thức trước mỗi chuyến.</div>
+</div>
+
+<script>
+const DATA = {
+  pack: [
+    {id:"docs", title:"Giấy tờ", items:[
+      ["Hộ chiếu","Còn hạn ít nhất 6 tháng"],
+      ["Vé máy bay / boarding pass trên điện thoại",""],
+      ["Visa hoặc giấy tờ nhập cảnh nếu cần",""],
+      ["Ảnh chụp hộ chiếu lưu trong điện thoại",""],
+      ["Địa chỉ khách sạn / nơi ở","Bản tiếng địa phương để đưa tài xế"],
+      ["Bảo hiểm du lịch",""],
+      ["Danh thiếp","Nếu có gặp khách, đối tác"],
+      ["Visit Japan Web (mã QR nhập cảnh + hải quan)","",["tokyo"]],
+      ["Mã QR TDAC","Nếu áp dụng cho quốc tịch của Mai",["bkk"]]
+    ]},
+    {id:"tech", title:"Công nghệ & làm việc", items:[
+      ["Laptop + sạc",""],
+      ["Điện thoại + sạc + cáp",""],
+      ["Pin dự phòng","Để hành lý xách tay, không ký gửi"],
+      ["Tai nghe chống ồn",""],
+      ["Ổ cắm chuyển đổi đa năng",""],
+      ["eSIM / SIM data đã kích hoạt",""],
+      ["Tài liệu, slide đã tải offline","Pitch deck, proposal bản PDF"],
+      ["Sổ + bút","Điền tờ khai, ghi chú"],
+      ["Thẻ IC (Suica/Pasmo) trên điện thoại","",["tokyo"]]
+    ]},
+    {id:"money", title:"Tiền & thẻ", items:[
+      ["Thẻ tín dụng + thẻ dự phòng để riêng",""],
+      ["Tiền mặt yên","Nhiều nơi ở Nhật vẫn chỉ nhận tiền mặt",["tokyo"]],
+      ["Tiền mặt đồng","",["hcmc"]],
+      ["Tiền mặt baht cho taxi/xe từ sân bay","",["bkk"]]
+    ]},
+    {id:"beauty", title:"Làm đẹp & cá nhân", items:[
+      ["Túi zip trong suốt cho chất lỏng xách tay","Mỗi chai tối đa 100ml"],
+      ["Skincare: sữa rửa mặt, toner, kem dưỡng",""],
+      ["Kem chống nắng",""],
+      ["Đồ make up",""],
+      ["Xịt khoáng + son dưỡng + mặt nạ","Máy bay rất khô"],
+      ["Bàn chải, kem đánh răng",""],
+      ["Dây buộc tóc, lược",""]
+    ]},
+    {id:"clothes", title:"Quần áo", items:[
+      ["Áo khoác mỏng / khăn choàng mặc trên máy bay",""],
+      ["Quần áo theo thời tiết nơi đến","Xem dự báo 3 ngày trước"],
+      ["Một bộ đi gặp khách",""],
+      ["Đồ ngủ",""],
+      ["Giày đi bộ thoải mái","Ở Tokyo đi bộ nhiều",["tokyo"]],
+      ["Đồ lót, tất",""]
+    ]},
+    {id:"health", title:"Sức khỏe & trên máy bay", items:[
+      ["Thuốc cá nhân","Để hành lý xách tay"],
+      ["Thuốc đau đầu, đau bụng, say xe",""],
+      ["Gối cổ + bịt mắt",""],
+      ["Bình nước rỗng","Đổ đầy sau khi qua an ninh"],
+      ["Khẩu trang, nước rửa tay",""]
+    ]}
+  ],
+  todo: [
+    {id:"w1", title:"1 tuần trước", items:[
+      ["Kiểm tra hạn hộ chiếu và yêu cầu nhập cảnh",""],
+      ["Đặt khách sạn / nơi ở",""],
+      ["Mua bảo hiểm du lịch",""],
+      ["Mua eSIM",""],
+      ["Báo cộng sự lịch vắng, chặn lịch trên Google Calendar",""],
+      ["Dời hoặc chuyển sang online các cuộc họp trùng ngày bay",""],
+      ["Đặt lịch spa / làm tóc nếu muốn trước chuyến",""]
+    ]},
+    {id:"d3", title:"3 ngày trước", items:[
+      ["Điền Visit Japan Web","",["tokyo"]],
+      ["Nộp TDAC (trong vòng 3 ngày trước khi đến)","Nếu áp dụng; chỉ dùng trang chính thức tdac.immigration.go.th, miễn phí",["bkk"]],
+      ["Xem dự báo thời tiết nơi đến",""],
+      ["Giặt đồ cần mang",""],
+      ["Đổi tiền mặt",""],
+      ["Tải bản đồ offline + tài liệu làm việc",""],
+      ["Check-in online khi mở, chọn chỗ ngồi",""]
+    ]},
+    {id:"n0", title:"Tối hôm trước", items:[
+      ["Sạc laptop, điện thoại, pin dự phòng, tai nghe",""],
+      ["Xếp hành lý theo checklist đồ mang theo",""],
+      ["Cân hành lý",""],
+      ["Kiểm tra lại giờ bay, nhà ga",""],
+      ["Tính giờ đi sân bay, đặt báo thức","Chuẩn bị 1 tiếng 30 + di chuyển + có mặt trước 2 tiếng 30"],
+      ["Đặt xe ra sân bay nếu cần",""],
+      ["Thanh toán các hóa đơn sắp đến hạn",""],
+      ["Bật trả lời tự động email nếu đi dài ngày",""]
+    ]},
+    {id:"day", title:"Sáng ngày bay", items:[
+      ["Kiểm tra lần cuối: hộ chiếu, điện thoại, ví",""],
+      ["Kiểm tra chuyến bay có đổi giờ không",""],
+      ["Tắt điện, bình nóng lạnh, điều hòa",""],
+      ["Đổ rác, tưới cây",""],
+      ["Khóa cửa",""]
+    ]},
+    {id:"air", title:"Ở sân bay", items:[
+      ["Có mặt trước giờ bay 2 tiếng 30","Bay quốc tế"],
+      ["Ký gửi hành lý, lấy thẻ lên máy bay",""],
+      ["Đổ đầy bình nước sau an ninh",""],
+      ["Nhắn cho người đón / cộng sự giờ đến",""]
+    ]}
+  ]
+};
+
+const KEY="mai-flight-checklist-v1";
+let state={tab:"pack",dest:"tokyo",done:{},custom:{},removed:{}};
+try{const s=localStorage.getItem(KEY);if(s)state=Object.assign(state,JSON.parse(s));}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+
+const root=document.getElementById("root");
+function itemId(g,i){return g+"::"+i}
+
+function render(){
+  document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===state.tab));
+  document.querySelectorAll("[data-dest]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.dest===state.dest));
+  root.innerHTML="";
+  let total=0,done=0;
+  DATA[state.tab].forEach(g=>{
+    const items=g.items.map((it,i)=>({id:itemId(g.id,i),t:it[0],h:it[1],d:it[2]}))
+      .filter(it=>!it.d||it.d.includes(state.dest))
+      .filter(it=>!state.removed[it.id]);
+    (state.custom[g.id]||[]).forEach(c=>items.push({id:c.id,t:c.t,h:"",custom:true}));
+    const sec=document.createElement("section");sec.className="group";
+    const gdone=items.filter(it=>state.done[it.id]).length;
+    total+=items.length;done+=gdone;
+    sec.innerHTML=`<h2>${g.title}<small>${gdone}/${items.length}</small></h2>`;
+    const ul=document.createElement("ul");
+    items.forEach(it=>{
+      const li=document.createElement("li");if(state.done[it.id])li.className="done";
+      const lab=document.createElement("label");
+      const cb=document.createElement("input");cb.type="checkbox";cb.checked=!!state.done[it.id];
+      cb.addEventListener("change",()=>{state.done[it.id]=cb.checked;save();render();});
+      const span=document.createElement("span");span.className="txt";
+      const b=document.createElement("b");b.textContent=it.t;span.appendChild(b);
+      if(it.d){const t=document.createElement("span");t.className="tag";t.textContent={tokyo:"Tokyo",hcmc:"HCMC",bkk:"Bangkok"}[state.dest];span.appendChild(t);}
+      if(it.h){const h=document.createElement("span");h.className="hint";h.textContent=it.h;span.appendChild(h);}
+      lab.appendChild(cb);lab.appendChild(span);
+      const del=document.createElement("button");del.className="del";del.type="button";del.textContent="Xóa";del.setAttribute("aria-label","Xóa "+it.t);
+      del.addEventListener("click",e=>{e.preventDefault();
+        if(it.custom){state.custom[g.id]=state.custom[g.id].filter(c=>c.id!==it.id);}else{state.removed[it.id]=true;}
+        delete state.done[it.id];save();render();});
+      lab.appendChild(del);
+      li.appendChild(lab);ul.appendChild(li);
+    });
+    sec.appendChild(ul);
+    const add=document.createElement("form");add.className="add";
+    add.innerHTML=`<input aria-label="Thêm vào ${g.title}" placeholder="Thêm món / việc của riêng Mai"><button type="submit">Thêm</button>`;
+    add.addEventListener("submit",e=>{e.preventDefault();const v=add.querySelector("input").value.trim();if(!v)return;
+      (state.custom[g.id]=state.custom[g.id]||[]).push({id:"c"+Date.now(),t:v});save();render();});
+    sec.appendChild(add);
+    root.appendChild(sec);
+  });
+  document.getElementById("num").textContent=done+"/"+total;
+  document.getElementById("bar").style.width=(total?done/total*100:0)+"%";
+}
+document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;save();render();}));
+document.querySelectorAll("[data-dest]").forEach(b=>b.addEventListener("click",()=>{state.dest=b.dataset.dest;save();render();}));
+document.getElementById("reset").addEventListener("click",()=>{if(confirm("Bỏ tick tất cả để bắt đầu chuyến mới? Món Mai tự thêm vẫn được giữ.")){state.done={};save();render();}});
+render();
+</script>
+</body>
+</html>

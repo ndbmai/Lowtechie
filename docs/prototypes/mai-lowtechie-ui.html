@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mai Lowtechie — UI & user flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF1F8; --surface:#FFFFFF; --surface-2:#F6F7FC; --ink:#1E2150; --ink-2:#5A5E86; --line:#DDE1EF;
+  --mai:#FFC93C; --mai-deep:#E8A300; --petal:#FF8FA3; --leaf:#2FA97C;
+  --p-sorene:#8B7BFF; --p-circle:#1FA9B8; --p-fav:#FF8A5B; --p-edge:#3D62E0; --p-me:#FF7FA8;
+  --phone:#1E2150; --shadow:0 18px 40px -18px rgba(30,33,80,.35);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151733; --surface:#1F2247; --surface-2:#282B55; --ink:#F1F2FF; --ink-2:#AEB2D8; --line:#363A6B;
+    --phone:#0C0D22; --shadow:0 18px 40px -18px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151733; --surface:#1F2247; --surface-2:#282B55; --ink:#F1F2FF; --ink-2:#AEB2D8; --line:#363A6B;
+  --phone:#0C0D22; --shadow:0 18px 40px -18px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.55}
+h1,h2,h3,.display{font-family:"Baloo 2","Be Vietnam Pro",system-ui,sans-serif;line-height:1.1;margin:0}
+p{margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding:40px 20px 80px}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--mai-deep);outline-offset:2px;border-radius:8px}
+
+/* Hero */
+.hero{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center;margin-bottom:56px}
+.hero .blossom-xl{width:150px;height:150px}
+.hero h1{font-size:clamp(44px,8vw,84px);font-weight:800;letter-spacing:-.02em}
+.hero p{max-width:60ch;color:var(--ink-2);font-size:18px;margin-top:10px}
+.hero .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.tag{padding:6px 12px;border-radius:999px;background:var(--surface);border:1.5px solid var(--line);font-size:14px;font-weight:600}
+@media (max-width:640px){.hero{grid-template-columns:1fr}.hero .blossom-xl{width:110px;height:110px}}
+
+/* Blossom mascot */
+.blossom .petal{fill:var(--mai)}
+.blossom .core{fill:#FFF3C4}
+.blossom .eye{fill:var(--ink)}
+@media (prefers-reduced-motion:no-preference){
+  .hero .blossom-xl{animation:bloom 1.1s cubic-bezier(.2,1.4,.4,1) both}
+  @keyframes bloom{from{transform:scale(.4) rotate(-40deg);opacity:0}to{transform:none;opacity:1}}
+  .listening .blossom-btn{animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,201,60,.55)}50%{box-shadow:0 0 0 16px rgba(255,201,60,0)}}
+}
+
+/* Section */
+section{margin-top:64px}
+section > h2{font-size:clamp(28px,4vw,40px);font-weight:700}
+section > .lead{color:var(--ink-2);max-width:62ch;margin-top:8px}
+
+/* Tokens */
+.tokens{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:24px}
+.tok{background:var(--surface);border-radius:20px;padding:18px;border:1.5px solid var(--line)}
+.tok h3{font-size:20px;margin-bottom:10px}
+.swatches{display:flex;gap:6px;flex-wrap:wrap}
+.sw{width:38px;height:38px;border-radius:12px;border:1.5px solid rgba(0,0,0,.06)}
+.tok ul{margin:0;padding-left:18px;color:var(--ink-2);font-size:15px}
+
+/* Screens rail */
+.rail{display:flex;gap:28px;overflow-x:auto;scroll-snap-type:x mandatory;padding:28px 4px 20px;margin-top:8px;-webkit-overflow-scrolling:touch}
+.screen{scroll-snap-align:center;flex:0 0 auto;display:flex;flex-direction:column;gap:12px;width:300px}
+.screen .cap h3{font-size:22px}
+.screen .cap p{color:var(--ink-2);font-size:14.5px;margin-top:2px}
+
+.phone{width:300px;height:620px;border-radius:44px;background:var(--phone);padding:10px;box-shadow:var(--shadow)}
+.ui{position:relative;height:100%;border-radius:35px;background:var(--surface-2);overflow:hidden;display:flex;flex-direction:column;font-size:13.5px}
+.status{display:flex;justify-content:space-between;padding:12px 22px 4px;font-size:12px;font-weight:600;color:var(--ink-2)}
+.body{flex:1;overflow:hidden;padding:6px 16px 0;display:flex;flex-direction:column;gap:10px}
+.hdr{display:flex;align-items:center;justify-content:space-between}
+.hdr h4{font-family:"Baloo 2",sans-serif;font-size:24px;margin:0;font-weight:700}
+.muted{color:var(--ink-2)}
+.small{font-size:12px}
+
+.bubble{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border-radius:18px 18px 18px 6px;padding:12px;border:1.5px solid var(--line)}
+.bubble svg{flex:0 0 34px;width:34px;height:34px}
+.bubble .act{display:flex;gap:6px;margin-top:8px}
+.btn{border:0;border-radius:999px;padding:7px 13px;font-weight:600;font-size:12.5px;background:var(--surface-2);border:1.5px solid var(--line)}
+.btn.primary{background:var(--mai);border-color:var(--mai);color:#1E2150}
+.btn.ghost{background:transparent}
+
+.row{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:14px;padding:10px 12px}
+.check{width:20px;height:20px;border-radius:7px;border:2px solid var(--line);flex:0 0 20px}
+.dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px}
+.chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;color:#fff}
+.row .t{flex:1;line-height:1.3}
+.row .t b{font-weight:600;display:block}
+.group-title{font-weight:700;font-size:13px;margin-top:4px}
+
+/* Tab bar */
+.tabbar{display:grid;grid-template-columns:repeat(5,1fr);align-items:end;padding:8px 10px 16px;background:var(--surface);border-top:1.5px solid var(--line);font-size:10.5px;text-align:center;color:var(--ink-2)}
+.tabbar .on{color:var(--ink);font-weight:700}
+.tab-ico{display:block;width:22px;height:22px;margin:0 auto 2px;border-radius:7px;background:var(--line)}
+.tabbar .on .tab-ico{background:var(--ink)}
+.blossom-btn{width:58px;height:58px;margin:-26px auto 0;border-radius:50%;background:var(--mai);display:grid;place-items:center;border:4px solid var(--surface)}
+.blossom-btn svg{width:40px;height:40px}
+
+/* Voice */
+.wave{display:flex;gap:4px;align-items:center;justify-content:center;height:60px}
+.wave i{display:block;width:5px;border-radius:4px;background:var(--mai-deep)}
+.transcript{background:var(--surface);border-radius:16px;padding:12px;font-size:14px;line-height:1.45}
+.parsed{border-radius:14px;padding:10px 12px;background:var(--surface);border-left:5px solid var(--p-circle)}
+.parsed.cal{border-left-color:var(--p-me)}
+.parsed .k{font-size:11px;color:var(--ink-2)}
+
+/* Triage */
+.card{background:var(--surface);border-radius:18px;padding:12px;border:1.5px solid var(--line)}
+.card.top{transform:rotate(-2deg);box-shadow:0 10px 24px -14px rgba(30,33,80,.5)}
+.src{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2)}
+.src .app{width:16px;height:16px;border-radius:5px;background:#0068FF}
+.src .app.wa{background:#25D366}
+.quote{margin-top:8px;padding:8px 10px;background:var(--surface-2);border-radius:10px;font-size:12px;color:var(--ink-2);font-style:italic}
+.meter{height:6px;border-radius:6px;background:var(--line);overflow:hidden;margin-top:8px}
+.meter span{display:block;height:100%;background:var(--leaf)}
+.swipe{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.swipe .btn{text-align:center}
+
+/* Projects */
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.proj{background:var(--surface);border-radius:18px;padding:12px;position:relative}
+.proj .ring{width:46px;height:46px}
+.proj b{display:block;font-family:"Baloo 2",sans-serif;font-size:17px;margin-top:6px}
+.warn{background:#FFF1D0;color:#6B4A00;border-radius:14px;padding:10px 12px;font-size:12.5px}
+:root[data-theme="dark"] .warn{background:#3F3417;color:#FFE08A}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .warn{background:#3F3417;color:#FFE08A}}
+
+/* Calendar */
+.slot{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border-radius:14px;padding:12px;border:2px solid transparent}
+.slot.pick{border-color:var(--mai-deep)}
+.slot .when{font-weight:700}
+.tz{font-size:11.5px;background:var(--surface);border-radius:10px;padding:8px 10px;color:var(--ink-2)}
+
+/* Meeting */
+.rec{display:flex;align-items:center;gap:10px;background:var(--ink);color:#fff;border-radius:16px;padding:10px 12px}
+.rec .red{width:12px;height:12px;border-radius:50%;background:#FF4D6D}
+.rec .time{font-family:"Baloo 2",sans-serif;font-size:20px;margin-left:auto}
+.sec{background:var(--surface);border-radius:14px;padding:10px 12px}
+.sec h5{margin:0 0 4px;font-size:12.5px}
+.sec ul{margin:0;padding-left:16px;font-size:12.5px;line-height:1.45}
+
+/* Review */
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar{display:grid;grid-template-columns:66px 1fr 34px;align-items:center;gap:8px;font-size:12px}
+.track{position:relative;height:12px;border-radius:8px;background:var(--line)}
+.track span{position:absolute;inset:0 auto 0 0;border-radius:8px}
+.track em{position:absolute;top:-3px;bottom:-3px;width:3px;border-radius:2px;background:var(--ink)}
+
+/* Flows */
+.flows{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:24px}
+.flow{background:var(--surface);border-radius:22px;padding:20px;border:1.5px solid var(--line)}
+.flow h3{font-size:22px}
+.flow ol{list-style:none;margin:14px 0 0;padding:0;counter-reset:s;display:flex;flex-direction:column;gap:8px}
+.flow li{counter-increment:s;display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start;font-size:15px}
+.flow li::before{content:counter(s);width:28px;height:28px;border-radius:50%;background:var(--mai);color:#1E2150;font-weight:700;display:grid;place-items:center;font-size:13px}
+.flow li.gate::before{background:var(--ink);color:#fff}
+.flow .note{margin-top:12px;font-size:13.5px;color:var(--ink-2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:14px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:14px;height:14px;border-radius:50%;display:inline-block}
+
+.principles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:24px}
+.pr{padding:4px 0 0;border-top:3px solid var(--mai)}
+.pr h3{font-size:20px;margin-top:10px}
+.pr p{color:var(--ink-2);font-size:15px;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="blossom">
+        <g class="petal">
+          <ellipse cx="50" cy="24" rx="17" ry="22"/>
+          <ellipse cx="50" cy="24" rx="17" ry="22" transform="rotate(72 50 52)"/>
+          <ellipse cx="50" cy="24" rx="17" ry="22" transform="rotate(144 50 52)"/>
+          <ellipse cx="50" cy="24" rx="17" ry="22" transform="rotate(216 50 52)"/>
+          <ellipse cx="50" cy="24" rx="17" ry="22" transform="rotate(288 50 52)"/>
+        </g>
+        <circle class="core" cx="50" cy="52" r="19"/>
+        <circle class="eye" cx="43" cy="50" r="3"/>
+        <circle class="eye" cx="57" cy="50" r="3"/>
+        <path d="M44 57 Q50 62 56 57" stroke="#1E2150" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+        <circle cx="38" cy="57" r="3" fill="#FF8FA3" opacity=".7"/>
+        <circle cx="62" cy="57" r="3" fill="#FF8FA3" opacity=".7"/>
+      </g>
+    </defs>
+  </svg>
+
+  <header class="hero">
+    <svg class="blossom blossom-xl" viewBox="0 0 100 100" role="img" aria-label="Linh vật hoa mai"><use href="#blossom"/></svg>
+    <div>
+      <h1>Mai Lowtechie</h1>
+      <p>Trợ lý chief of staff cho người có quá nhiều dự án. Nói một câu, Lowtechie tự xếp việc vào đúng dự án, giữ lịch, nhặt việc từ group chat và ghi recap cuộc họp.</p>
+      <div class="tags">
+        <span class="tag">Smart, không lạnh lùng</span>
+        <span class="tag">Dễ thương, không trẻ con</span>
+        <span class="tag">Tiếng Việt · ไทย · English</span>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <h2>Hệ thống thiết kế</h2>
+    <p class="lead">Linh vật là một bông hoa mai năm cánh, cũng là nút giao việc ở giữa thanh điều hướng. Mọi thứ khác giữ yên lặng, gọn gàng để bông mai là điểm nhớ duy nhất.</p>
+    <div class="tokens">
+      <div class="tok">
+        <h3>Màu nền tảng</h3>
+        <div class="swatches">
+          <div class="sw" style="background:#FFC93C" title="Vàng mai #FFC93C"></div>
+          <div class="sw" style="background:#1E2150" title="Mực chàm #1E2150"></div>
+          <div class="sw" style="background:#EEF1F8" title="Sương #EEF1F8"></div>
+          <div class="sw" style="background:#FF8FA3" title="Má hồng #FF8FA3"></div>
+          <div class="sw" style="background:#2FA97C" title="Lá #2FA97C"></div>
+        </div>
+        <ul style="margin-top:10px"><li>Vàng mai cho hành động chính</li><li>Mực chàm cho chữ và dữ liệu</li><li>Xanh lá chỉ dùng cho “đã xong”</li></ul>
+      </div>
+      <div class="tok">
+        <h3>Màu dự án</h3>
+        <div class="swatches">
+          <div class="sw" style="background:var(--p-sorene)" title="Sorene"></div>
+          <div class="sw" style="background:var(--p-circle)" title="Circle"></div>
+          <div class="sw" style="background:var(--p-fav)" title="Favstay"></div>
+          <div class="sw" style="background:var(--p-edge)" title="Intelligent Edge"></div>
+          <div class="sw" style="background:var(--p-me)" title="Cá nhân"></div>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--p-sorene)"></i>Sorene</span>
+          <span><i style="background:var(--p-circle)"></i>Circle</span>
+          <span><i style="background:var(--p-fav)"></i>Favstay</span>
+          <span><i style="background:var(--p-edge)"></i>Edge</span>
+          <span><i style="background:var(--p-me)"></i>Cá nhân</span>
+        </div>
+      </div>
+      <div class="tok">
+        <h3>Chữ</h3>
+        <p class="display" style="font-size:30px;font-weight:700">Baloo 2</p>
+        <p class="muted" style="font-size:14px">Tiêu đề, con số, lời của Lowtechie. Tròn, thân thiện.</p>
+        <p style="font-size:20px;font-weight:600;margin-top:8px">Be Vietnam Pro</p>
+        <p class="muted" style="font-size:14px">Nội dung, task, dữ liệu. Thiết kế cho dấu tiếng Việt.</p>
+      </div>
+      <div class="tok">
+        <h3>Giọng nói</h3>
+        <ul><li>Xưng “mình”, gọi “Mai”</li><li>Một câu hỏi mỗi lần</li><li>Đề xuất, không ra lệnh</li><li>Nói thẳng khi Mai đang ôm quá nhiều</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Màn hình chính</h2>
+    <p class="lead">Vuốt ngang để xem. Năm tab: Hôm nay, Dự án, bông mai (giao việc), Lịch, Hộp duyệt. Họp và Weekly review mở từ Hôm nay.</p>
+
+    <div class="rail" tabindex="0" aria-label="Các màn hình ứng dụng">
+
+      <!-- 1 Home -->
+      <div class="screen">
+        <div class="phone"><div class="ui">
+          <div class="status"><span>8:02</span><span>BKK</span></div>
+          <div class="body">
+            <div class="hdr"><div><div class="muted small">Thứ Sáu, 18/9</div><h4>Chào Mai</h4></div></div>
+            <div class="bubble">
+              <svg class="blossom" viewBox="0 0 100 100" aria-hidden="true"><use href="#blossom"/></svg>
+              <div>Hôm nay có 3 việc quan trọng và một khoảng trống 2 tiếng lúc 14:00. Mình giữ chỗ cho pitch deck Sorene nhé?
+                <div class="act"><button class="btn primary">Giữ chỗ</button><button class="btn ghost">Để sau</button></div>
+              </div>
+            </div>
+            <div class="group-title">Ưu tiên hôm nay</div>
+            <div class="row"><span class="check"></span><span class="t"><b>Sửa slide traction</b><span class="chip" style="background:var(--p-sorene)">Sorene</span> <span class="muted small">hạn 17:00</span></span></div>
+            <div class="row"><span class="check"></span><span class="t"><b>Duyệt proposal AIO</b><span class="chip" style="background:var(--p-circle)">Circle</span></span></div>
+            <div class="row"><span class="check"></span><span class="t"><b>Học tiếng Thái 20 phút</b><span class="chip" style="background:var(--p-me)">Cá nhân</span> <span class="muted small">chuỗi 12 ngày</span></span></div>
+            <div class="group-title">Đang chờ người khác</div>
+            <div class="row"><span class="dot" style="background:var(--p-fav)"></span><span class="t"><b>Linh gửi báo cáo OTA</b><span class="muted small">quá hạn 1 ngày, nhắc giúp?</span></span></div>
+          </div>
+          <nav class="tabbar">
+            <div class="on"><span class="tab-ico"></span>Hôm nay</div>
+            <div><span class="tab-ico"></span>Dự án</div>
+            <div><div class="blossom-btn"><svg class="blossom" viewBox="0 0 100 100" aria-hidden="true"><use href="#blossom"/></svg></div></div>
+            <div><span class="tab-ico"></span>Lịch</div>
+            <div><span class="tab-ico"></span>Duyệt</div>
+          </nav>
+        </div></div>
+        <div class="cap"><h3>Hôm nay</h3><p>Brief buổi sáng dạng hội thoại. Top 3, việc chờ người khác, và một đề xuất cụ thể để bấm luôn.</p></div>
+      </div>
+
+      <!-- 2 Voice -->
+      <div class="screen listening">
+        <div class="phone"><div class="ui">
+          <div class="status"><span>12:40</span><span>Đang nghe</span></div>
+          <div class="body">
+            <div class="hdr"><h4>Mai nói đi</h4><span class="muted small">VI · TH · EN</span></div>
+            <div class="wave" aria-hidden="true">
+              <i style="height:18px"></i><i style="height:34px"></i><i style="height:48px"></i><i style="height:26px"></i><i style="height:54px"></i><i style="height:30px"></i><i style="height:42px"></i><i style="height:20px"></i><i style="height:36px"></i><i style="height:14px"></i>
+            </div>
+            <div class="transcript">“Thứ Ba tuần sau nhắc chị gọi anh Tuấn bên OKR về hợp đồng Circle, rồi dời spa sang thứ Năm nha.”</div>
+            <div class="muted small">Mình hiểu thành 2 việc:</div>
+            <div class="parsed"><div class="k">Việc mới</div><b>Gọi anh Tuấn (OKR) về hợp đồng</b><div class="small muted">Circle, thứ Ba 22/9, nhắc 9:00</div></div>
+            <div class="parsed cal"><div class="k">Đổi lịch</div><b>Spa: thứ Tư 16:00 sang thứ Năm 16:00</b><div class="small muted">Thứ Năm 16:00 đang trống</div></div>
+            <div style="display:flex;gap:8px;margin-top:4px"><button class="btn primary" style="flex:1">Lưu cả hai</button><button class="btn" style="flex:1">Sửa</button></div>
+          </div>
+          <nav class="tabbar">
+            <div><span class="tab-ico"></span>Hôm nay</div>
+            <div><span class="tab-ico"></span>Dự án</div>
+            <div><div class="blossom-btn"><svg class="blossom" viewBox="0 0 100 100" aria-hidden="true"><use href="#blossom"/></svg></div></div>
+            <div><span class="tab-ico"></span>Lịch</div>
+            <div><span class="tab-ico"></span>Duyệt</div>
+          </nav>
+        </div></div>
+        <div class="cap"><h3>Giao việc bằng giọng nói</h3><p>Giữ bông mai để nói. Một câu có thể thành nhiều việc; Mai xem lại một lần rồi lưu.</p></div>
+      </div>
+
+      <!-- 3 Triage -->
+      <div class="screen">
+        <div class="phone"><div class="ui">
+          <div class="status"><span>18:30</span><span>7 việc mới</span></div>
+          <div class="body">
+            <div class="hdr"><h4>Hộp duyệt</h4><span class="muted small">1 / 7</span></div>
+            <p class="muted small">Việc mình nhặt được từ chat hôm nay. Mai duyệt thì mới vào danh sách.</p>
+            <div class="card top">
+              <div class="src"><span class="app"></span>Zalo, nhóm Favstay Ops, 15:12</div>
+              <b style="display:block;margin-top:6px;font-size:15px">Gửi báo cáo OTA tháng 9 cho khách sạn Rạng Đông</b>
+              <div class="small" style="margin-top:4px">Người làm: <b>Linh</b> · Hạn: <b>thứ Hai 21/9</b></div>
+              <div class="quote">“ok chị, thứ 2 em gửi bản OTA tháng 9 cho bên Rạng Đông nha”</div>
+              <div class="meter" aria-label="Độ tin cậy 86%"><span style="width:86%"></span></div>
+              <div class="muted small" style="margin-top:4px">Chắc chắn 86%</div>
+            </div>
+            <div class="card" style="opacity:.6">
+              <div class="src"><span class="app wa"></span>WhatsApp, Sorene founders</div>
+              <b style="display:block;margin-top:6px">Chốt danh sách 20 người cho cohort 1</b>
+            </div>
+            <div class="swipe"><button class="btn">Bỏ</button><button class="btn">Sửa</button><button class="btn primary">Nhận</button></div>
+          </div>
+          <nav class="tabbar">
+            <div><span class="tab-ico"></span>Hôm nay</div>
+            <div><span class="tab-ico"></span>Dự án</div>
+            <div><div class="blossom-btn"><svg class="blossom" viewBox="0 0 100 100" aria-hidden="true"><use href="#blossom"/></svg></div></div>
+            <div><span class="tab-ico"></span>Lịch</div>
+            <div class="on"><span class="tab-ico"></span>Duyệt</div>
+          </nav>
+        </div></div>
+        <div class="cap"><h3>Hộp duyệt</h3><p>Vuốt trái bỏ, phải nhận. Luôn kèm trích dẫn gốc và độ chắc chắn để Mai tin được.</p></div>
+      </div>
+
+      <!-- 4 Projects -->
+      <div class="screen">
+        <div class="phone"><div class="ui">
+          <div class="status"><span>9:15</span><span>Tuần 38</span></div>
+          <div class="body">
+            <div class="hdr"><h4>Dự án</h4><span class="muted small">thời gian tuần này</span></div>
+            <div class="pgrid">
+              <div class="proj"><svg class="ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="var(--line)" stroke-width="5"/><circle cx="18" cy="18" r="15" fill="none" stroke="var(--p-sorene)" stroke-width="5" stroke-dasharray="75 100" pathLength="100" transform="rotate(-90 18 18)" stroke-linecap="round"/></svg><b>Sorene</b><span class="small muted">8h / mục tiêu 16h</span></div>
+              <div class="proj"><svg class="ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="var(--line)" stroke-width="5"/><circle cx="18" cy="18" r="15" fill="none" stroke="var(--p-circle)" stroke-width="5" stroke-dasharray="100 100" pathLength="100" transform="rotate(-90 18 18)"/></svg><b>Circle</b><span class="small muted">14h / mục tiêu 12h</span></div>
+              <div class="proj"><svg class="ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="var(--line)" stroke-width="5"/><circle cx="18" cy="18" r="15" fill="none" stroke="var(--p-fav)" stroke-width="5" stroke-dasharray="60 100" pathLength="100" transform="rotate(-90 18 18)" stroke-linecap="round"/></svg><b>Favstay</b><span class="small muted">5h / mục tiêu 8h</span></div>
+              <div class="proj"><svg class="ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="var(--line)" stroke-width="5"/><circle cx="18" cy="18" r="15" fill="none" stroke="var(--p-edge)" stroke-width="5" stroke-dasharray="40 100" pathLength="100" transform="rotate(-90 18 18)" stroke-linecap="round"/></svg><b>Edge</b><span class="small muted">2h / mục tiêu 4h</span></div>
+            </div>
+            <div class="warn">Circle đang lấn sang Sorene 2 tuần liền. Muốn mình khóa 2 buổi sáng tuần sau cho Sorene không?</div>
+            <div class="row"><span class="dot" style="background:var(--p-me)"></span><span class="t"><b>Cá nhân</b><span class="muted small">Tiếng Thái 5/7 buổi · spa thứ Năm</span></span></div>
+          </div>
+          <nav class="tabbar">
+            <div><span class="tab-ico"></span>Hôm nay</div>
+            <div class="on"><span class="tab-ico"></span>Dự án</div>
+            <div><div class="blossom-btn"><svg class="blossom" viewBox="0 0 100 100" aria-hidden="true"><use href="#blossom"/></svg></div></div>
+            <div><span class="tab-ico"></span>Lịch</div>
+            <div><span class="tab-ico"></span>Duyệt</div>
+          </nav>
+        </div></div>
+        <div class="cap"><h3>Dự án</h3><p>Vòng tròn là thời gian thật so với mục tiêu Mai đặt. Lowtechie lên tiếng khi một dự án bị bỏ đói.</p></div>
+      </div>
+
+      <!-- 5 Calendar -->
+      <div class="screen">
+        <div class="phone"><div class="ui">
+          <div class="status"><span>10:05</span><span>Lịch</span></div>
+          <div class="body">
+            <div class="hdr"><h4>Tìm giờ</h4></div>
+            <div class="bubble">
+              <svg class="blossom" viewBox="0 0 100 100" aria-hidden="true"><use href="#blossom"/></svg>
+              <div><b>Deep work: pitch deck Sorene</b><br><span class="muted small">Cần 2 tiếng, trước thứ Sáu</span></div>
+            </div>
+            <div class="slot pick"><div><div class="when">Thứ Ba, 9:00–11:00</div><div class="small muted">Buổi sáng, ít họp nhất tuần</div></div><span class="chip" style="background:var(--leaf)">Gợi ý</span></div>
+            <div class="slot"><div><div class="when">Thứ Tư, 14:00–16:00</div><div class="small muted">Giờ Tokyo, sau chuyến bay</div></div></div>
+            <div class="slot"><div><div class="when">Thứ Năm, 8:00–10:00</div><div class="small muted">Trước spa, hơi sát</div></div></div>
+            <div class="tz">Thứ Tư Mai ở Tokyo nên mình đã tính theo giờ JST. Lịch Google vẫn lưu đúng múi giờ.</div>
+            <button class="btn primary" style="padding:11px">Đặt thứ Ba 9:00</button>
+          </div>
+          <nav class="tabbar">
+            <div><span class="tab-ico"></span>Hôm nay</div>
+            <div><span class="tab-ico"></span>Dự án</div>
+            <div><div class="blossom-btn"><svg class="blossom" viewBox="0 0 100 100" aria-hidden="true"><use href="#blossom"/></svg></div></div>
+            <div class="on"><span class="tab-ico"></span>Lịch</div>
+            <div><span class="tab-ico"></span>Duyệt</div>
+          </nav>
+        </div></div>
+        <div class="cap"><h3>Đặt lịch có duyệt</h3><p>Ba lựa chọn kèm lý do. Không có gì ghi vào lịch cho đến khi Mai bấm.</p></div>
+      </div>
+
+      <!-- 6 Meeting -->
+      <div class="screen">
+        <div class="phone"><div class="ui">
+          <div class="status"><span>16:48</span><span>Họp</span></div>
+          <div class="body">
+            <div class="rec"><span class="red"></span><div><b>Họp offline với OKR</b><div class="small" style="opacity:.8">Đã báo mọi người đang ghi âm</div></div><span class="time">42:10</span></div>
+            <div class="hdr"><h4>Recap</h4><span class="muted small">soạn xong 30 giây</span></div>
+            <div class="sec"><h5>Tóm tắt</h5><p style="font-size:12.5px">OKR đồng ý thử gói đào tạo AIO cho 2 phòng ban, bắt đầu tháng 10.</p></div>
+            <div class="sec"><h5>Quyết định</h5><ul><li>Pilot 6 tuần, 2 phòng ban</li><li>Circle gửi báo giá trước 25/9</li></ul></div>
+            <div class="sec"><h5>Việc cần làm</h5><ul><li><b>Mai</b>: gửi báo giá, 25/9</li><li><b>Anh Tuấn</b>: danh sách học viên, 30/9</li></ul></div>
+            <div class="sec"><h5>Còn bỏ ngỏ</h5><ul><li>Ai duyệt ngân sách bên OKR?</li></ul></div>
+            <div style="display:flex;gap:8px"><button class="btn primary" style="flex:1">Lưu việc</button><button class="btn" style="flex:1">Gửi recap</button></div>
+          </div>
+          <nav class="tabbar">
+            <div class="on"><span class="tab-ico"></span>Hôm nay</div>
+            <div><span class="tab-ico"></span>Dự án</div>
+            <div><div class="blossom-btn"><svg class="blossom" viewBox="0 0 100 100" aria-hidden="true"><use href="#blossom"/></svg></div></div>
+            <div><span class="tab-ico"></span>Lịch</div>
+            <div><span class="tab-ico"></span>Duyệt</div>
+          </nav>
+        </div></div>
+        <div class="cap"><h3>Họp và recap</h3><p>Online: Lowtechie vào Meet/Zoom/Teams như một thành viên. Offline: ghi âm trên điện thoại. Cùng một mẫu recap.</p></div>
+      </div>
+
+      <!-- 7 Weekly review -->
+      <div class="screen">
+        <div class="phone"><div class="ui">
+          <div class="status"><span>CN 19:00</span><span>Review</span></div>
+          <div class="body">
+            <div class="hdr"><h4>Tuần 38</h4><span class="muted small">12 xong · 4 dời</span></div>
+            <div class="bars">
+              <div class="bar"><span>Sorene</span><div class="track"><span style="width:38%;background:var(--p-sorene)"></span><em style="left:76%"></em></div><span>8h</span></div>
+              <div class="bar"><span>Circle</span><div class="track"><span style="width:66%;background:var(--p-circle)"></span><em style="left:57%"></em></div><span>14h</span></div>
+              <div class="bar"><span>Favstay</span><div class="track"><span style="width:24%;background:var(--p-fav)"></span><em style="left:38%"></em></div><span>5h</span></div>
+              <div class="bar"><span>Edge</span><div class="track"><span style="width:10%;background:var(--p-edge)"></span><em style="left:19%"></em></div><span>2h</span></div>
+            </div>
+            <p class="muted small">Vạch đậm là mục tiêu Mai đặt.</p>
+            <div class="bubble">
+              <svg class="blossom" viewBox="0 0 100 100" aria-hidden="true"><use href="#blossom"/></svg>
+              <div>Nói thẳng nhé: 3 việc này đã dời 3 lần. Bỏ hoặc giao đi thì tuần sau nhẹ hơn 5 tiếng.</div>
+            </div>
+            <div class="row"><span class="dot" style="background:var(--p-edge)"></span><span class="t"><b>Viết lại trang About của Edge</b></span><button class="btn">Bỏ</button></div>
+            <div class="row"><span class="dot" style="background:var(--p-circle)"></span><span class="t"><b>Dọn thư mục proposal cũ</b></span><button class="btn">Giao</button></div>
+            <div class="row"><span class="dot" style="background:var(--p-fav)"></span><span class="t"><b>Ebook revenue chương 4</b></span><button class="btn">Hoãn</button></div>
+          </div>
+          <nav class="tabbar">
+            <div class="on"><span class="tab-ico"></span>Hôm nay</div>
+            <div><span class="tab-ico"></span>Dự án</div>
+            <div><div class="blossom-btn"><svg class="blossom" viewBox="0 0 100 100" aria-hidden="true"><use href="#blossom"/></svg></div></div>
+            <div><span class="tab-ico"></span>Lịch</div>
+            <div><span class="tab-ico"></span>Duyệt</div>
+          </nav>
+        </div></div>
+        <div class="cap"><h3>Weekly review</h3><p>Thời gian thật so với mục tiêu, và danh sách việc nên bỏ. Đây là màn hình giúp Mai nói “không”.</p></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>User flow</h2>
+    <p class="lead">Bước màu đen là điểm Mai duyệt. Không có hành động nào ra ngoài (ghi lịch, gửi tin, gửi recap) mà không qua một bước đen.</p>
+    <div class="flows">
+      <div class="flow">
+        <h3>Giao việc nhanh</h3>
+        <ol>
+          <li>Giữ bông mai, nói hoặc gõ</li>
+          <li>Lowtechie tách thành việc, gắn dự án, hạn, ưu tiên</li>
+          <li>Thiếu thông tin quan trọng thì hỏi đúng một câu</li>
+          <li class="gate">Mai xem thẻ tóm tắt, bấm Lưu</li>
+          <li>Việc có hạn lớn được đề xuất khung giờ làm</li>
+        </ol>
+      </div>
+      <div class="flow">
+        <h3>Group chat thành việc</h3>
+        <ol>
+          <li>Bot trong group (đã được mọi người biết) đọc tin nhắn</li>
+          <li>Cuối ngày hoặc khi có @Lowtechie: tóm tắt, trích việc, quyết định</li>
+          <li>Việc vào Hộp duyệt kèm trích dẫn gốc</li>
+          <li class="gate">Mai nhận, sửa hoặc bỏ</li>
+          <li>Việc của cộng sự hiện trong app của họ; quá hạn thì nhắc</li>
+        </ol>
+      </div>
+      <div class="flow">
+        <h3>Recap cuộc họp</h3>
+        <ol>
+          <li>Lịch có link Meet/Zoom: Lowtechie hỏi trước có tham dự không</li>
+          <li>Họp offline: bấm Ghi âm, xác nhận đã báo mọi người</li>
+          <li>Chép lời, tách người nói, soạn recap</li>
+          <li class="gate">Mai duyệt việc và bản recap</li>
+          <li>Lưu vào Drive theo dự án; gửi recap vào group nếu Mai chọn</li>
+        </ol>
+      </div>
+      <div class="flow">
+        <h3>Nhịp ngày và tuần</h3>
+        <ol>
+          <li>Sáng: brief trong app và qua Zalo/WhatsApp</li>
+          <li>Trong ngày: nhắc việc chờ người khác</li>
+          <li>Tối: việc xong, việc dời, chuẩn bị cho mai</li>
+          <li class="gate">Chủ nhật: Mai quyết bỏ, giao hoặc hoãn</li>
+          <li>Tuần mới: lịch được khóa theo trọng số dự án</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Nguyên tắc UX</h2>
+    <div class="principles">
+      <div class="pr"><h3>Mười giây</h3><p>Giao một việc không bao giờ quá mười giây. Mọi thứ khác có thể để sau.</p></div>
+      <div class="pr"><h3>Duyệt trước, tự động sau</h3><p>Bắt đầu với mọi hành động cần duyệt. Mở tự động dần cho từng loại khi Lowtechie đã đúng đủ nhiều.</p></div>
+      <div class="pr"><h3>Luôn có nguồn</h3><p>Mọi việc trích tự động đều dẫn về tin nhắn hoặc đoạn ghi âm gốc.</p></div>
+      <div class="pr"><h3>Dễ thương nhưng thật thà</h3><p>Giọng vui vẻ, nhưng nói thẳng khi lịch quá tải hay một dự án bị bỏ quên.</p></div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
