@@ -120,7 +120,10 @@ export default function TodayPage() {
           {brief.todayEvents.map((e) => (
             <div className={`block-line${e.kind !== "event" ? " faded" : ""}`} key={e.id}>
               <span className="time">{fmtRange(e.startAt, e.endAt)}</span>
-              <span style={{ minWidth: 0 }}>{e.title}</span>
+              <span style={{ minWidth: 0 }}>
+                {e.title}
+                {e.location ? <span className="muted small"> · {e.location}</span> : null}
+              </span>
             </div>
           ))}
         </>

@@ -126,7 +126,7 @@ export default function CapturePage() {
           const start = new Date(a.startAt);
           const end = new Date(start.getTime() + (a.durationMinutes ?? 60) * 60_000);
           addEvent({
-            title: a.title + (a.location ? ` · ${a.location}` : ""),
+            title: a.title,
             startAt: start.toISOString(),
             endAt: end.toISOString(),
             location: a.location,

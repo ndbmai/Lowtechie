@@ -140,6 +140,8 @@ describe("parseCommand — ví dụ trong PRD/mockup", () => {
     expect(a.startAt).toBe(local(2026, 9, 18, 19, 0));
     expect(a.location).toBe("Thonglor");
     expect(a.mode).toBe("transit");
+    // Địa điểm tách riêng rồi thì tiêu đề không lặp lại nữa.
+    expect(a.title).not.toMatch(/Thonglor/);
   });
 
   it("PRD §4.2: dời spa + book 2 tiếng deep work", () => {

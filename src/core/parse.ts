@@ -225,7 +225,10 @@ function parseClause(clause: string, now: Date): ParsedAction {
       ? Math.round(parseFloat(dur[1].replace(",", ".")) * (dur[2] === "phút" ? 1 : 60))
       : undefined;
 
-    let title = stripSpans(clause, when.spans)
+    let title = stripSpans(clause, when.spans);
+    // Địa điểm đã tách riêng → gỡ "ở X" khỏi tiêu đề, tránh lặp khi hiển thị.
+    if (loc) title = title.replace(loc[0], " ");
+    title = title
       .replace(MODE_TRANSIT_RE, "")
       .replace(MODE_CAR_RE, "")
       .replace(/\bđi\s*,?\s*$/i, "")
