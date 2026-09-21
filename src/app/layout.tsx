@@ -8,7 +8,8 @@ export const metadata: Metadata = {
   description:
     "Trợ lý chief of staff của Mai: giao việc một câu, giữ lịch, tính giờ chuẩn bị + di chuyển, checklist bay.",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/icon.svg" },
+  icons: { icon: "/icon.svg", apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Lowtechie" },
 };
 
 export const viewport: Viewport = {
