@@ -1,6 +1,8 @@
 # CLAUDE.md — hướng dẫn làm việc trong repo này
 
-Mai Lowtechie là trợ lý AI chief-of-staff cá nhân của Mai. **Nguồn sự thật sản phẩm là `docs/PRD.md` (v0.5)** cùng hai prototype trong `docs/prototypes/`. Khi PRD và code lệch nhau, ưu tiên PRD hoặc hỏi Mai.
+Mai Lowtechie là trợ lý AI chief-of-staff cá nhân của Mai. **Nguồn sự thật sản phẩm là `docs/PRD.md` (v0.7)** cùng hai prototype trong `docs/prototypes/`. Khi PRD và code lệch nhau, ưu tiên PRD hoặc hỏi Mai.
+
+Ghi chú một mâu thuẫn nội bộ của PRD v0.7 và cách code xử lý: bảng category §5.2.1 coi "Học tập (tiếng Thái)" là category dưới Cá nhân và thêm dự án "Admin chung", trong khi §5.3 vẫn liệt kê Học tập là dự án mặc định. Code giữ **cả hai**: 7 dự án (6 cũ + Admin chung), Học tập vẫn là dự án riêng không có category — đổi cách nào thì hỏi Mai.
 
 ## Ngôn ngữ & giọng điệu
 
@@ -19,6 +21,7 @@ npm run build    # bắt buộc xanh trước khi push
 ## Kiến trúc hiện tại (Giai đoạn 1, local-first)
 
 - **`src/core/` là logic thuần**: không import React, không gọi mạng, mọi thời điểm là chuỗi ISO. Mỗi file có unit test trong `src/core/__tests__/`. Thêm logic mới → thêm test.
+- **Phân loại (PRD §5.2.1)**: bảng luật duy nhất là `RULES` trong `src/core/classify.ts` — `parse.detectProject` cũng lấy từ đây, đừng tạo bảng từ khóa thứ hai. Category mặc định ở `DEFAULT_CATEGORIES` (`src/core/projects.ts`). Học từ sửa đổi: mọi chỗ Mai đổi dự án/category phải gọi `recordFeedback(learnableTerms(title) → entries)`; `classify()` với feedback thắng luật. Ảnh nguồn của nhóm triage lưu tạm trong `triageImages` và bị xóa khi nhóm duyệt xong — đừng giữ ảnh lâu trong localStorage.
 - **Store**: Zustand + persist vào `localStorage` (key `lowtechie-v1`), xem `src/lib/store.ts`. Ngày giờ lưu dạng ISO string, không lưu `Date`. Đây là chỗ sẽ thay bằng Supabase (+RLS) ở Giai đoạn 3 — giữ mọi truy cập dữ liệu đi qua store, đừng đọc localStorage trực tiếp.
 - **Màn hình** trong `src/app/` là client component; mọi màn hình phải render được khi store rỗng (empty state tử tế).
 - **`/api/parse`**: proxy Claude API (fetch trực tiếp, không SDK) khi có `ANTHROPIC_API_KEY`; không có key thì trả 501 và **client tự chạy `src/core/parse.ts` trên trình duyệt** — cố ý như vậy để ngày giờ tính theo múi giờ của Mai chứ không phải server (UTC). Model qua env `LOWTECHIE_MODEL`, mặc định `claude-sonnet-5`.
@@ -27,7 +30,7 @@ npm run build    # bắt buộc xanh trước khi push
 ## Design system
 
 - Token màu ở `src/app/globals.css`, lấy đúng từ mockup: vàng mai `#FFC93C` (hành động chính), mực chàm `#1E2150` (chữ/dữ liệu), nền sương `#EEF1F8`, má hồng `#FF8FA3`, xanh lá `#2FA97C` **chỉ dành cho "đã xong"**.
-- Màu dự án cố định: Sorene `#8B7BFF` · Circle `#1FA9B8` · Favstay `#FF8A5B` · Edge `#3D62E0` · Cá nhân `#FF7FA8` · Học tập `#7C9A3E` (màu Học tập không có trong mockup, đã chọn thêm).
+- Màu dự án cố định: Sorene `#8B7BFF` · Circle `#1FA9B8` · Favstay `#FF8A5B` · Edge `#3D62E0` · Cá nhân `#FF7FA8` · Học tập `#7C9A3E` · Admin chung `#7D8AA5` (hai màu cuối không có trong mockup, đã chọn thêm).
 - Chữ: Baloo 2 (tiêu đề, số, lời Lowtechie), Be Vietnam Pro (nội dung). Dark mode theo `prefers-color-scheme` + override `data-theme`.
 - Linh vật bông mai: component `src/components/Blossom.tsx` (SVG 5 cánh mặt cười, lấy từ prototype). Bông mai cũng là nút giao việc giữa tab bar.
 

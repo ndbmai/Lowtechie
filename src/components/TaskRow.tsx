@@ -1,7 +1,7 @@
 "use client";
 
 import type { Project, Task } from "@/core/types";
-import { projectById } from "@/core/projects";
+import { categoryName, projectById } from "@/core/projects";
 import { fmtRelativeDay, fmtTime } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -32,6 +32,7 @@ export function TaskRow({ task, showDue = true }: { task: Task; showDue?: boolea
         <b>{task.title}</b>
         <span className="small muted">
           <ProjectChip project={p} />
+          {categoryName(task.categoryId) ? ` ${categoryName(task.categoryId)} ·` : ""}
           {showDue && task.dueAt && (
             <>
               {" "}

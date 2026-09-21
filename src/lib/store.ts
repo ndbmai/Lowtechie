@@ -5,6 +5,7 @@ import { persist } from "zustand/middleware";
 import type {
   CalEvent,
   Destination,
+  FeedbackEntry,
   Project,
   Task,
   TriageItem,
@@ -35,6 +36,10 @@ interface LowtechieState {
   trips: Trip[];
   /** Món checklist Mai tự thêm, học cho các chuyến sau cùng điểm đến. */
   learnedItems: Record<Destination, { groupId: string; text: string }[]>;
+  /** Học từ sửa phân loại (classification_feedback, PRD §5.2.1). */
+  feedback: FeedbackEntry[];
+  /** Ảnh nguồn của nhóm triage đang chờ; xóa khi nhóm được duyệt hết. */
+  triageImages: Record<string, string>;
   pendingBlock?: PendingBlock;
   settings: {
     /** Đi bộ nhà → BTS Bang Na, đo một lần rồi lưu (PRD §5.4.1). */
@@ -49,8 +54,14 @@ interface LowtechieState {
   delegateTask: (id: string, person: string) => void;
 
   addTriage: (draft: TaskDraft) => void;
+  /** Thêm cả nhóm dòng trích từ một ảnh, kèm ảnh nguồn (PRD §5.1.1). */
+  addTriageGroup: (drafts: TaskDraft[], image?: string) => string;
   acceptTriage: (id: string) => void;
   dismissTriage: (id: string) => void;
+  acceptGroup: (groupId: string) => void;
+  dismissGroup: (groupId: string) => void;
+  /** Ghi lại sửa đổi phân loại để lần sau xếp đúng (PRD §5.2.1). */
+  recordFeedback: (entries: FeedbackEntry[]) => void;
 
   addEvent: (ev: Omit<CalEvent, "id">) => CalEvent;
   addEvents: (evs: Omit<CalEvent, "id">[]) => void;
@@ -74,6 +85,20 @@ function uid(): string {
     : `id-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Gỡ thẻ triage; nhóm nào hết thẻ thì xóa luôn ảnh nguồn (đỡ đầy localStorage). */
+function removeTriage(
+  s: Pick<LowtechieState, "triage" | "triageImages">,
+  ids: string[],
+): Pick<LowtechieState, "triage" | "triageImages"> {
+  const gone = new Set(ids);
+  const triage = s.triage.filter((x) => !gone.has(x.id));
+  const liveGroups = new Set(triage.map((x) => x.groupId).filter(Boolean));
+  const triageImages = Object.fromEntries(
+    Object.entries(s.triageImages).filter(([g]) => liveGroups.has(g)),
+  );
+  return { triage, triageImages };
+}
+
 export const useStore = create<LowtechieState>()(
   persist(
     (set, get) => ({
@@ -83,6 +108,8 @@ export const useStore = create<LowtechieState>()(
       events: [],
       trips: [],
       learnedItems: { tokyo: [], hcmc: [], bkk: [] },
+      feedback: [],
+      triageImages: {},
       pendingBlock: undefined,
       settings: { walkToStationMin: 12, defaultPrepMinutes: 90 },
 
@@ -136,14 +163,42 @@ export const useStore = create<LowtechieState>()(
         set((s) => ({
           triage: [...s.triage, { id: uid(), draft, receivedAt: new Date().toISOString() }],
         })),
+      addTriageGroup: (drafts, image) => {
+        const groupId = uid();
+        const now = new Date().toISOString();
+        set((s) => ({
+          triage: [
+            ...s.triage,
+            ...drafts.map((draft) => ({ id: uid(), draft, receivedAt: now, groupId })),
+          ],
+          triageImages: image ? { ...s.triageImages, [groupId]: image } : s.triageImages,
+        }));
+        return groupId;
+      },
       acceptTriage: (id) => {
         const item = get().triage.find((x) => x.id === id);
         if (!item) return;
         get().addTask(item.draft);
-        set((s) => ({ triage: s.triage.filter((x) => x.id !== id) }));
+        set((s) => removeTriage(s, [id]));
       },
-      dismissTriage: (id) =>
-        set((s) => ({ triage: s.triage.filter((x) => x.id !== id) })),
+      dismissTriage: (id) => set((s) => removeTriage(s, [id])),
+      acceptGroup: (groupId) => {
+        const items = get().triage.filter((x) => x.groupId === groupId);
+        for (const it of items) get().addTask(it.draft);
+        set((s) => removeTriage(s, items.map((it) => it.id)));
+      },
+      dismissGroup: (groupId) =>
+        set((s) =>
+          removeTriage(s, s.triage.filter((x) => x.groupId === groupId).map((x) => x.id)),
+        ),
+      recordFeedback: (entries) =>
+        set((s) => ({
+          feedback: [
+            // Term dạy lại sau thay term cũ.
+            ...s.feedback.filter((f) => !entries.some((e) => e.term === f.term)),
+            ...entries,
+          ],
+        })),
 
       addEvent: (ev) => {
         const e: CalEvent = { ...ev, id: uid() };
@@ -262,6 +317,21 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
+      version: 2,
+      migrate: (persisted, version) => {
+        const s = persisted as Partial<LowtechieState>;
+        if (version < 2) {
+          // v2: thêm dự án Admin chung + feedback phân loại + ảnh triage.
+          const existing = new Set((s.projects ?? []).map((p) => p.id));
+          s.projects = [
+            ...(s.projects ?? []),
+            ...DEFAULT_PROJECTS.filter((p) => !existing.has(p.id)),
+          ];
+          s.feedback = s.feedback ?? [];
+          s.triageImages = s.triageImages ?? {};
+        }
+        return s as LowtechieState;
+      },
     },
   ),
 );

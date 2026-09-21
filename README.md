@@ -4,7 +4,7 @@ Trợ lý AI chief-of-staff cá nhân cho Mai — người vận hành song song
 
 Tài liệu gốc:
 
-- [PRD v0.5](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
+- [PRD v0.7](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
 - [Mockup UI & user flow](docs/prototypes/mai-lowtechie-ui.html) — hệ thống thiết kế + 7 màn hình
 - [Checklist bay](docs/prototypes/checklist-bay.html) — nguyên mẫu module Chuyến đi (§5.9)
 
@@ -29,6 +29,7 @@ cp .env.example .env.local
 ```
 src/core/        Logic thuần, có unit test — không phụ thuộc UI hay dịch vụ ngoài
   parse.ts         Tách 1 câu chat/voice thành nhiều hành động (VI, fallback khi không có API key)
+  classify.ts      Phân loại 2 tầng Dự án → Category §5.2.1: luật + học từ sửa đổi + bắt trùng
   timeback.ts      Chuỗi tính ngược §5.4.1: chuẩn bị → di chuyển (BTS/ô tô) → hẹn; chuỗi ngày bay
   priority.ts      Điểm ưu tiên §5.2: deadline, trọng số dự án, đang chặn ai, năng lượng
   checklist.ts     Mẫu checklist bay theo điểm đến (Tokyo / HCMC / về Bangkok) + việc trước khi bay
@@ -48,6 +49,9 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Design system từ mockup (vàng mai / mực chàm, Baloo 2 + Be Vietnam Pro, dark mode)
 - [x] Task engine + triage inbox (nguồn gốc + độ tin cậy trên từng thẻ)
 - [x] Giao việc bằng chat & voice (Web Speech; 1 câu → nhiều hành động; hỏi lại tối đa 1 câu)
+- [x] Phân loại 2 tầng Dự án → Category (§5.2.1, có Admin chung) + **học từ sửa đổi** ("Rạng Đông" → Favstay)
+- [x] Thẻ xác nhận trước khi lưu: tóm tắt nhóm, sửa phân loại một chạm, bắt việc trùng (đề xuất gộp), cảnh báo hạn đã qua
+- [x] Nhập việc từ **ảnh** (§5.1.1): chụp checklist/bảng trắng → Claude vision đọc → nhóm trong Hộp duyệt kèm ảnh nguồn, bỏ qua mục đã tick (cần `ANTHROPIC_API_KEY`)
 - [x] `/api/parse` dùng Claude API khi có key, tự fallback bộ phân tích luật
 - [x] Dự án + trọng số thời gian + cảnh báo dự án bị bỏ đói
 - [x] Lịch v0: sự kiện local + chuỗi Chuẩn bị → Di chuyển → Hẹn tính ngược (mặc định BTS từ Bang Na)

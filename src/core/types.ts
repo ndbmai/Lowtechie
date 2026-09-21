@@ -9,7 +9,8 @@ export type ProjectId =
   | "favstay"
   | "edge"
   | "canhan"
-  | "hoctap";
+  | "hoctap"
+  | "admin";
 
 export interface Project {
   id: ProjectId;
@@ -20,6 +21,21 @@ export interface Project {
   /** Mục tiêu giờ mỗi tuần, suy từ weight × quỹ giờ tuần. */
   targetHoursPerWeek: number;
   goal?: string;
+}
+
+/** Category cấp 2 dưới dự án (PRD §5.2.1). */
+export interface Category {
+  id: string;
+  projectId: ProjectId;
+  name: string;
+}
+
+/** Học từ sửa đổi phân loại: gặp lại term này → dự án/category này. */
+export interface FeedbackEntry {
+  /** Từ khóa đã chuẩn hóa lowercase, ví dụ "rạng đông". */
+  term: string;
+  projectId: ProjectId;
+  categoryId?: string;
 }
 
 export type DueType = "hard" | "soft";
@@ -39,6 +55,8 @@ export interface Task {
   id: string;
   title: string;
   projectId: ProjectId;
+  /** Category cấp 2 (PRD §5.2.1), ví dụ "circle:hopdong". */
+  categoryId?: string;
   /** Người phụ trách; mặc định "mai". */
   assignee: string;
   dueAt?: string;
@@ -69,6 +87,8 @@ export interface TriageItem {
   id: string;
   draft: Omit<Task, "id" | "status" | "createdAt" | "deferCount">;
   receivedAt: string;
+  /** Các dòng trích từ cùng một ảnh/nguồn đi chung một nhóm (PRD §5.1.1). */
+  groupId?: string;
 }
 
 export interface CalEvent {
@@ -116,6 +136,7 @@ export type ParsedAction =
       kind: "task";
       title: string;
       projectId: ProjectId;
+      categoryId?: string;
       assignee?: string;
       dueAt?: string;
       dueType?: DueType;
@@ -149,4 +170,24 @@ export interface ParseResult {
   /** Câu hỏi lại duy nhất khi thiếu thông tin quan trọng (PRD §5.0). */
   question?: string;
   source: "claude" | "rules";
+}
+
+/** Một dòng việc trích từ ảnh (PRD §5.1.1). */
+export interface ImageItem {
+  title: string;
+  /** Nhóm/mục con trong ảnh, nếu ảnh có cấu trúc. */
+  group?: string;
+  /** Ô đã tick / gạch ngang trong ảnh → không tạo việc mới. */
+  done?: boolean;
+  assignee?: string;
+  dueAt?: string;
+  projectId?: ProjectId;
+  categoryId?: string;
+  confidence: number;
+}
+
+export interface ImageParseResult {
+  items: ImageItem[];
+  question?: string;
+  source: "claude";
 }

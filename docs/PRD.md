@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 0.5 — 18/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng.*
+*Phiên bản 0.7 — 18/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -24,6 +24,7 @@ Vấn đề cốt lõi không phải là thiếu công cụ to-do, mà là:
 | Giao việc trong < 10 giây (chat hoặc voice) | Thời gian từ lúc nói đến lúc task được tạo |
 | ≥ 80% đầu việc từ group chat được bắt tự động | So sánh với review thủ công hàng tuần |
 | Tỷ lệ task trích xuất bị xóa vì sai/không cần < 20% | Precision của triage inbox |
+| ≥ 90% việc được xếp đúng dự án + category mà Mai không phải sửa (sau 4 tuần dùng) | Log sửa phân loại |
 | Mỗi sáng có brief, mỗi tuần có review | Tỷ lệ mở brief |
 | Biết được % thời gian mỗi dự án/tuần | Báo cáo tuần |
 
@@ -60,6 +61,7 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 | Module | Chat / voice ví dụ |
 |---|---|
 | Giao việc | "Thứ Ba nhắc chị gửi báo giá cho OKR, dự án Circle, gấp" |
+| Ảnh | *(gửi ảnh checklist)* + "việc của Favstay, hạn thứ Sáu" |
 | Lịch & di chuyển | "Tối nay 7 giờ hẹn ở Thonglor, đi tàu" / "Mai đi ô tô ra sân bay nhé" |
 | Hồ sơ chuẩn bị | "Lần này chỉ cần 30 phút chuẩn bị thôi" |
 | Chuyến đi | "Thứ Tư tuần sau chị bay Tokyo 4 ngày" / "Thêm máy uốn tóc vào checklist Tokyo" |
@@ -73,11 +75,85 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 - Agent tự tách 1 câu nói thành nhiều task, gắn dự án, người, deadline, ưu tiên.
 - Nếu độ tin cậy thấp → hỏi lại **một** câu, không hỏi dồn.
 
+### 5.1.1 Nhập việc từ hình chụp
+Mai gửi ảnh, Lowtechie tự trích danh sách việc.
+
+- **Nguồn ảnh:** checklist viết tay trên giấy, bảng trắng sau buổi họp, sticky note, ảnh chụp màn hình (ghi chú điện thoại, tin nhắn, email, file Excel), tài liệu in.
+- **Kênh gửi:** chụp trong app, chia sẻ từ thư viện ảnh (share sheet), gửi vào bot Zalo/WhatsApp/Telegram 1:1. Gửi nhiều ảnh một lần được.
+- **Ảnh + lời nhắn đi kèm:** gửi ảnh kèm chat hoặc voice, ví dụ "đây là việc của Favstay, hạn thứ Sáu", để gắn dự án và hạn cho cả danh sách.
+- **Trích xuất:**
+  - Từng dòng thành một việc; giữ cấu trúc nhóm/mục con nếu có.
+  - Nhận biết ô đã tick / gạch ngang: mục đã xong được đánh dấu xong (hoặc bỏ qua), chỉ mục chưa xong thành việc mới.
+  - Đọc ngày, tên người, dấu ưu tiên (*, !, gạch chân, khoanh tròn) nếu có.
+  - Tiếng Việt, tiếng Thái, tiếng Anh, kể cả viết trộn.
+- **Kết quả vào Hộp duyệt** dưới dạng một nhóm, ảnh gốc đính kèm làm nguồn; Mai nhận cả nhóm, hoặc sửa/bỏ từng dòng.
+- **Dòng đọc không chắc** (chữ tay khó đọc, ảnh mờ, lóa) được đánh dấu riêng kèm vùng cắt từ ảnh để Mai xem và sửa nhanh.
+- **Biến ảnh thành mẫu:** ảnh một danh sách dùng lặp lại (ví dụ đồ mang theo khi bay) có thể lưu thành mẫu checklist cho module 5.9 thay vì thành việc một lần.
+- **Lưu ảnh:** ảnh gốc lưu theo thời hạn (ví dụ 90 ngày) rồi xóa, danh sách việc giữ lâu dài.
+
+Độ khó kỹ thuật: thấp. Mô hình Claude đọc ảnh trực tiếp; phần việc chính là thiết kế bước duyệt và xử lý dòng đọc không chắc.
+
 ### 5.2 Task engine
 - Trường dữ liệu: tiêu đề, dự án, người phụ trách, deadline (cứng/mềm), ưu tiên, trạng thái, ước lượng thời gian, nguồn (kênh + link/trích đoạn tin nhắn gốc), độ tin cậy.
 - **Triage inbox**: mọi task trích xuất tự động vào hàng chờ duyệt trước, swipe để nhận/sửa/bỏ. Task do Mai tự giao đi thẳng vào danh sách.
 - Ưu tiên tính theo: deadline, trọng số dự án (Mai đặt, ví dụ Sorene 40%, Circle 30%...), phụ thuộc (đang chặn người khác?), năng lượng cần (deep/shallow).
 - Loại đặc biệt: **Waiting-on** (việc đã giao/đang chờ người khác, tự nhắc follow-up), **Routine** (học tiếng Thái hằng ngày, spa định kỳ), **Hard deadline hành chính** (thuế, gia hạn, báo cáo pháp lý).
+
+### 5.2.1 Kiểm tra trước khi lưu & phân loại thông minh
+**Nguyên tắc:** không việc nào được ghi vào danh sách hay file checklist (Google Sheets / Notion) khi chưa qua bước kiểm tra và Mai chưa xác nhận. Áp dụng cho mọi nguồn: chat, voice, ảnh, group chat, recap họp, email.
+
+**Luồng**
+```mermaid
+flowchart LR
+  A[Nhận việc từ bất kỳ nguồn nào] --> B[Tách & chuẩn hóa]
+  B --> C[Phân loại: dự án + category]
+  C --> D[Kiểm tra: trùng, thiếu, mâu thuẫn]
+  D --> E[Thẻ xác nhận]
+  E --> F{Mai xác nhận bằng chat / voice / bấm}
+  F -- Đồng ý --> G[Ghi vào danh sách + file checklist]
+  F -- Sửa --> C
+  F -- Bỏ --> H[Không lưu, ghi nhận để học]
+```
+
+**1. Tách & chuẩn hóa**
+- Một câu nhiều ý thành nhiều việc; mỗi việc bắt đầu bằng động từ rõ ràng ("Gửi báo giá cho OKR", không phải "báo giá OKR").
+- Việc quá to hoặc mơ hồ ("làm marketing Favstay") → đề xuất tách thành 2–4 việc cụ thể hoặc hỏi lại.
+
+**2. Phân loại vào đúng dự án và category**
+- Hai tầng: **Dự án** → **Category**.
+
+| Dự án | Category mặc định |
+|---|---|
+| Sorene | Sản phẩm · Gọi vốn · Tăng trưởng & cohort · Pháp lý & công ty |
+| The Circle Technology | Khách hàng & bán hàng · Delivery dự án · Đào tạo · Marketing & nội dung · Hợp đồng |
+| Favstay / Favultimate | Khách sạn & vận hành · OTA · Marketing · Đối tác |
+| The Intelligent Edge | Viết bài · Phân phối · Cộng đồng |
+| Cá nhân | Sức khỏe & làm đẹp · Học tập (tiếng Thái) · Chuyến đi · Nhà cửa · Giấy tờ & tài chính cá nhân |
+| Admin chung | Thuế & hạn pháp lý · Hóa đơn · Công cụ & tài khoản |
+
+  Mai thêm, đổi tên, gộp category bằng chat/voice ("tạo category Tuyển dụng cho Circle").
+- **Tín hiệu dùng để phân loại:** từ khóa và tên riêng (khách hàng, khách sạn, đối tác gắn với dự án); nguồn (group chat, email, cuộc họp đã gắn dự án); người liên quan (cộng sự thuộc dự án nào); lịch sử (việc tương tự trước đây Mai xếp vào đâu); lời Mai nói kèm ("việc của Favstay").
+- **Mỗi việc có độ chắc chắn phân loại.** Dưới ngưỡng → hiện 2 lựa chọn dự án/category có khả năng nhất để Mai chọn một chạm, không đoán bừa.
+- **Việc liên quan nhiều dự án:** một dự án chính + gắn tag dự án phụ.
+- **Học từ sửa đổi:** mỗi lần Mai đổi dự án/category, hệ thống ghi lại và áp dụng cho lần sau (ví dụ: tên "Rạng Đông" luôn là Favstay / Khách sạn & vận hành).
+
+**3. Kiểm tra trước khi lưu**
+| Kiểm tra | Xử lý |
+|---|---|
+| Trùng với việc đã có | Đề xuất gộp, hoặc cập nhật việc cũ thay vì tạo mới |
+| Thiếu hạn / thiếu người làm với việc cần có | Đề xuất hạn hợp lý hoặc hỏi một câu |
+| Hạn đã qua, rơi vào ngày Mai đang bay, hoặc trùng lịch dày | Cảnh báo và đề xuất ngày khác |
+| Mâu thuẫn với việc/quyết định trước | Nêu rõ mâu thuẫn, để Mai chọn |
+| Việc đã xong (ô đã tick trong ảnh, đã báo xong trong chat) | Đánh dấu xong, không tạo việc mới |
+| Việc phụ thuộc việc khác | Gắn liên kết phụ thuộc |
+| Ưu tiên | Gợi ý theo hạn + trọng số dự án; Mai chỉnh được |
+
+**4. Thẻ xác nhận**
+- Tóm tắt theo nhóm, ví dụ: *"5 việc mới: 3 Sorene / Gọi vốn, 2 Cá nhân / Chuyến đi. 1 việc trùng (đề xuất gộp), 1 việc thiếu hạn."*
+- Mỗi dòng hiện: việc · dự án / category · hạn · người · ưu tiên · độ chắc chắn · nguồn.
+- Xác nhận bằng bấm, chat hoặc voice: "ok lưu hết", "việc số 2 chuyển sang Circle", "bỏ việc cuối".
+- Chỉ sau xác nhận mới ghi vào file; file ghi thêm cột **Nguồn** và **Ngày tạo** để truy vết.
+- **Tự động dần:** khi độ chính xác phân loại của một loại việc đủ cao trong thời gian dài (ví dụ routine cá nhân), Mai có thể bật "lưu thẳng, báo sau" cho riêng loại đó. Mặc định luôn hỏi.
 
 ### 5.3 Dự án
 - Mỗi dự án có: mục tiêu quý, trọng số thời gian, thành viên, kênh chat liên kết, file liên kết, decision log.
@@ -168,6 +244,8 @@ Giờ hẹn
 - v1 dùng **một hệ thống, nhiều người dùng** (shared database + phân quyền), không làm giao thức agent-nói-chuyện-với-agent — đơn giản và an toàn hơn nhiều.
 
 ### 5.7 Xuất ra file
+- Chỉ ghi vào file sau bước xác nhận ở mục 5.2.1.
+- Cấu trúc file checklist (Google Sheets): một tab mỗi dự án + một tab "Tất cả". Cột: Dự án · Category · Việc · Người làm · Hạn · Ưu tiên · Trạng thái · Nguồn · Ngày tạo · Ghi chú. Lọc và nhóm theo category có sẵn.
 - Đồng bộ task sang Google Sheets (một tab / dự án) và/hoặc Notion — để cộng sự không dùng app vẫn xem được.
 - Ghi chú & biên bản họp lưu vào Google Drive theo thư mục dự án.
 
@@ -292,6 +370,7 @@ flowchart LR
 1. Giao một việc không bao giờ quá 10 giây, bằng chat hoặc voice, từ bất kỳ kênh nào.
 2. Duyệt trước, tự động sau: mở tự động dần cho từng loại hành động khi độ chính xác đủ cao.
 3. Mọi việc tự trích đều có nguồn gốc (tin nhắn hoặc đoạn ghi âm).
+3b. Không lưu gì khi chưa kiểm tra và chưa được Mai xác nhận; phân loại sai thì sửa một chạm và hệ thống nhớ.
 4. Dễ thương nhưng thật thà: nói thẳng khi quá tải.
 
 ## 7. Kiến trúc đề xuất
@@ -316,7 +395,9 @@ Ghi chú lựa chọn:
 ## 8. Mô hình dữ liệu (rút gọn)
 
 - `projects` (id, name, weight, goal, members, linked_channels)
-- `tasks` (id, project_id, title, owner_id, assignee_id, due_at, due_type, priority, status, est_minutes, energy, source_channel, source_ref, source_quote, confidence, visibility)
+- `categories` (id, project_id, name)
+- `classification_feedback` (task_id, suggested_project, suggested_category, final_project, final_category, signals)
+- `tasks` (id, project_id, category_id, title, owner_id, assignee_id, due_at, due_type, priority, status, est_minutes, energy, source_channel, source_ref, source_quote, confidence, visibility)
 - `waiting_on` (task_id, person_id, follow_up_at)
 - `routines` (title, rrule, project_id)
 - `events` (calendar_event_id, task_id)
@@ -331,6 +412,7 @@ Ghi chú lựa chọn:
 - `checklist_templates` (destination, group, item, hint, learned_from_user)
 - `trip_checklist_items` (trip_id, template_item_id / custom_text, done)
 - `voice_inputs` (audio_ref, transcript, language, parsed_actions, channel)
+- `image_inputs` (image_ref, channel, caption, extracted_items, low_confidence_regions, expires_at)
 - `meetings` (calendar_event_id, mode online/offline, recording_ref, transcript_ref, recap, consent_confirmed, project_id)
 - `actions_log` (proposed, approved_by, executed_at, result)
 
@@ -356,7 +438,7 @@ Ghi chú lựa chọn:
 Dùng Claude (đã kết nối Google Calendar, Drive, Gmail) + một Project làm "trợ lý" thủ công; forward tin nhắn vào để trích task. Ghi lại những gì thực sự hữu ích. Mục đích: không xây nhầm.
 
 **Giai đoạn 1 — MVP cá nhân (3–4 tuần, build bằng Claude Code)**
-Capture **chat + voice** cho mọi module (app và bot Telegram/Zalo 1:1) → task engine + triage inbox → dự án → Google Calendar (có duyệt) → sync Google Sheets → **tự khóa block chuẩn bị + di chuyển (Google Maps)** → brief sáng → **chuyến đi + checklist bay** → **ghi âm họp offline + recap** (rẻ, giá trị cao, không phụ thuộc bên thứ ba). Chỉ Mai dùng.
+Capture **chat + voice + ảnh** cho mọi module (app và bot Telegram/Zalo 1:1) → task engine + **kiểm tra trước khi lưu + phân loại dự án/category** + triage inbox → dự án → Google Calendar (có duyệt) → sync Google Sheets → **tự khóa block chuẩn bị + di chuyển (Google Maps)** → brief sáng → **chuyến đi + checklist bay** → **ghi âm họp offline + recap** (rẻ, giá trị cao, không phụ thuộc bên thứ ba). Chỉ Mai dùng.
 
 **Giai đoạn 2 — Ingest chat (3–4 tuần)**
 Bot họp online qua dịch vụ meeting-bot; bot 1:1 WhatsApp/Zalo để forward; thử nghiệm ingest 1–2 group (Telegram hoặc tài khoản Zalo phụ) có sự đồng ý; tóm tắt cuối ngày; waiting-on & follow-up.
@@ -372,6 +454,7 @@ Tài khoản cho cộng sự, phân quyền RLS, giao việc chéo, assistant ri
 | Rủi ro | Giảm thiểu |
 |---|---|
 | Dự án này thành thêm một dự án ngốn thời gian | Timebox cứng; chỉ build giai đoạn 1 rồi dùng 2 tuần trước khi đi tiếp |
+| Phân loại sai dự án/category làm file lộn xộn | Ngưỡng tin cậy + hỏi một chạm + học từ sửa đổi; báo cáo tỷ lệ phải sửa mỗi tuần |
 | Trích xuất nhiễu → mất niềm tin → bỏ app | Triage inbox, ngưỡng tin cậy, trích dẫn nguồn |
 | Khóa tài khoản Zalo khi dùng thư viện không chính thức | Tài khoản phụ; phương án dự phòng là forward thủ công |
 | Rò rỉ việc riêng tư sang cộng sự | Phân quyền ở tầng database, mặc định Riêng tư |

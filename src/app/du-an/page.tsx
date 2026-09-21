@@ -73,9 +73,9 @@ export default function ProjectsPage() {
         <div className="row">
           <span className="dot" style={{ background: "var(--p-me)" }} />
           <span className="t">
-            <b>Cá nhân & Học tập</b>
+            <b>Cá nhân · Học tập · Admin chung</b>
             <span className="muted small">
-              không tính trọng số — routine như tiếng Thái, spa nằm ở đây
+              không tính trọng số — tiếng Thái, spa, thuế, hóa đơn nằm ở đây
             </span>
           </span>
         </div>

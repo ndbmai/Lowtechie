@@ -1,3 +1,4 @@
+import { classify } from "./classify";
 import type { DueType, ParseResult, ParsedAction, ProjectId } from "./types";
 
 /**
@@ -130,20 +131,13 @@ export function parseWhen(clause: string, now: Date): WhenMatch {
 
 // ── Dự án ────────────────────────────────────────────────────────────────
 
-const PROJECT_KEYWORDS: [RegExp, ProjectId][] = [
-  [/sorene|pitch\s*deck/i, "sorene"],
-  [/circle|\baio\b/i, "circle"],
-  [/favstay|favultimate|khách sạn|\bota\b/i, "favstay"],
-  [/\bedge\b|intelligent edge|newsletter/i, "edge"],
-  [/tiếng thái|học tiếng/i, "hoctap"],
-  [/\bspa\b|làm tóc|nail|bác sĩ|khám/i, "canhan"],
-];
-
+/**
+ * Nhận dạng dự án từ câu — dùng chung bảng luật với classify.ts
+ * (một nguồn sự thật cho phân loại, PRD §5.2.1).
+ */
 export function detectProject(text: string): { id: ProjectId; explicit: boolean } {
-  for (const [re, id] of PROJECT_KEYWORDS) {
-    if (re.test(text)) return { id, explicit: true };
-  }
-  return { id: "canhan", explicit: false };
+  const c = classify(text);
+  return { id: c.projectId, explicit: c.confidence >= 0.65 };
 }
 
 // ── Tách mệnh đề ─────────────────────────────────────────────────────────
@@ -247,13 +241,16 @@ function parseClause(clause: string, now: Date): ParsedAction {
     };
   }
 
-  // Mặc định: một việc (task)
+  // Mặc định: một việc (task). Category lấy từ luật phân loại trên cả
+  // mệnh đề (trước khi gỡ "dự án X" khỏi tiêu đề).
   const title = tidyTitle(stripSpans(clause, when.spans));
+  const cls = classify(clause);
   const dueType: DueType | undefined = when.at ? (urgent ? "hard" : "soft") : undefined;
   return {
     kind: "task",
     title: title || clause.trim(),
     projectId: project.id,
+    categoryId: cls.projectId === project.id ? cls.categoryId : undefined,
     dueAt: when.at?.toISOString(),
     dueType,
     confidence: project.explicit ? baseConfidence : baseConfidence - 0.1,
