@@ -21,7 +21,7 @@ npm run build    # bắt buộc xanh trước khi push
 - **`src/core/` là logic thuần**: không import React, không gọi mạng, mọi thời điểm là chuỗi ISO. Mỗi file có unit test trong `src/core/__tests__/`. Thêm logic mới → thêm test.
 - **Store**: Zustand + persist vào `localStorage` (key `lowtechie-v1`), xem `src/lib/store.ts`. Ngày giờ lưu dạng ISO string, không lưu `Date`. Đây là chỗ sẽ thay bằng Supabase (+RLS) ở Giai đoạn 3 — giữ mọi truy cập dữ liệu đi qua store, đừng đọc localStorage trực tiếp.
 - **Màn hình** trong `src/app/` là client component; mọi màn hình phải render được khi store rỗng (empty state tử tế).
-- **`/api/parse`**: dùng Claude API (fetch trực tiếp, không SDK) khi có `ANTHROPIC_API_KEY`, fallback `src/core/parse.ts`. Model qua env `LOWTECHIE_MODEL`, mặc định `claude-sonnet-5`.
+- **`/api/parse`**: proxy Claude API (fetch trực tiếp, không SDK) khi có `ANTHROPIC_API_KEY`; không có key thì trả 501 và **client tự chạy `src/core/parse.ts` trên trình duyệt** — cố ý như vậy để ngày giờ tính theo múi giờ của Mai chứ không phải server (UTC). Model qua env `LOWTECHIE_MODEL`, mặc định `claude-sonnet-5`.
 - Font nạp bằng `<link>` Google Fonts (giống prototype) — đừng đổi sang `next/font` (build offline sẽ vỡ).
 
 ## Design system

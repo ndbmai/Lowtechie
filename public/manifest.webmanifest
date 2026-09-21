@@ -1,0 +1,18 @@
+{
+  "name": "Mai Lowtechie",
+  "short_name": "Lowtechie",
+  "description": "Trợ lý chief of staff của Mai",
+  "lang": "vi",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EEF1F8",
+  "theme_color": "#FFC93C",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
