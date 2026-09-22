@@ -113,14 +113,20 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "no-key" }, { status: 501 });
   }
 
+  // Key cấp org chưa gắn workspace → Anthropic đòi header này.
+  const headers: Record<string, string> = {
+    "x-api-key": apiKey,
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json",
+  };
+  if (process.env.ANTHROPIC_WORKSPACE_ID) {
+    headers["anthropic-workspace-id"] = process.env.ANTHROPIC_WORKSPACE_ID;
+  }
+
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
+      headers,
       body: JSON.stringify({
         model: process.env.LOWTECHIE_MODEL || "claude-sonnet-5",
         max_tokens: 1024,
