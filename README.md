@@ -79,6 +79,10 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Màn Lịch v2.3 (§5.4.0): xem Ngày/Tuần/Tháng/Danh sách (app nhớ chế độ), lưới tháng chấm màu dự án + ✈️❗📄, không giới hạn quá khứ/tương lai (tải theo tháng), tìm kiếm toàn bộ lịch (app + Google), lọc dự án/loại/nguồn
 - [x] Hẹn định kỳ dài hạn (§5.4.0): chu kỳ bất kỳ (3 tháng, năm, N ngày), "Đã làm" tính lại từ ngày thật, đếm ngược 30/14/7/1, việc chuẩn bị tự vào Hộp duyệt trước 30 ngày, lịch sử từng lần, cảnh báo trùng ngày bay
 - [x] Khách hàng nhập MỘT lần (v2.3, sửa lỗi nhập lại "Đô Thị"): tên gõ tay rồi Lưu là vào danh bạ, tìm không dấu, tên gần giống dùng lại không tạo trùng, gợi ý theo gần đây → hay dùng → thứ tự Mai đặt
+- [x] Chạm để XEM việc (5.2.2 v2.6, sửa lỗi chạm dòng là đóng): màn chi tiết việc đầy đủ (dự án/khách/hạn/ghi chú/nguồn/lịch sử); đóng CHỈ bằng tick hoặc nút Xong, có "Hoàn tác" 6 giây; đóng qua chat có thẻ xác nhận; mục "Đã xong" + Mở lại (hạn qua → gợi ý hạn mới)
+- [x] Hạn chỉ-có-ngày không hiện "0:00" (lỗi 22/9); việc còn hạn xa >14 ngày không leo lên Ưu tiên hôm nay trừ khi Mai gắn ⭐ hoặc việc đang chặn người khác
+- [x] Ghi chú trong từng việc (3d): nhật ký có giờ, sửa/xóa từng dòng, tách riêng với trích dẫn Nguồn; ô ghi chú ngay trên thẻ duyệt; lệnh "ghi chú cho việc X: …"
+- [x] Nhắc đặt lịch trước (§5.4.2): danh bạ nơi cần đặt (spa, nhà hàng…) với số ngày đặt trước + cách đặt; lịch ở đó mang "🔖 Chưa đặt" đến khi bấm Đã đặt, việc "Đặt lịch…" tự vào Hộp duyệt đúng hạn, cảnh báo khi còn <24h, nút Gọi/link đặt chỗ
 - [x] Tạm ngưng dự án + xóa phải chọn nơi chuyển việc (§5.3.1)
 - [ ] Speech-to-text server (voice note VI/TH/EN trộn) — đang dùng Web Speech của trình duyệt
 - [ ] Sync Google Sheets · ghi âm họp offline + recap

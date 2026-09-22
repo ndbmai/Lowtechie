@@ -123,9 +123,15 @@ export default function CapturePage() {
     addClient,
     touchClient,
     removeEvent,
+    addTaskNote,
+    completeTask,
+    places,
+    addTriage,
   } = useStore();
   /** Tên khách đang gõ dở theo từng thẻ — Lưu là vào danh bạ (v2.3). */
   const [clientQ, setClientQ] = useState<Record<number, string>>({});
+  /** Ghi chú Mai gõ trên từng thẻ việc (3d) — tách riêng với Nguồn. */
+  const [noteEdits, setNoteEdits] = useState<Record<number, string>>({});
   const [dueEdits, setDueEdits] = useState<Record<number, { dueAt?: string; dueType?: DueType }>>({});
   const gs = useGoogleStatus();
   /** Book sự kiện lên Google Calendar sau khi xem trước (§5.4 v2.0). */
@@ -143,6 +149,7 @@ export default function CapturePage() {
       setBook({});
       setLastBooked(null);
       setClientQ({});
+      setNoteEdits({});
       const r = await parseViaApi(t.trim(), { projects, categories, clients });
       setResult(r);
       setBusy(false);
@@ -303,11 +310,15 @@ export default function CapturePage() {
           clientId = (findClientByName(clients, typed) ?? addClient(typed, r.projectId))?.id;
         }
         if (clientId) touchClient(clientId);
+        const noteBody = noteEdits[i]?.trim();
         addTask({
           title: a.title,
           projectId: r.projectId,
           categoryId: r.categoryId,
           clientId,
+          notes: noteBody
+            ? [{ id: `n-${Date.now()}-${i}`, body: noteBody, at: new Date().toISOString() }]
+            : undefined,
           assignee: a.assignee ?? "mai",
           dueAt: due.dueAt,
           dueType: due.dueAt ? (due.dueType ?? "soft") : undefined,
@@ -331,6 +342,13 @@ export default function CapturePage() {
               description: a.location ? `Ở ${a.location}` : undefined,
             });
           }
+          // Nơi cần đặt chỗ trước (§5.4.2): lịch mang trạng thái "Chưa đặt"
+          // + việc "Đặt lịch…" tự vào Hộp duyệt với hạn = ngày hẹn − đặt trước.
+          const place = places.find(
+            (pl) =>
+              pl.needsBooking &&
+              `${a.location ?? ""} ${a.title}`.toLowerCase().includes(pl.name.toLowerCase()),
+          );
           const ev = addEvent({
             title: a.title,
             startAt: start.toISOString(),
@@ -338,7 +356,28 @@ export default function CapturePage() {
             location: a.location,
             kind: "event",
             gcalId: gcalId ?? undefined,
+            bookingStatus: place ? "pending" : undefined,
+            placeId: place?.id,
           });
+          if (place) {
+            const dueDate = new Date(start.getTime() - place.bookingLeadDays * 86_400_000);
+            dueDate.setHours(9, 0, 0, 0);
+            addTriage({
+              title: `Đặt lịch ${place.name} cho ${fmtDayTime(start.toISOString())}`,
+              projectId: "canhan",
+              categoryId: "canhan:suckhoe",
+              assignee: "mai",
+              dueAt: dueDate.toISOString(),
+              dueType: "hard",
+              dueSource: "nguon",
+              source: {
+                channel: "manual",
+                quote: `“${a.title}” — ${place.name} cần đặt trước ${place.bookingLeadDays} ngày`,
+              },
+              confidence: 1,
+            });
+            lines.push(`🔖 ${place.name} cần đặt trước ${place.bookingLeadDays} ngày — việc "Đặt lịch" đang chờ trong Hộp duyệt.`);
+          }
           if (gcalId) booked.push({ localId: ev.id, gcalId });
           lines.push(
             `Đã thêm “${a.title}” lúc ${fmtTime(a.startAt)} ${fmtRelativeDay(a.startAt)}${
@@ -358,13 +397,37 @@ export default function CapturePage() {
           lines.push(`“${a.title}” cần ${a.durationMinutes} phút — mình đề xuất khung giờ trong Lịch nhé.`);
           goCalendar = true;
         }
-      } else if (a.toWhen) {
+      } else if (a.kind === "reschedule") {
+        if (!a.toWhen) continue;
         const hit = reschedule(a.what, a.toWhen, a.keepTime ?? true);
         lines.push(
           hit
             ? `Đã dời “${a.what}” sang ${fmtRelativeDay(a.toWhen)}${hit === "event" && a.keepTime ? " (giữ giờ cũ)" : ""}.`
             : `Mình chưa tìm thấy “${a.what}” trong lịch hay danh sách việc — Mai kiểm tra giúp mình nhé.`,
         );
+      } else if (a.kind === "note") {
+        // Ghi chú vào việc đã có (3d) — thẻ ở trên đã hiện đúng việc khớp.
+        const target = tasks.find(
+          (t) => t.status !== "done" && t.status !== "dropped" && t.title.toLowerCase().includes(a.what.toLowerCase()),
+        );
+        if (target) {
+          addTaskNote(target.id, a.text);
+          lines.push(`Đã thêm ghi chú vào “${target.title}”.`);
+        } else {
+          lines.push(`Mình chưa tìm thấy việc “${a.what}” để ghi chú — Mai kiểm tra giúp mình nhé.`);
+        }
+      } else if (a.kind === "complete") {
+        // 5.2.2: đóng qua chat LUÔN qua thẻ xác nhận — thẻ trên đã hiện
+        // đúng tên việc, bấm Lưu mới đóng.
+        const target = tasks.find(
+          (t) => t.status !== "done" && t.status !== "dropped" && t.title.toLowerCase().includes(a.what.toLowerCase()),
+        );
+        if (target) {
+          completeTask(target.id, "chat");
+          lines.push(`Đã đóng “${target.title}” ✓ (Mở lại được trong mục Đã xong).`);
+        } else {
+          lines.push(`Mình chưa thấy việc “${a.what}” đang mở — có khi xong rồi?`);
+        }
       }
     }
 
@@ -639,6 +702,29 @@ export default function CapturePage() {
                     </label>
                   )}
                 </div>
+              ) : a.kind === "note" || a.kind === "complete" ? (
+                (() => {
+                  // Thẻ xác nhận: hiện ĐÚNG việc khớp trước khi ghi/đóng (5.2.2).
+                  const target = tasks.find(
+                    (t) =>
+                      t.status !== "done" &&
+                      t.status !== "dropped" &&
+                      t.title.toLowerCase().includes(a.what.toLowerCase()),
+                  );
+                  return (
+                    <div className="parsed cal" key={i}>
+                      <div className="k">{a.kind === "note" ? "Ghi chú vào việc" : "Đóng việc — xác nhận"}</div>
+                      <b>{target ? target.title : `“${a.what}”`}</b>
+                      <div className="small muted">
+                        {a.kind === "note"
+                          ? a.text
+                          : target
+                            ? "Bấm Lưu là mình đóng đúng việc này."
+                            : "Chưa thấy việc đang mở khớp tên — Mai kiểm tra lại nhé."}
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="parsed cal" key={i}>
                   <div className="k">Đổi lịch</div>
@@ -746,6 +832,14 @@ export default function CapturePage() {
                     onChange={(dueAt, dueType) => setDueEdits((s) => ({ ...s, [i]: { dueAt, dueType } }))}
                     trips={trips}
                     events={events}
+                  />
+                  <input
+                    className="transcript"
+                    style={{ minHeight: 0, padding: "6px 10px" }}
+                    placeholder="Ghi chú (tùy chọn)…"
+                    aria-label={`Ghi chú cho ${a.title}`}
+                    value={noteEdits[i] ?? ""}
+                    onChange={(e) => setNoteEdits((s) => ({ ...s, [i]: e.target.value }))}
                   />
                 </div>
                 {duplicates[i] && (

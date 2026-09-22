@@ -70,6 +70,14 @@ export type SourceChannel =
   | "meeting"
   | "manual";
 
+/** Một dòng ghi chú của Mai trong việc — nhật ký có giờ (PRD 3d v2.6). */
+export interface TaskNote {
+  id: string;
+  body: string;
+  at: string;
+  updatedAt?: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -101,8 +109,27 @@ export interface Task {
   confidence: number;
   createdAt: string;
   completedAt?: string;
+  /** Đóng bằng gì (5.2.2): tick đầu dòng, nút Xong, hay chat/voice. */
+  completedVia?: "tick" | "button" | "chat";
+  reopenedAt?: string;
+  /** Mai tự đánh dấu để việc còn hạn xa vẫn lên Ưu tiên hôm nay (5.2.2). */
+  priority?: "high";
+  /** Nhật ký ghi chú của Mai — TÁCH RIÊNG với trích dẫn nguồn (3d). */
+  notes?: TaskNote[];
   /** Số lần bị dời — weekly review đề xuất bỏ khi ≥ 3 (PRD §5.10). */
   deferCount: number;
+}
+
+/** Nơi hay đến cần đặt chỗ trước — spa, nhà hàng, phòng khám (§5.4.2). */
+export interface Place {
+  id: string;
+  name: string;
+  needsBooking: boolean;
+  /** Đặt trước bao nhiêu ngày (spa 3, nhà hàng cuối tuần 7…). */
+  bookingLeadDays: number;
+  bookingMethod?: "call" | "line" | "zalo" | "whatsapp" | "web";
+  /** Số điện thoại hoặc link đặt chỗ. */
+  bookingContact?: string;
 }
 
 /** Thẻ chờ duyệt trong Hộp duyệt (PRD §5.2 triage inbox). */
@@ -127,6 +154,9 @@ export interface CalEvent {
   chainOf?: string;
   /** id trên Google Calendar khi block đã được ghi sang đó (PRD §5.4). */
   gcalId?: string;
+  /** Nơi cần đặt chỗ: chưa đặt thì lịch "có thể không thành" (§5.4.2). */
+  bookingStatus?: "pending" | "booked";
+  placeId?: string;
 }
 
 export type Destination = "tokyo" | "hcmc" | "bkk";
@@ -211,6 +241,19 @@ export type ParsedAction =
       keepTime?: boolean;
       confidence: number;
       note?: string;
+    }
+  | {
+      /** "Ghi chú cho việc X: …" — thêm vào nhật ký của việc đã có (3d). */
+      kind: "note";
+      what: string;
+      text: string;
+      confidence: number;
+    }
+  | {
+      /** "Xong việc X rồi" — LUÔN qua thẻ xác nhận trước khi đóng (5.2.2). */
+      kind: "complete";
+      what: string;
+      confidence: number;
     };
 
 export interface ParseResult {

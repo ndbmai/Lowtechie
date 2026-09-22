@@ -177,6 +177,23 @@ export default function TodayPage() {
         </>
       )}
 
+      {mounted &&
+        (() => {
+          const doneTasks = tasks
+            .filter((t) => t.status === "done")
+            .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
+          return doneTasks.length > 0 ? (
+            <details style={{ marginTop: 8 }}>
+              <summary className="group-title" style={{ cursor: "pointer" }}>
+                Đã xong ({doneTasks.length})
+              </summary>
+              {doneTasks.slice(0, 10).map((t) => (
+                <TaskRow key={t.id} task={t} showDue={false} />
+              ))}
+            </details>
+          ) : null;
+        })()}
+
       <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
         <Link href="/chuyen-di" className="btn" style={{ textDecoration: "none" }}>
           ✈️ Chuyến đi

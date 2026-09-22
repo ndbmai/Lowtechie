@@ -33,6 +33,11 @@ export function composeBrief(
 ): MorningBrief {
   const ranked = rankTasks(tasks, projects, now);
   const waiting = tasks.filter((t) => t.waitingOn && t.status !== "done" && t.status !== "dropped");
+  // Ưu tiên hôm nay (5.2.2 v2.6): việc còn hạn XA (>14 ngày) không leo lên
+  // đây, trừ khi Mai đánh dấu ưu tiên cao hoặc việc đang chặn người khác.
+  const nearMs = now.getTime() + 14 * 86_400_000;
+  const todayWorthy = (t: Task) =>
+    !t.dueAt || new Date(t.dueAt).getTime() <= nearMs || t.priority === "high" || Boolean(t.blocksOthers);
   const in7d = now.getTime() + 7 * 86_400_000;
   const deadlines7d = ranked.filter(
     (t) => t.dueAt && new Date(t.dueAt).getTime() <= in7d && !t.waitingOn,
@@ -69,7 +74,7 @@ export function composeBrief(
 
   return {
     greeting: GREETINGS[now.getDate() % GREETINGS.length],
-    top: ranked.filter((t) => !t.waitingOn).slice(0, 3),
+    top: ranked.filter((t) => !t.waitingOn && todayWorthy(t)).slice(0, 3),
     waiting,
     deadlines7d,
     todayEvents,

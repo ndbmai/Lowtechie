@@ -26,6 +26,17 @@ export function fmtRange(startIso: string, endIso: string): string {
   return `${fmtTime(startIso)}–${fmtTime(endIso)}`;
 }
 
+/**
+ * Nhãn hạn (5.2.2 v2.6 — sửa lỗi "hạn 30/10 0:00"): chỉ hiện giờ khi Mai
+ * THẬT SỰ đặt giờ. Hai quy ước "chỉ ngày" của app là 9:00 (parse/nút nhanh)
+ * và 0:00 (nguồn ngoài trả nửa đêm) → cả hai đều ẩn giờ.
+ */
+export function fmtDue(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  const dateOnly = (d.getHours() === 9 || d.getHours() === 0) && d.getMinutes() === 0;
+  return `${fmtRelativeDay(iso, now)}${dateOnly ? "" : ` ${fmtTime(iso)}`}`;
+}
+
 /** "hôm nay" / "ngày mai" / "Thứ Năm 24/9" — cho câu nói của Lowtechie. */
 export function fmtRelativeDay(iso: string, now = new Date()): string {
   const d = new Date(iso);

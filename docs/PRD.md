@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 2.3 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng; tạo lịch trong app → xem trước → book Google Calendar; kết nối Lark Mail, Lark Calendar và bot trong group chat Lark; chuỗi ngày bay đầy đủ hai đầu, chỉnh sửa được; sửa lỗi voice; xóa chuyến bay cũ; tự lưu vé PDF vào chuyến mới; sửa cảnh báo nửa đêm sai; cập nhật danh sách phương tiện; màn Lịch xem theo tháng, không giới hạn quá khứ/tương lai; lịch hẹn định kỳ dài hạn (gia hạn giấy tờ); tên khách hàng nhập một lần được lưu và gợi ý lại.*
+*Phiên bản 2.6 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng; tạo lịch trong app → xem trước → book Google Calendar; kết nối Lark Mail, Lark Calendar và bot trong group chat Lark; chuỗi ngày bay đầy đủ hai đầu, chỉnh sửa được; sửa lỗi voice; xóa chuyến bay cũ; tự lưu vé PDF vào chuyến mới; sửa cảnh báo nửa đêm sai; cập nhật danh sách phương tiện; màn Lịch xem theo tháng, không giới hạn quá khứ/tương lai; lịch hẹn định kỳ dài hạn (gia hạn giấy tờ); tên khách hàng nhập một lần được lưu và gợi ý lại; mục ghi chú trong từng việc; nhắc đặt lịch trước với spa và các nơi cần booking; chạm để xem chi tiết việc, chỉ tick hoặc "Xong" mới đóng việc, mở lại việc cũ.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -78,9 +78,10 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 | Review | "Tuần này chị dồn thời gian vào đâu?" / "Bỏ việc viết lại trang About" |
 | Học tập | "Hôm nay chị học tiếng Thái rồi" / "Tuần này học 4 buổi" |
 | Dự án & category | "Tạo dự án Podcast" / "Thêm category Tuyển dụng vào Circle" |
+| Ghi chú | "Ghi chú cho việc hợp đồng Đô Thị: khách muốn thêm điều khoản bảo trì" |
 | Deadline | "Hạn thứ Sáu" / "Dời hợp đồng Đô thị sang thứ Hai" / "Việc này không có hạn" |
 | Khách hàng / đối tác | "Việc này của khách Đô thị" / "Thêm đối tác OKR vào Circle" / "Cho chị xem hết việc của Đô thị" |
-| Cá nhân | "Đặt lịch spa thứ Năm 4 giờ" |
+| Cá nhân | "Đặt lịch spa thứ Năm 4 giờ" / "Spa thứ Năm đặt rồi" / "Spa này cần đặt trước 3 ngày" |
 
 ### 5.1 Capture (thu thập)
 - Nhập qua: chat trong app, voice note (VI/TH/EN, trộn ngôn ngữ), forward tin nhắn/email vào bot, chia sẻ ảnh chụp màn hình.
@@ -166,6 +167,7 @@ flowchart LR
   2. **Category** (lọc theo dự án đã chọn)
   3. **Khách hàng / đối tác** (lọc theo dự án đã chọn, không bắt buộc)
   4. **Deadline** (xem 3c)
+  5. **Ghi chú** (xem 3d)
 - Mỗi trường là ô chọn **có tìm kiếm**: gõ vài chữ để lọc; nếu không có kết quả thì hiện dòng **"Tạo mới: …"** để tạo ngay tại chỗ, không phải rời thẻ duyệt. Mọi thứ tạo mới ở đây (category, khách hàng) được lưu vĩnh viễn và xuất hiện trong gợi ý các lần sau (xem 5.3.2).
 - Không dùng một danh sách phẳng dài gộp tất cả "Dự án · Category": chọn dự án trước, category sau.
 - Đổi tên hoặc xóa category / khách hàng làm ở màn Dự án (mục 5.3.1, 5.3.2); thẻ duyệt chỉ chọn và tạo mới để giữ thao tác nhanh.
@@ -191,6 +193,42 @@ flowchart LR
 - Xác nhận bằng bấm, chat hoặc voice: "ok lưu hết", "việc số 2 chuyển sang Circle", "bỏ việc cuối".
 - Chỉ sau xác nhận mới ghi vào file; file ghi thêm cột **Nguồn** và **Ngày tạo** để truy vết.
 - **Tự động dần:** khi độ chính xác phân loại của một loại việc đủ cao trong thời gian dài (ví dụ routine cá nhân), Mai có thể bật "lưu thẳng, báo sau" cho riêng loại đó. Mặc định luôn hỏi.
+
+**3d. Ghi chú trong từng việc**
+- **Mỗi việc có mục Ghi chú riêng**, có ngay trên thẻ duyệt (ô nhỏ, mở rộng khi chạm) và trong màn chi tiết việc.
+- **Nội dung:** chữ nhiều dòng, gạch đầu dòng, link; đính kèm được ảnh, file (hợp đồng, báo giá) và ghi âm ngắn.
+- **Nhập bằng chat/voice:** "ghi chú cho việc hợp đồng Đô Thị: khách muốn thêm điều khoản bảo trì 12 tháng". Voice được chuyển thành chữ và lưu vào ghi chú, giữ kèm file ghi âm gốc nếu Mai muốn.
+- **Ghi chú của Mai tách riêng với trích dẫn nguồn:** đoạn tin nhắn / email / ảnh gốc mà Lowtechie trích ra vẫn nằm ở phần Nguồn; ô Ghi chú chỉ chứa những gì Mai viết hoặc đồng ý thêm vào. Lowtechie có thể **gợi ý** một ghi chú (ví dụ tóm tắt ngữ cảnh từ group chat), nhưng chỉ thêm khi Mai chấp nhận.
+- **Nhật ký cập nhật:** mỗi lần thêm ghi chú mới được lưu thành một dòng có thời gian (ví dụ "22/9 19:10 — khách đã đồng ý giá"), để xem lại diễn biến của việc; sửa hoặc xóa từng dòng được.
+- **Quyền xem:** ghi chú theo quyền của việc (Riêng tư / Dự án). Với việc chia sẻ cho cộng sự, Mai có thể đánh dấu một ghi chú là **chỉ mình xem**.
+- **Tìm kiếm:** nội dung ghi chú được tìm cùng với tên việc ("việc nào có ghi chú về bảo trì?").
+- **Đồng bộ:** ghi chú mới nhất hiện ở cột Ghi chú trong Google Sheets; toàn bộ nhật ký xem trong app.
+
+### 5.2.2 Xem chi tiết việc, đánh dấu xong, mở lại việc cũ
+**Chạm để xem, không phải để đóng**
+- Chạm vào bất kỳ chỗ nào trên một việc (trừ ô tick) → mở **màn chi tiết việc**. Áp dụng ở mọi nơi có danh sách việc: Hôm nay, Dự án, Lịch, Khách hàng, kết quả tìm kiếm.
+- Màn chi tiết gồm: tên việc (sửa được), Dự án · Category · Khách hàng, Deadline, ưu tiên, người làm, trạng thái, **Ghi chú** (nhật ký, 3d), **Nguồn** (trích dẫn tin nhắn / email / ảnh gốc, link mở lại nguồn), file đính kèm, sự kiện lịch liên quan, lịch sử thay đổi (ngày tạo, các lần đổi hạn).
+- Nút trong màn chi tiết: **Xong** · Dời hạn · Sửa · Xóa.
+
+**Chỉ hai cách để đóng việc**
+1. Tick vào **ô tick ở đầu dòng**.
+2. Bấm **Xong** trong màn chi tiết.
+- Không có thao tác nào khác tự đóng việc: chạm vào dòng, vuốt, cuộn đều không đóng việc.
+- Sau khi tick hoặc bấm Xong: việc mờ đi với hiệu ứng ngắn, hiện thông báo **"Đã xong · Hoàn tác"** trong vài giây để sửa khi tick nhầm.
+- Đóng việc qua chat/voice ("xong việc chatbot rồi") vẫn được, nhưng luôn hiện thẻ xác nhận tên việc trước khi đóng, để không đóng nhầm việc có tên gần giống.
+
+**Xem lại và mở lại việc đã xong**
+- Việc đã xong **không bị xóa**; chuyển xuống mục **"Đã xong"** (thu gọn mặc định) ở cuối mỗi danh sách, và vẫn xem được trong màn Dự án, Khách hàng, tìm kiếm.
+- Mở một việc đã xong → màn chi tiết đầy đủ như trên, hiện thêm ngày giờ hoàn thành.
+- Nút **Mở lại** đưa việc về trạng thái trước khi đóng (giữ nguyên dự án, hạn, ghi chú); nếu hạn đã qua, hỏi có muốn đặt hạn mới không.
+- Lọc "Đã xong" theo khoảng thời gian (tuần này, tháng trước…); weekly review dùng dữ liệu này.
+
+**Hiển thị deadline trên danh sách** (lỗi thấy 22/9: "hạn Thứ Sáu 30/10 0:00")
+- Việc chỉ có ngày, không có giờ → chỉ hiện ngày ("hạn Thứ Sáu 30/10"), không hiện "0:00".
+- Chỉ hiện giờ khi Mai thực sự đặt giờ.
+
+**Ưu tiên hôm nay** (ghi nhận từ cùng ảnh chụp)
+- Việc có hạn còn xa (ví dụ Event 30/10, còn 5 tuần) chỉ lên mục Ưu tiên hôm nay khi Mai đánh dấu ưu tiên cao hoặc khi có việc chuẩn bị cần làm hôm nay; mặc định mục này ưu tiên việc đến hạn sớm và hạn cứng.
 
 ### 5.3 Dự án
 - Mỗi dự án có: mục tiêu quý, trọng số thời gian, thành viên, kênh chat liên kết, file liên kết, decision log.
@@ -388,6 +426,29 @@ Giờ hẹn
 - Cần kiểm tra chất lượng dữ liệu lịch tàu BTS/MRT trên Google Maps bằng vài chuyến thật trước khi tin hoàn toàn.
 - Dự báo giao thông nhiều ngày trước chỉ là ước lượng lịch sử; con số chính xác nhất là lần kiểm tra lại trước giờ đi.
 - Không lấy được thời gian chờ Grab thực tế qua API; dùng đệm cố định.
+
+### 5.4.2 Nhắc đặt lịch trước (spa và các nơi cần booking)
+Một số lịch chỉ thành khi Mai **đã đặt chỗ với nơi đó**: spa, làm tóc/nail, nhà hàng, phòng khám, lịch hẹn giấy tờ. Lowtechie nhắc đặt chỗ đủ sớm và theo dõi đến khi đặt xong.
+
+**Nơi cần đặt chỗ**
+- Địa điểm đã lưu có thêm thông tin đặt chỗ: **cần đặt trước** (có/không), **đặt trước bao lâu** (ví dụ spa 3 ngày, nhà hàng cuối tuần 7 ngày), **cách đặt** (gọi điện, LINE, Zalo, WhatsApp, website, app đặt chỗ) kèm số điện thoại / link.
+- Lowtechie gợi ý bật "cần đặt trước" theo loại nơi (spa, salon, nhà hàng, phòng khám); Mai xác nhận một lần cho mỗi nơi, lần sau tự áp dụng.
+
+**Khi tạo lịch ở nơi cần đặt chỗ**
+- Sự kiện trên lịch hiện trạng thái **"Chưa đặt chỗ"** (biểu tượng riêng trên màn Ngày/Tuần/Tháng) cho đến khi Mai xác nhận đã đặt.
+- Tự tạo việc **"Đặt lịch [nơi] cho [ngày giờ]"** với deadline = ngày hẹn trừ thời gian đặt trước, vào dự án Cá nhân · Sức khỏe & làm đẹp (hoặc dự án của sự kiện).
+- **Nhắc theo mốc:** vào ngày cần đặt; nếu chưa đặt, nhắc lại hôm sau; 24 giờ trước giờ hẹn mà vẫn chưa đặt → cảnh báo "lịch này có thể không thành, đặt ngay hoặc dời?".
+- **Đặt chỗ một chạm:** nhắc việc có nút gọi điện, mở LINE/Zalo/WhatsApp với **tin nhắn soạn sẵn** (ngôn ngữ theo nơi đó: tiếng Thái, Việt, Anh), hoặc mở link đặt chỗ. Ví dụ tin soạn sẵn cho spa ở Bangkok bằng tiếng Thái, ghi ngày giờ và dịch vụ.
+- Lowtechie **không tự gửi tin đặt chỗ**; Mai xem tin soạn sẵn và tự gửi (hoặc xác nhận để bot gửi, nếu kênh đó đã kết nối).
+
+**Sau khi đặt**
+- Mai bấm "Đã đặt" hoặc nói "spa thứ Năm đặt rồi"; có thể thêm mã xác nhận, tên nhân viên, ghi chú.
+- Email / tin nhắn xác nhận đặt chỗ đến Gmail hoặc Lark Mail → tự nhận ra, đánh dấu đã đặt, lưu vào ghi chú của sự kiện.
+- Nơi đặt đổi giờ → cập nhật sự kiện qua thẻ xem trước (5.4) và dời chuỗi chuẩn bị + di chuyển.
+
+**Lịch định kỳ cần đặt chỗ** (ví dụ spa mỗi 2 tuần)
+- Mỗi lần lặp tự sinh một nhắc đặt chỗ riêng theo đúng thời gian đặt trước của nơi đó.
+- Tùy chọn: nhắc đặt luôn lần kế tiếp ngay sau buổi hiện tại ("đặt luôn buổi sau khi đang ở spa").
 
 ### 5.5 Ingest group chat (Zalo / WhatsApp)
 - Đọc tin nhắn các group được cho phép (allowlist), tóm tắt theo lịch (cuối ngày hoặc khi có `@bot`).
@@ -713,6 +774,8 @@ Ghi chú lựa chọn:
 - `tasks` bổ sung: client_id, due_date, due_time (tùy chọn), due_type (cứng / mềm / không hạn), due_source (từ nguồn / Mai điền), due_quote
 - `recurring_series` (title, interval: weeks/months/years/days, interval_count, anchor_date, recalc_from_actual, reminder_offsets, prep_checklist_template_id, project_id, category_id, is_hard)
 - `series_occurrences` (series_id, planned_date, actual_date, notes, attachments)
+- `tasks` bổ sung: completed_at, completed_via (tick / nut_xong / chat), status_before_complete, reopened_at
+- `task_notes` (task_id, body, attachments, audio_ref, visibility: task/private, suggested_by_ai, accepted, created_at, updated_at)
 - `due_changes` (task_id, old_due, new_due, changed_at, reason)
 - `structure_changes` (type: add/rename/merge/move/archive/delete, before, after, confirmed_at) — để hoàn tác
 - `classification_feedback` (task_id, suggested_project, suggested_category, final_project, final_category, signals)
@@ -725,7 +788,8 @@ Ghi chú lựa chọn:
 - `messages_ingested` (channel, group_id, sender, text, ts, processed)
 - `decisions` (project_id, text, decided_at, source_ref)
 - `people` (name, org, channels, last_contact_at)
-- `places` (name, address, place_id, city, is_home, home_station, walk_to_station_min)
+- `places` (name, address, place_id, city, is_home, home_station, walk_to_station_min, needs_booking, booking_lead_days, booking_method, booking_contact, booking_language)
+- `bookings` (event_id, place_id, status: chua_dat/da_dat/huy, booked_at, confirmation_code, notes)
 - `city_defaults` (city, default_mode, rain_walk_buffer_min)
 - `prep_profiles` (name, minutes, applies_to)
 - `event_chains` (event_id, prep_block_id, travel_block_id, origin_place_id, mode, last_checked_at)

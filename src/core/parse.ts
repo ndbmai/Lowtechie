@@ -189,6 +189,18 @@ function parseClause(clause: string, now: Date): ParsedAction {
     0.6 + (project.explicit ? 0.15 : 0) + (when.at ? 0.1 : 0),
   );
 
+  // Ghi chú vào việc đã có (3d): "ghi chú cho việc hợp đồng Đô Thị: …"
+  const noteM = clause.match(/^ghi chú (?:cho |vào )?(?:việc )?(.+?)\s*[:—]\s*(.+)$/i);
+  if (noteM) {
+    return { kind: "note", what: tidyTitle(noteM[1]), text: noteM[2].trim(), confidence: 0.85 };
+  }
+
+  // Đóng việc qua chat (5.2.2) — UI luôn hiện thẻ xác nhận tên việc trước.
+  const doneM = clause.match(/^(?:đã |vừa )?(?:xong|hoàn thành)(?: việc)?\s+(.+?)(?:\s+rồi)?\s*$/i);
+  if (doneM) {
+    return { kind: "complete", what: tidyTitle(doneM[1]), confidence: 0.85 };
+  }
+
   // Đổi lịch: "dời X sang thứ Năm"
   const resched = clause.match(/\b(?:dời|đổi|chuyển)\s+(.+?)\s+(?:sang|qua|tới|đến)\s+(.+)$/i);
   if (resched) {

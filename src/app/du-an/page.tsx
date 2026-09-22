@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { mostStarved, weekStats } from "@/core/stats";
 import { rankTasks } from "@/core/priority";
 import { activeProjects } from "@/core/projects";
@@ -94,10 +94,47 @@ export default function ProjectsPage() {
         </>
       )}
 
-      <p className="muted small">
-        Giờ tuần này tính từ ước lượng của việc đã xong — Google Calendar (sắp có) sẽ thay bằng
-        thời gian thật.
-      </p>
+      {mounted && <DoneSection />}
     </main>
+  );
+}
+
+/** Việc đã xong không mất — xem lại, lọc theo thời gian, mở lại (5.2.2). */
+function DoneSection() {
+  const tasks = useStore((s) => s.tasks);
+  const [range, setRange] = useState<"week" | "month" | "all">("week");
+  const done = useMemo(() => {
+    const cutoff =
+      range === "all"
+        ? 0
+        : Date.now() - (range === "week" ? 7 : 31) * 86_400_000;
+    return tasks
+      .filter((t) => t.status === "done" && (t.completedAt ? Date.parse(t.completedAt) >= cutoff : range === "all"))
+      .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
+  }, [tasks, range]);
+
+  if (!tasks.some((t) => t.status === "done")) return null;
+  return (
+    <details style={{ marginTop: 8 }}>
+      <summary className="group-title" style={{ cursor: "pointer" }}>
+        Đã xong ({done.length})
+      </summary>
+      <div style={{ display: "flex", gap: 6, margin: "6px 0" }}>
+        {(
+          [
+            ["week", "Tuần này"],
+            ["month", "Tháng này"],
+            ["all", "Tất cả"],
+          ] as const
+        ).map(([id, label]) => (
+          <button key={id} className="btn small" aria-pressed={range === id} onClick={() => setRange(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {done.slice(0, 30).map((t) => (
+        <TaskRow key={t.id} task={t} showDue={false} />
+      ))}
+    </details>
   );
 }

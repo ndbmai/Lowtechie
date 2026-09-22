@@ -11,7 +11,9 @@ import type {
   FeedbackEntry,
   Project,
   ProjectId,
+  Place,
   Task,
+  TaskNote,
   TriageItem,
   Trip,
   TripAttachment,
@@ -64,6 +66,8 @@ interface LowtechieState {
   tripTrash: { trip: Trip; events: CalEvent[]; deletedAt: string }[];
   /** Hẹn định kỳ dài hạn — gia hạn visa 3 tháng, mỗi năm (§5.4.0 v2.3). */
   series: RecurringSeries[];
+  /** Nơi hay đến cần đặt chỗ trước (§5.4.2 v2.6). */
+  places: Place[];
   events: CalEvent[];
   trips: Trip[];
   /** Món checklist Mai tự thêm, học cho các chuyến sau cùng điểm đến. */
@@ -90,6 +94,15 @@ interface LowtechieState {
   delegateTask: (id: string, person: string) => void;
   /** Đổi hạn một việc, có ghi lịch sử đổi hạn (PRD 3c). */
   setTaskDue: (id: string, dueAt: string | undefined, dueType?: DueType) => void;
+  /** Đóng việc — CHỈ từ tick, nút Xong, hoặc chat có xác nhận (5.2.2). */
+  completeTask: (id: string, via: "tick" | "button" | "chat") => void;
+  /** Mở lại việc đã xong, giữ nguyên dự án/hạn/ghi chú (5.2.2). */
+  reopenTask: (id: string) => void;
+  updateTaskTitle: (id: string, title: string) => void;
+  setTaskPriority: (id: string, priority: "high" | undefined) => void;
+  addTaskNote: (taskId: string, body: string) => void;
+  updateTaskNote: (taskId: string, noteId: string, body: string) => void;
+  deleteTaskNote: (taskId: string, noteId: string) => void;
 
   addTriage: (draft: TaskDraft) => void;
   /** Thêm cả nhóm dòng trích từ một ảnh, kèm ảnh nguồn (PRD §5.1.1). */
@@ -147,6 +160,12 @@ interface LowtechieState {
 
   /** Đánh dấu khách vừa được dùng — nuôi gợi ý "gần đây/hay dùng" (v2.3). */
   touchClient: (id: string) => void;
+
+  addPlace: (p: Omit<Place, "id">) => Place | null;
+  updatePlace: (id: string, patch: Partial<Omit<Place, "id">>) => void;
+  deletePlace: (id: string) => void;
+  /** Đánh dấu sự kiện ở nơi cần đặt chỗ đã đặt xong/chưa (§5.4.2). */
+  setEventBooking: (eventId: string, status: "pending" | "booked" | undefined) => void;
 
   addProject: (name: string, color: string) => Project | null;
   updateProject: (
@@ -226,6 +245,7 @@ export const useStore = create<LowtechieState>()(
       dueChanges: [],
       tripTrash: [],
       series: [],
+      places: [],
       events: [],
       trips: [],
       learnedItems: { tokyo: [], hcmc: [], bkk: [] },
@@ -277,6 +297,70 @@ export const useStore = create<LowtechieState>()(
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === id ? { ...t, waitingOn: { person }, assignee: person } : t,
+          ),
+        })),
+      completeTask: (id, via) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === id
+              ? { ...t, status: "done", completedAt: new Date().toISOString(), completedVia: via }
+              : t,
+          ),
+        })),
+      reopenTask: (id) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  status: "todo",
+                  completedAt: undefined,
+                  completedVia: undefined,
+                  reopenedAt: new Date().toISOString(),
+                }
+              : t,
+          ),
+        })),
+      updateTaskTitle: (id, title) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === id ? { ...t, title: title.trim().slice(0, 200) || t.title } : t,
+          ),
+        })),
+      setTaskPriority: (id, priority) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => (t.id === id ? { ...t, priority } : t)),
+        })),
+      addTaskNote: (taskId, body) =>
+        set((s) => {
+          const trimmed = body.trim();
+          if (!trimmed) return s;
+          const note: TaskNote = { id: uid(), body: trimmed.slice(0, 2000), at: new Date().toISOString() };
+          return {
+            tasks: s.tasks.map((t) =>
+              t.id === taskId ? { ...t, notes: [note, ...(t.notes ?? [])] } : t,
+            ),
+          };
+        }),
+      updateTaskNote: (taskId, noteId, body) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === taskId
+              ? {
+                  ...t,
+                  notes: (t.notes ?? []).map((n) =>
+                    n.id === noteId
+                      ? { ...n, body: body.trim().slice(0, 2000) || n.body, updatedAt: new Date().toISOString() }
+                      : n,
+                  ),
+                }
+              : t,
+          ),
+        })),
+      deleteTaskNote: (taskId, noteId) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === taskId ? { ...t, notes: (t.notes ?? []).filter((n) => n.id !== noteId) } : t,
           ),
         })),
       setTaskDue: (id, dueAt, dueType) =>
@@ -564,6 +648,31 @@ export const useStore = create<LowtechieState>()(
           ),
         })),
 
+      addPlace: (p) => {
+        const name = p.name.trim().slice(0, 80);
+        if (!name) return null;
+        const place: Place = { ...p, name, id: uid() };
+        set((s) => ({ places: [...s.places, place] }));
+        return place;
+      },
+      updatePlace: (id, patch) =>
+        set((s) => ({
+          places: s.places.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+        })),
+      deletePlace: (id) =>
+        set((s) => ({
+          places: s.places.filter((p) => p.id !== id),
+          events: s.events.map((e) =>
+            e.placeId === id ? { ...e, placeId: undefined, bookingStatus: undefined } : e,
+          ),
+        })),
+      setEventBooking: (eventId, status) =>
+        set((s) => ({
+          events: s.events.map((e) =>
+            e.id === eventId ? { ...e, bookingStatus: status } : e,
+          ),
+        })),
+
       addProject: (name, color) => {
         const trimmed = name.trim().slice(0, 40);
         if (!trimmed) return null;
@@ -746,7 +855,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 9,
+      version: 10,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -840,6 +949,10 @@ export const useStore = create<LowtechieState>()(
             homeAddress: prev?.homeAddress ?? "",
             calendarView: prev?.calendarView ?? "week",
           };
+        }
+        if (version < 10) {
+          // v10 (PRD v2.6): nơi cần đặt chỗ trước (§5.4.2).
+          s.places = s.places ?? [];
         }
         return s as LowtechieState;
       },

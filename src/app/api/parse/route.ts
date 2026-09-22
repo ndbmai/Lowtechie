@@ -24,9 +24,13 @@ const TOOL_SCHEMA = {
         items: {
           type: "object",
           properties: {
-            kind: { type: "string", enum: ["task", "event", "reschedule"] },
+            kind: { type: "string", enum: ["task", "event", "reschedule", "note", "complete"] },
             title: { type: "string", description: "Tiêu đề việc/sự kiện (kind=task|event)" },
-            what: { type: "string", description: "Thứ cần dời (kind=reschedule)" },
+            what: {
+              type: "string",
+              description: "Tên việc/lịch nhắm tới (kind=reschedule|note|complete)",
+            },
+            text: { type: "string", description: "Nội dung ghi chú (kind=note)" },
             projectId: {
               type: "string",
               description: "Id dự án — CHỈ dùng id có trong danh sách ở system prompt",
@@ -65,7 +69,7 @@ const TOOL_SCHEMA = {
 function systemPrompt(localNow: string, tzName: string, taxonomy: TaxonomyPayload): string {
   return `Bạn là bộ tách lệnh của Mai Lowtechie — trợ lý của Mai (founder ở Bangkok, nói tiếng Việt/Thái/Anh trộn).
 Bây giờ ở chỗ Mai là ${localNow} (múi giờ ${tzName}). Dùng mốc này cho "ngày mai", "thứ Ba tuần sau"…; mọi ISO trả về phải kèm đúng offset múi giờ này.
-Tách câu của Mai thành các hành động: task (việc, có projectId + categoryId + dueAt nếu nói), event (hẹn/họp/bay/block deep work; kèm startAt hoặc durationMinutes, location, mode nếu Mai nói "đi tàu"/"ô tô"), reschedule (dời lịch; keepTime=true khi chỉ nói ngày mới).
+Tách câu của Mai thành các hành động: task (việc, có projectId + categoryId + dueAt nếu nói), event (hẹn/họp/bay/block deep work; kèm startAt hoặc durationMinutes, location, mode nếu Mai nói "đi tàu"/"ô tô"), reschedule (dời lịch; keepTime=true khi chỉ nói ngày mới), note ("ghi chú cho việc X: …" → what=tên việc ĐÃ CÓ, text=nội dung — không tạo việc mới), complete ("xong việc X rồi" → what=tên việc; app sẽ hiện thẻ xác nhận trước khi đóng).
 Tiêu đề việc bắt đầu bằng động từ rõ ràng ("Gửi báo giá cho OKR", không phải "báo giá OKR").
 Dự án, category và danh bạ khách CỦA MAI (chỉ dùng đúng các id này, Mai tự quản danh sách):
 ${taxonomyText(taxonomy)}

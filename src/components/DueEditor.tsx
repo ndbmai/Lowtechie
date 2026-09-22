@@ -41,7 +41,10 @@ export function DueEditor({
     () => (value ? dueWarnings(value, { nowMs: Date.now(), trips, events }) : []),
     [value, trips, events],
   );
-  const hasTime = value ? new Date(value).getHours() !== 9 || new Date(value).getMinutes() !== 0 : false;
+  // 0:00 và 9:00 là quy ước "chỉ ngày" — không hiện giờ (lỗi "hạn 30/10 0:00").
+  const hasTime = value
+    ? !([0, 9].includes(new Date(value).getHours()) && new Date(value).getMinutes() === 0)
+    : false;
 
   function setDate(d: Date) {
     const next = new Date(d);

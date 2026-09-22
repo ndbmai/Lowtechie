@@ -53,6 +53,8 @@ export default function TriagePage() {
   const [clientQuery, setClientQuery] = useState("");
   const [dueAt, setDueAt] = useState<string | undefined>();
   const [dueType, setDueType] = useState<DueType | undefined>();
+  /** Ghi chú của Mai (3d) — tách riêng với trích dẫn Nguồn. */
+  const [noteText, setNoteText] = useState("");
   const [dueTouched, setDueTouched] = useState(false);
   /** Nhắc "chưa có deadline" đúng một lần cho thẻ đang mở (3c). */
   const [askDue, setAskDue] = useState(false);
@@ -87,6 +89,7 @@ export default function TriagePage() {
     setDueTouched(false);
     setGroupOpen(false);
     setClientQuery("");
+    setNoteText("");
   }
 
   function startEdit() {
@@ -118,12 +121,19 @@ export default function TriagePage() {
       finalClient = found?.id ?? useStore.getState().addClient(clientQuery, projectId)?.id;
     }
     if (finalClient) useStore.getState().touchClient(finalClient);
+    const noteBody = noteText.trim();
     useStore.getState().addTask({
       ...top.draft,
       title: finalTitle,
       projectId,
       categoryId,
       clientId: finalClient,
+      notes: noteBody
+        ? [
+            { id: `n-${Date.now()}`, body: noteBody, at: new Date().toISOString() },
+            ...(top.draft.notes ?? []),
+          ]
+        : top.draft.notes,
       dueAt,
       dueType: dueAt ? (dueType ?? "soft") : undefined,
       dueSource: dueAt ? (dueTouched ? "mai" : (top.draft.dueSource ?? "nguon")) : undefined,
@@ -376,6 +386,14 @@ export default function TriagePage() {
                   }}
                   trips={trips}
                   events={events}
+                />
+                <input
+                  className="transcript"
+                  style={{ minHeight: 0, padding: "6px 10px" }}
+                  placeholder="Ghi chú (tùy chọn)…"
+                  aria-label="Ghi chú cho việc"
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
                 />
                 {askDue && (
                   <div className="note-box small" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>

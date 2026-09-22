@@ -378,6 +378,7 @@ function MonthGrid({
               isSameDay(t.dueAt, d),
           );
           const hasSeries = series.some((s) => isSeriesDay(s, d));
+          const hasPendingBooking = dayEvents.some((e) => e.bookingStatus === "pending");
           const isToday =
             d.getFullYear() === today.getFullYear() &&
             d.getMonth() === today.getMonth() &&
@@ -416,6 +417,7 @@ function MonthGrid({
                 {hasFlight && <span style={{ fontSize: 9 }}>✈️</span>}
                 {hasSeries && <span style={{ fontSize: 9 }}>📄</span>}
                 {hasHardDue && <span style={{ fontSize: 9 }}>❗</span>}
+                {hasPendingBooking && <span style={{ fontSize: 9 }}>🔖</span>}
               </span>
             </button>
           );
@@ -672,6 +674,141 @@ function SeriesSection() {
   );
 }
 
+const BOOKING_METHODS = [
+  { id: "call", label: "Gọi điện" },
+  { id: "line", label: "LINE" },
+  { id: "zalo", label: "Zalo" },
+  { id: "whatsapp", label: "WhatsApp" },
+  { id: "web", label: "Website/app" },
+] as const;
+
+/** Nơi cần đặt chỗ trước (§5.4.2): spa, salon, nhà hàng, phòng khám. */
+function PlacesSection() {
+  const { places, addPlace, updatePlace, deletePlace } = useStore();
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [lead, setLead] = useState(3);
+  const [method, setMethod] = useState<(typeof BOOKING_METHODS)[number]["id"]>("call");
+  const [contact, setContact] = useState("");
+
+  return (
+    <section className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="hdr">
+        <h3 style={{ fontSize: 18 }}>🔖 Nơi cần đặt chỗ</h3>
+        <button className="btn ghost small" onClick={() => setAdding((v) => !v)}>
+          {adding ? "Thôi" : "+ Thêm"}
+        </button>
+      </div>
+
+      {adding && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <input
+            className="transcript"
+            style={{ minHeight: 0, padding: 9 }}
+            placeholder="Tên nơi (ví dụ: Spa Sukhumvit 24)"
+            aria-label="Tên nơi cần đặt chỗ"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <label className="small" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              đặt trước
+              <input
+                type="number"
+                min={0}
+                max={60}
+                value={lead}
+                aria-label="Đặt trước bao nhiêu ngày"
+                onChange={(e) => setLead(Math.max(0, Number(e.target.value) || 0))}
+                style={{ width: 52, padding: "4px 6px", borderRadius: 9, border: "1.5px solid var(--line)", background: "var(--surface-2)" }}
+              />
+              ngày
+            </label>
+            <select className="btn small" value={method} aria-label="Cách đặt" onChange={(e) => setMethod(e.target.value as typeof method)}>
+              {BOOKING_METHODS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <input
+              className="transcript"
+              style={{ minHeight: 0, padding: "4px 8px", flex: "1 1 140px" }}
+              placeholder="SĐT hoặc link đặt chỗ"
+              aria-label="Liên hệ đặt chỗ"
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
+            />
+            <button
+              className="btn primary small"
+              disabled={!name.trim()}
+              onClick={() => {
+                addPlace({
+                  name,
+                  needsBooking: true,
+                  bookingLeadDays: lead,
+                  bookingMethod: method,
+                  bookingContact: contact.trim() || undefined,
+                });
+                setName("");
+                setContact("");
+                setAdding(false);
+              }}
+            >
+              Thêm
+            </button>
+          </div>
+        </div>
+      )}
+
+      {places.length === 0 && !adding && (
+        <p className="muted small" style={{ margin: 0 }}>
+          Thêm spa, salon, nhà hàng… hay đến — lịch ở đó sẽ mang trạng thái "Chưa đặt chỗ" và có
+          việc "Đặt lịch" nhắc trước.
+        </p>
+      )}
+
+      {places.map((p) => (
+        <div key={p.id} className="small" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", flex: 1, minWidth: 140 }}>
+            <input
+              type="checkbox"
+              className="check"
+              checked={p.needsBooking}
+              aria-label={`${p.name} cần đặt trước`}
+              onChange={(e) => updatePlace(p.id, { needsBooking: e.target.checked })}
+            />
+            <b>{p.name}</b>
+          </label>
+          <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            trước
+            <input
+              type="number"
+              min={0}
+              max={60}
+              value={p.bookingLeadDays}
+              aria-label={`Số ngày đặt trước cho ${p.name}`}
+              onChange={(e) => updatePlace(p.id, { bookingLeadDays: Math.max(0, Number(e.target.value) || 0) })}
+              style={{ width: 48, padding: "3px 5px", borderRadius: 8, border: "1.5px solid var(--line)", background: "var(--surface-2)" }}
+            />
+            ngày
+          </label>
+          <span className="muted">{BOOKING_METHODS.find((m) => m.id === p.bookingMethod)?.label}</span>
+          <button
+            className="btn ghost small"
+            aria-label={`Xóa ${p.name}`}
+            onClick={() => {
+              if (window.confirm(`Xóa "${p.name}" khỏi danh sách nơi đặt chỗ?`)) deletePlace(p.id);
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 export default function CalendarPage() {
   const mounted = useMounted();
   const {
@@ -687,6 +824,8 @@ export default function CalendarPage() {
     removeChain,
     setCalendarView,
     updateSeries,
+    places,
+    setEventBooking,
   } = useStore();
   const [chainFor, setChainFor] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -887,6 +1026,11 @@ export default function CalendarPage() {
 
   const eventRow = (e: CalEvent, withChainButtons = true) => {
     const hasChain = events.some((x) => x.chainOf === e.id);
+    const place = e.placeId ? places.find((p) => p.id === e.placeId) : undefined;
+    const soon =
+      e.bookingStatus === "pending" &&
+      Date.parse(e.startAt) - Date.now() < 24 * 3_600_000 &&
+      Date.parse(e.startAt) > Date.now();
     return (
       <div key={e.id} style={{ marginTop: 6 }}>
         <div className={`block-line${e.kind !== "event" ? " faded" : ""}`}>
@@ -897,7 +1041,37 @@ export default function CalendarPage() {
             {e.gcalId && e.kind === "event" ? "📆 " : ""}
             {e.title}
             {e.location ? <span className="muted small"> · {e.location}</span> : null}
+            {e.bookingStatus === "booked" && (
+              <span className="small" style={{ color: "#2FA97C" }}> · ✓ đã đặt chỗ</span>
+            )}
           </span>
+          {e.bookingStatus === "pending" && (
+            <button
+              className="btn small"
+              style={{ background: "var(--note)", borderColor: "var(--note)", color: "var(--note-ink)" }}
+              onClick={() => {
+                if (window.confirm(`Đánh dấu đã đặt chỗ${place ? ` ở ${place.name}` : ""}?`))
+                  setEventBooking(e.id, "booked");
+              }}
+            >
+              🔖 Chưa đặt
+            </button>
+          )}
+          {e.bookingStatus === "pending" && place?.bookingContact && (
+            <a
+              className="btn ghost small"
+              style={{ textDecoration: "none" }}
+              href={
+                /^https?:/i.test(place.bookingContact)
+                  ? place.bookingContact
+                  : `tel:${place.bookingContact.replace(/\s+/g, "")}`
+              }
+              target={/^https?:/i.test(place.bookingContact) ? "_blank" : undefined}
+              rel="noreferrer"
+            >
+              {/^https?:/i.test(place.bookingContact) ? "Mở đặt chỗ" : "Gọi"}
+            </a>
+          )}
           {withChainButtons &&
             e.kind === "event" &&
             (hasChain ? (
@@ -910,6 +1084,11 @@ export default function CalendarPage() {
               </button>
             ))}
         </div>
+        {soon && (
+          <div className="note-box small" style={{ marginTop: 4 }}>
+            ⚠ Còn dưới 24 giờ mà chưa đặt chỗ — lịch này có thể không thành. Đặt ngay hoặc dời?
+          </div>
+        )}
       </div>
     );
   };
@@ -1221,6 +1400,7 @@ export default function CalendarPage() {
       )}
 
       {mounted && !searchResults && <SeriesSection />}
+      {mounted && !searchResults && <PlacesSection />}
 
       {mounted && !searchResults && (
         <div className="card" style={{ marginTop: 8 }}>
@@ -1247,12 +1427,37 @@ export default function CalendarPage() {
               disabled={!title.trim() || !when}
               onClick={() => {
                 const start = new Date(when);
+                // Nơi cần đặt chỗ (§5.4.2): lịch mang "Chưa đặt" + việc
+                // "Đặt lịch…" vào Hộp duyệt với hạn = ngày hẹn − đặt trước.
+                const place = places.find(
+                  (pl) => pl.needsBooking && title.toLowerCase().includes(pl.name.toLowerCase()),
+                );
                 addEvent({
                   title: title.trim(),
                   startAt: start.toISOString(),
                   endAt: new Date(start.getTime() + 60 * 60_000).toISOString(),
                   kind: "event",
+                  bookingStatus: place ? "pending" : undefined,
+                  placeId: place?.id,
                 });
+                if (place) {
+                  const dueDate = new Date(start.getTime() - place.bookingLeadDays * 86_400_000);
+                  dueDate.setHours(9, 0, 0, 0);
+                  addTriage({
+                    title: `Đặt lịch ${place.name} cho ${fmtDay(start.toISOString())} ${fmtTime(start.toISOString())}`,
+                    projectId: "canhan",
+                    categoryId: "canhan:suckhoe",
+                    assignee: "mai",
+                    dueAt: dueDate.toISOString(),
+                    dueType: "hard",
+                    dueSource: "nguon",
+                    source: {
+                      channel: "manual",
+                      quote: `“${title.trim()}” — ${place.name} cần đặt trước ${place.bookingLeadDays} ngày`,
+                    },
+                    confidence: 1,
+                  });
+                }
                 setTitle("");
                 setWhen("");
               }}
