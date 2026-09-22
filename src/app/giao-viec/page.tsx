@@ -257,11 +257,21 @@ export default function CapturePage() {
       });
       if (res.status === 501) {
         setImgError(
-          "Đọc ảnh cần Claude API — Mai thêm ANTHROPIC_API_KEY vào server (Vercel → Settings → Environment Variables) rồi thử lại nhé. Phần chat/voice vẫn chạy không cần key.",
+          "Đọc ảnh cần Claude API — Mai thêm ANTHROPIC_API_KEY vào server (Vercel → Settings → Environment Variables), Redeploy, rồi thử lại nhé. Phần chat/voice vẫn chạy không cần key.",
         );
         return;
       }
-      if (!res.ok) throw new Error(String(res.status));
+      if (res.status === 413) {
+        setImgError("Ảnh nặng quá cho server — Mai bỏ bớt, gửi 1–2 ảnh một lần nhé.");
+        return;
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { detail?: string } | null;
+        setImgError(
+          `Đọc ảnh không thành công (mã ${res.status}${body?.detail ? ` — ${body.detail}` : ""}). Mai chụp màn hình lỗi này gửi mình là mình biết đường sửa.`,
+        );
+        return;
+      }
       const data = (await res.json()) as ImageParseResult;
 
       const caption = text.trim();
@@ -308,7 +318,7 @@ export default function CapturePage() {
       ]);
       router.push("/hop-duyet");
     } catch {
-      setImgError("Đọc ảnh không thành công — Mai thử lại giúp mình nhé.");
+      setImgError("Không gửi được ảnh lên server (mạng chập chờn?) — Mai thử lại giúp mình nhé.");
     } finally {
       setImgBusy(false);
     }

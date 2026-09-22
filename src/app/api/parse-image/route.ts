@@ -8,6 +8,8 @@ import type { ImageItem, ImageParseResult } from "@/core/types";
  */
 
 export const runtime = "nodejs";
+/** Đọc ảnh + trả danh sách dài có thể quá 15s mặc định của Vercel. */
+export const maxDuration = 60;
 
 const MAX_IMAGES = 4;
 
@@ -115,6 +117,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     });
   }
 
+  let detail = "";
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -125,7 +128,9 @@ export async function POST(req: Request): Promise<NextResponse> {
       },
       body: JSON.stringify({
         model: process.env.LOWTECHIE_MODEL || "claude-sonnet-5",
-        max_tokens: 2048,
+        // Danh sách viết tay dài → JSON trả về dài; để thấp là bị cắt
+        // giữa chừng và hỏng tool input.
+        max_tokens: 8192,
         system: systemPrompt(localIso(epochMs, tzOffsetMin)),
         tools: [TOOL_SCHEMA],
         tool_choice: { type: "tool", name: "emit_checklist" },
@@ -145,8 +150,12 @@ export async function POST(req: Request): Promise<NextResponse> {
         ],
       }),
     });
-    if (res.ok) {
-      const data = (await res.json()) as { content?: ClaudeContent[] };
+    const data = (await res.json().catch(() => null)) as {
+      content?: ClaudeContent[];
+      stop_reason?: string;
+      error?: { type?: string; message?: string };
+    } | null;
+    if (res.ok && data) {
       const toolUse = data.content?.find(
         (c) => c.type === "tool_use" && c.name === "emit_checklist",
       );
@@ -159,9 +168,16 @@ export async function POST(req: Request): Promise<NextResponse> {
         };
         return NextResponse.json(out);
       }
+      detail = `Claude trả về không có danh sách (stop_reason: ${data.stop_reason ?? "?"})`;
+    } else {
+      // Không lộ key — chỉ lấy loại lỗi + message từ Claude API.
+      detail = data?.error?.message
+        ? `${data.error.type ?? "api_error"}: ${data.error.message.slice(0, 200)}`
+        : `Claude API HTTP ${res.status}`;
     }
-  } catch {
-    /* rơi xuống 502 */
+  } catch (e) {
+    detail = e instanceof Error ? e.message.slice(0, 200) : "lỗi mạng phía server";
   }
-  return NextResponse.json({ error: "claude-failed" }, { status: 502 });
+  console.error("parse-image failed:", detail);
+  return NextResponse.json({ error: "claude-failed", detail }, { status: 502 });
 }

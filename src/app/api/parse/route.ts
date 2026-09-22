@@ -10,6 +10,7 @@ import type { ParseResult, ParsedAction } from "@/core/types";
  */
 
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 const TOOL_SCHEMA = {
   name: "emit_actions",
