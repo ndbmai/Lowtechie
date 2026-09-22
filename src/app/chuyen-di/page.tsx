@@ -181,20 +181,40 @@ function GmailScan() {
     });
   }
 
-  /** Tự lưu vé PDF của email vào chuyến vừa xác nhận (v2.0). */
-  async function saveTickets(c: FlightTripCandidate, tripId: string) {
+  /** Các file PDF thuộc về một ứng viên: khớp subject, không khớp thì lấy hết. */
+  function refsFor(c: FlightTripCandidate): GmailAttachmentRef[] {
     const refs = result?.attachments ?? [];
     const matched = refs.filter((x) => x.subject === c.subject);
-    const use = (matched.length ? matched : refs).slice(0, 3);
+    return (matched.length ? matched : refs).slice(0, 3);
+  }
+
+  /** Tự lưu vé PDF của email vào chuyến vừa xác nhận (v2.0) — CÓ BÁO LẠI. */
+  async function saveTickets(c: FlightTripCandidate, tripId: string) {
+    const use = refsFor(c);
+    if (use.length === 0) {
+      setNote((p) =>
+        `${p ?? ""} Email này không có file PDF đính kèm (hoặc file quá 3MB) — vé nằm trong nội dung email nên chưa có gì để lưu.`.trim(),
+      );
+      return;
+    }
     let saved = 0;
+    let failed = 0;
     for (let i = 0; i < use.length; i++) {
       const blob = await fetchGmailAttachment(use[i]);
-      if (!blob) continue;
+      if (!blob) {
+        failed++;
+        continue;
+      }
       const name = i === 0 ? ticketFileName(c, use[i].filename) : use[i].filename;
       const att = useStore.getState().addTripAttachment(tripId, name);
       if (att && (await putFile(att.id, blob))) saved++;
+      else failed++;
     }
-    if (saved > 0) setNote(`🎫 Đã lưu ${saved} file vé vào chuyến.`);
+    setNote((p) =>
+      `${p ?? ""}${saved > 0 ? ` 🎫 Đã lưu ${saved} file vé — xem ở mục "Vé & file của chuyến".` : ""}${
+        failed > 0 ? ` ⚠ ${failed} file tải không được — Mai quét lại thử nhé.` : ""
+      }`.trim(),
+    );
   }
 
   function confirm(c: FlightTripCandidate, i: number) {
@@ -262,7 +282,9 @@ function GmailScan() {
                 <span className="muted">
                   {c.flights}
                   {c.pnr ? ` · PNR ${c.pnr}` : ""}
-                  {c.returnAt ? ` · về ${fmtDay(c.returnAt)}` : ""} · từ email “{c.subject.slice(0, 60)}”
+                  {c.returnAt ? ` · về ${fmtDay(c.returnAt)}` : ""}
+                  {refsFor(c).length > 0 ? ` · 🎫 ${refsFor(c).length} file PDF sẽ lưu kèm` : ""} · từ
+                  email “{c.subject.slice(0, 60)}”
                 </span>
               </span>
               {c.destination === "other" ? (
@@ -541,7 +563,18 @@ function FullChain({ trip }: { trip: Trip }) {
 function TripFiles({ trip }: { trip: Trip }) {
   const [msg, setMsg] = useState<string | null>(null);
   const atts = trip.attachments ?? [];
-  if (atts.length === 0) return null;
+  if (atts.length === 0) {
+    // Empty state (lần đầu): chuyến từ email mà chưa có file → chỉ đường.
+    return trip.pnr ? (
+      <div className="card">
+        <b>🎫 Vé & file của chuyến</b>
+        <p className="muted small" style={{ margin: "4px 0 0" }}>
+          Chưa có file — bấm “Quét vé máy bay trong Gmail” rồi chọn “Cập nhật giờ” ở chuyến này là
+          vé PDF trong email tự lưu vào đây.
+        </p>
+      </div>
+    ) : null;
+  }
 
   async function open(att: TripAttachment) {
     const blob = await getFile(att.id);

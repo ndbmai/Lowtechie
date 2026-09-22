@@ -20,7 +20,10 @@ const MAX_EMAILS = 12;
 const MAX_BODY_CHARS = 3500;
 /** Hành trình đầy đủ hay nằm trong PDF (lỗi OADC5J) — đọc tối đa 3 tệp nhỏ. */
 const MAX_PDFS = 3;
+/** Trần ĐỌC bằng Claude — không phải trần lưu file. */
 const MAX_PDF_BYTES = 1_500_000;
+/** Trần file vé client tải về LƯU vào chuyến (khớp /api/gmail/attachment). */
+const MAX_REF_BYTES = 3_000_000;
 
 /** "Thứ Ba 22/9/2026, 14:30" theo giờ địa phương của Mai. */
 function localLabel(epochMs: number, tzOffsetMin: number): string {
@@ -195,7 +198,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const h = (name: string) =>
         m.payload?.headers?.find((x) => x.name.toLowerCase() === name)?.value ?? "";
       const body = extractText(m.payload).replace(/\s+/g, " ").slice(0, MAX_BODY_CHARS);
-      const pdfs = listPdfParts(m.payload).filter((p) => p.size > 0 && p.size <= MAX_PDF_BYTES);
+      // Lọc theo trần LƯU (3MB) — trần đọc Claude siết riêng lúc tải docs,
+      // đừng để vé nặng biến mất khỏi danh sách lưu (lỗi Mai gặp).
+      const pdfs = listPdfParts(m.payload).filter((p) => p.size > 0 && p.size <= MAX_REF_BYTES);
       return { id, subject: h("subject"), from: h("from"), date: h("date"), body, pdfs };
     }),
   );
@@ -208,6 +213,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   for (const e of usable) {
     for (const p of e.pdfs) {
       if (pdfDocs.length >= MAX_PDFS) break;
+      // Trần đọc Claude siết ở ĐÂY — file to hơn vẫn nằm trong refs để lưu.
+      if (p.size > MAX_PDF_BYTES) continue;
       const dupKey = `${p.filename}|${p.size}`;
       if (seenPdf.has(dupKey)) continue;
       seenPdf.add(dupKey);
