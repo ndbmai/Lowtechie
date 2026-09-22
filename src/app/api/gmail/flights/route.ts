@@ -157,7 +157,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       headers,
       body: JSON.stringify({
         model: process.env.LOWTECHIE_MODEL || "claude-sonnet-5",
-        max_tokens: 4096,
+        // Trần rộng + effort thấp: phần "suy nghĩ" cũng ăn vào max_tokens,
+        // để hẹp là danh sách bị cắt và mất luôn tool_use (lỗi "HTTP 200").
+        max_tokens: 16000,
+        output_config: { effort: "low" },
         system: `Bạn đọc email hộ Mai Lowtechie. Hôm nay là ${new Date().toISOString()}.
 Chỉ trích CHUYẾN BAY THẬT từ email xác nhận vé (bỏ quảng cáo, khuyến mãi, check-in nhắc lại chuyến đã trích). Bỏ chuyến đã bay xong. Ghép chặng đi + chặng về cùng một chuyến khi thấy khớp. Giờ bay theo múi giờ địa phương của sân bay đi (Bangkok +07:00, Việt Nam +07:00, Nhật +09:00). Không bịa chuyến không có trong email.`,
         tools: [TOOL_SCHEMA],
@@ -177,6 +180,7 @@ Chỉ trích CHUYẾN BAY THẬT từ email xác nhận vé (bỏ quảng cáo, 
     });
     const data = (await res.json().catch(() => null)) as {
       content?: ClaudeContent[];
+      stop_reason?: string;
       error?: { type?: string; message?: string };
     } | null;
     if (res.ok && data) {
@@ -185,7 +189,11 @@ Chỉ trích CHUYẾN BAY THẬT từ email xác nhận vé (bỏ quảng cáo, 
         return NextResponse.json({ trips: toolUse.input.trips, scanned: usable.length });
       }
     }
-    const detail = data?.error?.message?.slice(0, 200) ?? `Claude HTTP ${res.status}`;
+    const detail =
+      data?.error?.message?.slice(0, 200) ??
+      (res.ok
+        ? `Claude 200 nhưng thiếu danh sách (stop_reason: ${data?.stop_reason ?? "?"}, blocks: ${(data?.content ?? []).map((c) => c.type).join(",") || "rỗng"})`
+        : `Claude HTTP ${res.status}`);
     console.error("gmail/flights failed:", detail);
     return NextResponse.json({ error: "claude-failed", detail }, { status: 502 });
   } catch (e) {

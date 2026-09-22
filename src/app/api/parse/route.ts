@@ -129,7 +129,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       headers,
       body: JSON.stringify({
         model: process.env.LOWTECHIE_MODEL || "claude-sonnet-5",
-        max_tokens: 1024,
+        max_tokens: 4096,
+        output_config: { effort: "low" },
         system: systemPrompt(localIso(epochMs, tzOffsetMin), tzName),
         tools: [TOOL_SCHEMA],
         tool_choice: { type: "tool", name: "emit_actions" },

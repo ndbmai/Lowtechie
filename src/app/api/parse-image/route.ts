@@ -135,8 +135,9 @@ export async function POST(req: Request): Promise<NextResponse> {
       body: JSON.stringify({
         model: process.env.LOWTECHIE_MODEL || "claude-sonnet-5",
         // Danh sách viết tay dài → JSON trả về dài; để thấp là bị cắt
-        // giữa chừng và hỏng tool input.
-        max_tokens: 8192,
+        // giữa chừng và hỏng tool input (phần suy nghĩ cũng ăn vào trần).
+        max_tokens: 12000,
+        output_config: { effort: "low" },
         system: systemPrompt(localIso(epochMs, tzOffsetMin)),
         tools: [TOOL_SCHEMA],
         tool_choice: { type: "tool", name: "emit_checklist" },
