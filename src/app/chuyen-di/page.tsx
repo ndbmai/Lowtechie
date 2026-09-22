@@ -7,7 +7,8 @@ import {
   groupsFor,
   type ChecklistTab,
 } from "@/core/checklist";
-import { fullFlightChain, validateChainBlocks } from "@/core/timeback";
+import { IATA_TZ_MIN } from "@/core/flights";
+import { fullFlightChain, parseOffsetMin, validateChainBlocks } from "@/core/timeback";
 import type { Destination, Trip, TripAttachment } from "@/core/types";
 import { deleteFile, getFile, putFile } from "@/lib/fileStore";
 import { fmtDay, fmtDayTime, fmtRange, fmtTime, isSameDay } from "@/lib/format";
@@ -51,17 +52,23 @@ function ticketFileName(c: FlightTripCandidate, fallback: string): string {
   return `Ve_${from}-${to}_${c.departAt.slice(0, 10)}${c.pnr ? `_${c.pnr}` : ""}.pdf`;
 }
 
+// Danh sách phương tiện v2.3 — không có "Người đón".
 const MODE_OPTIONS = [
   { id: "grab", label: "Grab/taxi" },
   { id: "car", label: "Ô tô riêng" },
-  { id: "train", label: "Tàu" },
+  { id: "train", label: "Tàu điện" },
+  { id: "bus", label: "Xe bus" },
   { id: "bike", label: "Xe máy" },
-  { id: "pickup", label: "Người đón" },
 ] as const;
 type TravelMode = (typeof MODE_OPTIONS)[number]["id"];
 
+/** Chế độ Routes API theo phương tiện (xe máy = hai bánh, server tự rơi về lái xe). */
+function routeMode(mode: TravelMode): "transit" | "drive" | "bike" {
+  return mode === "train" || mode === "bus" ? "transit" : mode === "bike" ? "bike" : "drive";
+}
+
 function mapsUrl(origin: string, destination: string, mode: TravelMode): string {
-  const m = mode === "train" ? "transit" : "driving";
+  const m = mode === "train" || mode === "bus" ? "transit" : "driving";
   return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=${m}`;
 }
 
@@ -316,8 +323,14 @@ function FullChain({ trip }: { trip: Trip }) {
         checkinOverrideMin: checkinMin,
         arrivalProcessMin: arriveProcMin,
         travelAfterMin: afterOn && trip.arriveAt ? afterMin : 0,
+        // v2.3: cảnh báo tính theo giờ ĐỊA PHƯƠNG thành phố đi — dữ liệu
+        // cũ lưu dạng Z thì suy từ mã sân bay, cuối cùng mới tới giờ máy.
+        originTzOffsetMin:
+          parseOffsetMin(trip.departAt) ??
+          (from ? IATA_TZ_MIN[from] : undefined) ??
+          -new Date().getTimezoneOffset(),
       }),
-    [trip, prepOn, prepMin, travelMin, checkinMin, arriveProcMin, afterOn, afterMin],
+    [trip, from, prepOn, prepMin, travelMin, checkinMin, arriveProcMin, afterOn, afterMin],
   );
   const chainError = validateChainBlocks(chain.blocks);
   const departDay = new Date(trip.departAt);
@@ -330,7 +343,7 @@ function FullChain({ trip }: { trip: Trip }) {
     const r = await fetchRoute({
       origin: which === "to" ? place : airport,
       destination: which === "to" ? airport : place,
-      mode: mode === "train" ? "transit" : "drive",
+      mode: routeMode(mode),
       arriveByMs:
         which === "to"
           ? Date.parse(trip.departAt) - checkinMin * 60_000

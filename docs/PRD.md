@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 2.0 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng; tạo lịch trong app → xem trước → book Google Calendar; kết nối Lark Mail, Lark Calendar và bot trong group chat Lark; chuỗi ngày bay đầy đủ hai đầu, chỉnh sửa được; sửa lỗi voice; xóa chuyến bay cũ; tự lưu vé PDF vào chuyến mới.*
+*Phiên bản 2.3 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng; tạo lịch trong app → xem trước → book Google Calendar; kết nối Lark Mail, Lark Calendar và bot trong group chat Lark; chuỗi ngày bay đầy đủ hai đầu, chỉnh sửa được; sửa lỗi voice; xóa chuyến bay cũ; tự lưu vé PDF vào chuyến mới; sửa cảnh báo nửa đêm sai; cập nhật danh sách phương tiện; màn Lịch xem theo tháng, không giới hạn quá khứ/tương lai; lịch hẹn định kỳ dài hạn (gia hạn giấy tờ); tên khách hàng nhập một lần được lưu và gợi ý lại.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -69,6 +69,7 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 | Giao việc | "Thứ Ba nhắc chị gửi báo giá cho OKR, dự án Circle, gấp" |
 | Ảnh | *(gửi ảnh checklist)* + "việc của Circle, hạn thứ Sáu" |
 | Lịch & di chuyển | "Tối nay 7 giờ hẹn ở Thonglor, đi tàu" / "Mai đi ô tô ra sân bay nhé" |
+| Xem lịch | "Tháng 12 chị có gì?" / "Lần gia hạn trước là ngày nào?" |
 | Tạo & book lịch | "Thứ Năm 2 giờ họp với Đô thị, tạo link Meet" → xem trước → "ok book đi" |
 | Hồ sơ chuẩn bị | "Lần này chỉ cần 30 phút chuẩn bị thôi" |
 | Chuyến đi | "Thứ Tư tuần sau chị bay Tokyo 4 ngày" / "Thêm máy uốn tóc vào checklist Tokyo" |
@@ -108,7 +109,7 @@ Mai gửi ảnh, Lowtechie tự trích danh sách việc.
 - Trường dữ liệu: tiêu đề, dự án, người phụ trách, deadline (cứng/mềm), ưu tiên, trạng thái, ước lượng thời gian, nguồn (kênh + link/trích đoạn tin nhắn gốc), độ tin cậy.
 - **Triage inbox**: mọi task trích xuất tự động vào hàng chờ duyệt trước, swipe để nhận/sửa/bỏ. Task do Mai tự giao đi thẳng vào danh sách.
 - Ưu tiên tính theo: deadline, trọng số dự án (Mai đặt, ví dụ Sorene 40%, Circle 30%...), phụ thuộc (đang chặn người khác?), năng lượng cần (deep/shallow).
-- Loại đặc biệt: **Waiting-on** (việc đã giao/đang chờ người khác, tự nhắc follow-up), **Routine** (học tiếng Thái hằng ngày, spa định kỳ), **Hard deadline hành chính** (thuế, gia hạn, báo cáo pháp lý).
+- Loại đặc biệt: **Waiting-on** (việc đã giao/đang chờ người khác, tự nhắc follow-up), **Routine** (học tiếng Thái hằng ngày, spa định kỳ), **Hard deadline hành chính** (thuế, gia hạn giấy tờ, báo cáo pháp lý), **Hẹn định kỳ dài hạn** (mỗi 3 tháng, mỗi năm; xem 5.4.0).
 
 ### 5.2.1 Kiểm tra trước khi lưu & phân loại thông minh
 **Nguyên tắc:** không việc nào được ghi vào danh sách hay file checklist (Google Sheets / Notion) khi chưa qua bước kiểm tra và Mai chưa xác nhận. Áp dụng cho mọi nguồn: chat, voice, ảnh, group chat, recap họp, email.
@@ -165,7 +166,7 @@ flowchart LR
   2. **Category** (lọc theo dự án đã chọn)
   3. **Khách hàng / đối tác** (lọc theo dự án đã chọn, không bắt buộc)
   4. **Deadline** (xem 3c)
-- Mỗi trường là ô chọn **có tìm kiếm**: gõ vài chữ để lọc; nếu không có kết quả thì hiện dòng **"Tạo mới: …"** để tạo ngay tại chỗ, không phải rời thẻ duyệt.
+- Mỗi trường là ô chọn **có tìm kiếm**: gõ vài chữ để lọc; nếu không có kết quả thì hiện dòng **"Tạo mới: …"** để tạo ngay tại chỗ, không phải rời thẻ duyệt. Mọi thứ tạo mới ở đây (category, khách hàng) được lưu vĩnh viễn và xuất hiện trong gợi ý các lần sau (xem 5.3.2).
 - Không dùng một danh sách phẳng dài gộp tất cả "Dự án · Category": chọn dự án trước, category sau.
 - Đổi tên hoặc xóa category / khách hàng làm ở màn Dự án (mục 5.3.1, 5.3.2); thẻ duyệt chỉ chọn và tạo mới để giữ thao tác nhanh.
 - Sửa bằng chat/voice ngay trên thẻ: "việc này của khách Đô thị, category Hợp đồng".
@@ -247,6 +248,15 @@ Ví dụ: *"Ký lại hợp đồng website"* → **Circle · Hợp đồng · K
 - Một khách hàng có thể thuộc nhiều dự án (ví dụ vừa là khách của Circle vừa là đối tác của Sorene).
 - Mai thêm, sửa, gộp (khi trùng tên), lưu trữ bằng chat, voice, màn Dự án, hoặc tạo nhanh ngay trong thẻ duyệt.
 
+**Nhập một lần, lần sau chỉ cần chọn** (lỗi thấy 22/9: nhập "Đô Thị" trong thẻ duyệt nhưng lần sau vẫn phải nhập lại)
+- Khi Mai gõ một tên khách hàng/đối tác mới trong thẻ duyệt và lưu việc, tên đó **tự động được thêm vào danh bạ** của dự án đang chọn, kể cả khi Mai không bấm dòng "Tạo mới". Không có tên nào chỉ nằm trên một việc rồi mất.
+- Danh bạ lưu trên máy chủ, đồng bộ mọi thiết bị; không chỉ lưu tạm trên màn hình.
+- **Lần sau:** ô Khách hàng / đối tác hiện danh sách gợi ý ngay khi mở, sắp theo: khách vừa dùng gần đây → khách hay dùng nhất trong dự án → còn lại theo thứ tự Mai đặt.
+- **Gõ vài chữ là ra:** tìm không phân biệt hoa/thường và dấu, ví dụ "do thi", "đô thị", "Đô Thị" đều ra cùng một khách "Đô Thị".
+- **Không tạo trùng:** tên mới gần giống tên đã có (khác hoa/thường, khác dấu, thừa khoảng trắng) → hỏi "Có phải Đô Thị?" thay vì tạo thêm một mục.
+- **Tự điền:** nội dung việc có nhắc tên khách đã có trong danh bạ → ô khách hàng tự điền sẵn; Mai chỉ cần kiểm tra.
+- Tên đã lưu sửa hoặc gộp được ở màn Dự án (đổi tên thì mọi việc cũ cập nhật theo).
+
 **Nhận diện tự động**
 - Khi trích việc, Lowtechie so tên trong nội dung với danh bạ (kể cả tên gọi tắt) để điền khách hàng.
 - Gặp tên chưa có trong danh bạ → đề xuất "Tạo khách hàng mới 'Đô thị' cho Circle?" thay vì bỏ trống hoặc đoán.
@@ -292,6 +302,27 @@ Mai tạo lịch bằng chat, voice hoặc form trong app (ví dụ *"Thứ Năm
 - **Đồng bộ hai chiều:** Mai sửa hay xóa sự kiện trực tiếp trên Google Calendar → app cập nhật theo, và chuỗi block chuẩn bị/di chuyển tự dời hoặc hỏi lại.
 - Sửa sự kiện đã book cũng đi qua thẻ xem trước, chỉ hiện phần thay đổi (trước → sau).
 - **Tự động dần:** Mai có thể bật "book thẳng, báo sau" cho từng loại lịch không mời ai (ví dụ block học tiếng Thái, spa định kỳ). Mặc định luôn hỏi.
+
+### 5.4.0 Màn Lịch: xem theo ngày, tuần, tháng — không giới hạn thời gian
+- **Chế độ xem:** Ngày · Tuần · **Tháng** · Danh sách (các sự kiện sắp tới, cuộn liên tục). Mai chọn chế độ mặc định; app nhớ chế độ lần trước.
+- **Xem theo tháng:**
+  - Mỗi ngày hiện chấm màu theo dự án (tối đa vài chấm, thêm "+N" nếu nhiều); ngày có hạn cứng, chuyến bay hoặc hẹn gia hạn giấy tờ có biểu tượng riêng dễ nhận ra.
+  - Chạm vào một ngày → danh sách sự kiện và việc đến hạn của ngày đó ngay bên dưới.
+  - Vuốt trái/phải để chuyển tháng; nút **Hôm nay** để quay về; chọn nhanh tháng/năm bất kỳ.
+- **Không giới hạn thời gian:** cuộn tới tương lai hay lùi về quá khứ bao xa cũng được (ví dụ xem lại lịch năm ngoái, hoặc xem hẹn gia hạn sau 1 năm). Dữ liệu được tải dần theo tháng đang xem từ Google Calendar và Lark Calendar, không tải trước toàn bộ.
+- **Lịch cũ:** sự kiện đã qua vẫn xem được đầy đủ (giờ, địa điểm, ghi chú, file đính kèm, recap họp nếu có).
+- **Tìm kiếm trên toàn bộ lịch:** gõ hoặc nói "visa", "Đô thị", "spa" → mọi sự kiện khớp, cả quá khứ và tương lai, sắp theo thời gian.
+- **Lọc** theo dự án, khách hàng, lịch nguồn (Google / Lark), loại (sự kiện / hạn việc / chuyến bay).
+- Hỏi bằng chat/voice: "tháng 12 chị có gì?", "lần gia hạn trước là ngày nào?", "năm sau có hẹn gì cố định?".
+
+**Lịch hẹn định kỳ dài hạn (ví dụ gia hạn visa mỗi 3 tháng, mỗi năm)**
+- Tạo lịch lặp theo chu kỳ bất kỳ: mỗi tuần, mỗi tháng, **mỗi 3 tháng**, mỗi 6 tháng, **mỗi năm**, hoặc tùy chỉnh ("mỗi 90 ngày").
+- **Tính theo ngày thực tế:** nếu lần gia hạn thực tế sớm hay muộn hơn lịch, Mai cập nhật ngày thực tế và các lần sau tự tính lại từ ngày đó ("gia hạn xong hôm nay, lần sau sau 3 tháng").
+- **Nhắc trước nhiều mốc:** mặc định 30 ngày, 14 ngày, 7 ngày và 1 ngày trước; chỉnh được cho từng loại hẹn.
+- **Việc chuẩn bị tự tạo trước mỗi lần hẹn:** ví dụ "chuẩn bị giấy tờ", "đặt lịch hẹn", "chụp ảnh", theo một mẫu checklist Mai tự sửa (giống checklist bay).
+- **Lịch sử từng lần:** mỗi lần hẹn lưu ngày thực hiện, ghi chú, file đính kèm (biên nhận, bản chụp giấy tờ); xem lại được bất cứ lúc nào.
+- Thuộc dự án mặc định Cá nhân · Giấy tờ & tài chính cá nhân (hoặc Admin chung); được đánh dấu **hạn cứng** và luôn hiện nổi bật trên màn Tháng.
+- Kiểm tra xung đột: hẹn gia hạn trùng ngày bay hoặc Mai đang ở thành phố khác → cảnh báo sớm (từ mốc nhắc 30 ngày).
 
 ### 5.4.1 Điều phối thời gian: chuẩn bị + di chuyển
 Mục tiêu: Mai chỉ cần nói "hẹn 19:00 ở Thonglor" hoặc "bay 10:30 từ Suvarnabhumi", Lowtechie tự tính ngược và khóa lịch để biết **khi nào bắt đầu chuẩn bị** và **khi nào phải đi**.
@@ -526,7 +557,8 @@ Chuỗi đầy đủ gồm các block theo đúng thứ tự thời gian:
 | → | Giờ về đến nơi | | Hiện rõ, và dùng để xếp việc tiếp theo trong ngày |
 
 **Phương tiện (block 2 và 6)**
-- Chọn một chạm: Grab / taxi · ô tô riêng · tàu (Airport Rail Link, BTS/MRT, metro Tokyo) · xe máy · người đón.
+- Chọn một chạm: **Grab/taxi · Ô tô riêng · Tàu điện** (Airport Rail Link, BTS/MRT, metro Tokyo) **· Xe bus · Xe máy**. Không có lựa chọn "Người đón".
+- Google Maps tính theo đúng phương tiện: Tàu điện và Xe bus dùng chế độ phương tiện công cộng; Grab/taxi, Ô tô riêng dùng chế độ lái xe; Xe máy dùng chế độ xe hai bánh nếu có ở khu vực đó, không có thì dùng lái xe.
 - Điểm xuất phát / điểm đến chọn từ địa điểm đã lưu (Nhà Bangkok, nơi ở HCMC, khách sạn Tokyo…) hoặc gõ địa chỉ; mặc định theo thành phố của chặng bay (chặng từ SGN tính từ nơi ở tại HCMC, không phải nhà Bangkok).
 - Hiện: thời gian dự kiến, quãng đường, giờ nên đi, và nút **Mở trong Google Maps**. Kiểm tra lại giao thông thực tế trước giờ đi như 5.4.1.
 
@@ -543,6 +575,9 @@ Chuỗi đầy đủ gồm các block theo đúng thứ tự thời gian:
 - Block rơi sang **ngày khác** phải hiện kèm ngày (ví dụ "Thứ Năm 1/10, 22:00").
 - Thời gian di chuyển bất thường (ví dụ trên 3 tiếng trong cùng thành phố) → cảnh báo và hỏi lại; kiểm tra đơn vị (phút / giây) từ Google Maps.
 - Nếu giờ bắt đầu chuẩn bị rơi vào ban đêm (0:00–5:00) → hỏi Mai có muốn đổi phương tiện, rút ngắn chuẩn bị hoặc chấp nhận.
+  - **Giờ dùng để kiểm tra phải là giờ địa phương** của thành phố nơi block diễn ra (ví dụ HCMC, UTC+7), **không phải giờ UTC** của máy chủ. Lỗi thấy 22/9: chuẩn bị bắt đầu 7:13 sáng nhưng vẫn hiện cảnh báo "nửa đêm"; 7:13 giờ Việt Nam đúng bằng 0:13 giờ UTC, nên nhiều khả năng phép kiểm tra đang đọc giờ UTC.
+  - **Mọi cảnh báo được tính lại mỗi khi chuỗi thay đổi** (đổi phương tiện, sửa thời lượng, bấm Tính). Cảnh báo không còn đúng phải biến mất ngay, không được giữ lại từ lần tính trước.
+  - Test: chuẩn bị 7:13 giờ HCMC → không cảnh báo; chuẩn bị 4:30 giờ HCMC → có cảnh báo.
 
 **Ví dụ chuỗi đúng cho VU-131, 2/10** (số phút di chuyển chỉ minh họa, thực tế lấy từ Google Maps)
 | Giờ | Block |
@@ -587,7 +622,7 @@ Thanh điều hướng 5 mục: **Hôm nay** · **Dự án** · **Bông mai** (g
 | Giao việc | Nói một câu thành nhiều việc | Sóng âm, lời chép trực tiếp, thẻ việc đã tách, Lưu cả hai / Sửa |
 | Hộp duyệt | Kiểm soát việc tự trích | Thẻ vuốt (bỏ / sửa / nhận), nguồn, trích dẫn gốc, độ chắc chắn |
 | Dự án | Thấy phân bổ thời gian | Vòng tiến độ thời gian thật so với mục tiêu, cảnh báo dự án bị bỏ đói |
-| Lịch | Đặt giờ có kiểm soát | 3 khung đề xuất kèm lý do, ghi chú múi giờ, nút đặt |
+| Lịch | Xem và đặt giờ có kiểm soát | Chế độ Ngày / Tuần / Tháng / Danh sách, cuộn không giới hạn quá khứ và tương lai, tìm kiếm toàn bộ lịch; 3 khung đề xuất kèm lý do khi đặt giờ |
 | Họp | Ghi và recap | Thanh ghi âm, recap 4 phần, Lưu việc / Gửi recap |
 | Chuyến đi | Không quên gì khi bay | Checklist tick được theo điểm đến, việc trước khi bay theo mốc, chuỗi lịch ngày bay |
 | Weekly review | Giúp nói "không" | Biểu đồ thời gian vs mục tiêu, việc dời nhiều lần, Bỏ / Giao / Hoãn |
@@ -673,9 +708,11 @@ Ghi chú lựa chọn:
 - `projects` (id, name, weight, goal, members, linked_channels)
 - `projects` bổ sung: color, icon, sort_order, keywords, status (active / archived)
 - `categories` (id, project_id, name, sort_order, is_default, status)
-- `clients` (id, sort_order, name, type: khách hàng/đối tác/nhà cung cấp, aliases, contacts, status, linked_channels, notes)
+- `clients` (id, sort_order, name, name_normalized, last_used_at, use_count, type: khách hàng/đối tác/nhà cung cấp, aliases, contacts, status, linked_channels, notes)
 - `client_projects` (client_id, project_id)
 - `tasks` bổ sung: client_id, due_date, due_time (tùy chọn), due_type (cứng / mềm / không hạn), due_source (từ nguồn / Mai điền), due_quote
+- `recurring_series` (title, interval: weeks/months/years/days, interval_count, anchor_date, recalc_from_actual, reminder_offsets, prep_checklist_template_id, project_id, category_id, is_hard)
+- `series_occurrences` (series_id, planned_date, actual_date, notes, attachments)
 - `due_changes` (task_id, old_due, new_due, changed_at, reason)
 - `structure_changes` (type: add/rename/merge/move/archive/delete, before, after, confirmed_at) — để hoàn tác
 - `classification_feedback` (task_id, suggested_project, suggested_category, final_project, final_category, signals)

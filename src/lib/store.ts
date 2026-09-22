@@ -18,6 +18,12 @@ import type {
 } from "@/core/types";
 import { makeClientId } from "@/core/clients";
 import {
+  DEFAULT_PREP_TEMPLATE,
+  DEFAULT_REMINDER_OFFSETS,
+  completeOccurrence,
+  type RecurringSeries,
+} from "@/core/series";
+import {
   DEFAULT_CATEGORIES,
   DEFAULT_PROJECTS,
   WEEKLY_CAPACITY_HOURS,
@@ -56,6 +62,8 @@ interface LowtechieState {
   dueChanges: { taskId: string; oldDue?: string; newDue?: string; changedAt: string }[];
   /** Chuyến vừa xóa, giữ vài phút để Hoàn tác (§5.9 6a — xóa mềm). */
   tripTrash: { trip: Trip; events: CalEvent[]; deletedAt: string }[];
+  /** Hẹn định kỳ dài hạn — gia hạn visa 3 tháng, mỗi năm (§5.4.0 v2.3). */
+  series: RecurringSeries[];
   events: CalEvent[];
   trips: Trip[];
   /** Món checklist Mai tự thêm, học cho các chuyến sau cùng điểm đến. */
@@ -71,6 +79,8 @@ interface LowtechieState {
     defaultPrepMinutes: number;
     /** Địa chỉ nhà — điểm xuất phát cho Google Maps (places của PRD §8). */
     homeAddress: string;
+    /** Chế độ xem Lịch lần trước — app nhớ (§5.4.0 v2.3). */
+    calendarView: "day" | "week" | "month" | "list";
   };
 
   addTask: (draft: TaskDraft) => Task;
@@ -119,6 +129,24 @@ interface LowtechieState {
 
   setWalkToStation: (min: number) => void;
   setHomeAddress: (address: string) => void;
+  setCalendarView: (view: "day" | "week" | "month" | "list") => void;
+
+  addSeries: (
+    s: Pick<RecurringSeries, "title" | "intervalUnit" | "intervalCount" | "nextDate"> &
+      Partial<Pick<RecurringSeries, "projectId" | "categoryId" | "isHard">>,
+  ) => void;
+  updateSeries: (
+    id: string,
+    patch: Partial<
+      Pick<RecurringSeries, "title" | "intervalUnit" | "intervalCount" | "nextDate" | "prepTemplate" | "reminderOffsets" | "prepCreatedFor">
+    >,
+  ) => void;
+  deleteSeries: (id: string) => void;
+  /** Ghi ngày làm THẬT → lần sau tính từ ngày đó (§5.4.0 v2.3). */
+  completeSeries: (id: string, actualDateIso: string, notes?: string) => void;
+
+  /** Đánh dấu khách vừa được dùng — nuôi gợi ý "gần đây/hay dùng" (v2.3). */
+  touchClient: (id: string) => void;
 
   addProject: (name: string, color: string) => Project | null;
   updateProject: (
@@ -197,13 +225,14 @@ export const useStore = create<LowtechieState>()(
       clients: [],
       dueChanges: [],
       tripTrash: [],
+      series: [],
       events: [],
       trips: [],
       learnedItems: { tokyo: [], hcmc: [], bkk: [] },
       feedback: [],
       triageImages: {},
       pendingBlock: undefined,
-      settings: { walkToStationMin: 12, defaultPrepMinutes: 90, homeAddress: "" },
+      settings: { walkToStationMin: 12, defaultPrepMinutes: 90, homeAddress: "", calendarView: "week" },
 
       addTask: (draft) => {
         const t: Task = {
@@ -491,6 +520,49 @@ export const useStore = create<LowtechieState>()(
         set((s) => ({ settings: { ...s.settings, walkToStationMin: min } })),
       setHomeAddress: (address) =>
         set((s) => ({ settings: { ...s.settings, homeAddress: address.slice(0, 300) } })),
+      setCalendarView: (view) =>
+        set((s) => ({ settings: { ...s.settings, calendarView: view } })),
+
+      addSeries: (sr) =>
+        set((s) => ({
+          series: [
+            ...s.series,
+            {
+              id: uid(),
+              title: sr.title.trim().slice(0, 80),
+              intervalUnit: sr.intervalUnit,
+              intervalCount: Math.max(1, sr.intervalCount),
+              nextDate: sr.nextDate.slice(0, 10),
+              reminderOffsets: DEFAULT_REMINDER_OFFSETS,
+              prepTemplate: DEFAULT_PREP_TEMPLATE,
+              projectId: sr.projectId ?? "canhan",
+              categoryId: sr.categoryId ?? "canhan:giayto",
+              isHard: sr.isHard ?? true,
+              history: [],
+            },
+          ],
+        })),
+      updateSeries: (id, patch) =>
+        set((s) => ({
+          series: s.series.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+        })),
+      deleteSeries: (id) =>
+        set((s) => ({ series: s.series.filter((x) => x.id !== id) })),
+      completeSeries: (id, actualDateIso, notes) =>
+        set((s) => ({
+          series: s.series.map((x) =>
+            x.id === id ? completeOccurrence(x, actualDateIso, notes) : x,
+          ),
+        })),
+
+      touchClient: (id) =>
+        set((s) => ({
+          clients: s.clients.map((c) =>
+            c.id === id
+              ? { ...c, lastUsedAt: new Date().toISOString(), useCount: (c.useCount ?? 0) + 1 }
+              : c,
+          ),
+        })),
 
       addProject: (name, color) => {
         const trimmed = name.trim().slice(0, 40);
@@ -674,7 +746,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 8,
+      version: 9,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -711,6 +783,7 @@ export const useStore = create<LowtechieState>()(
             defaultPrepMinutes: 90,
             homeAddress: "",
             ...(s.settings ?? {}),
+            calendarView: s.settings?.calendarView ?? "week",
           };
         }
         if (version < 5) {
@@ -756,6 +829,17 @@ export const useStore = create<LowtechieState>()(
         if (version < 8) {
           // v8 (PRD v2.0): thùng rác chuyến để hoàn tác xóa (6a).
           s.tripTrash = s.tripTrash ?? [];
+        }
+        if (version < 9) {
+          // v9 (PRD v2.3): hẹn định kỳ dài hạn + chế độ xem Lịch đã nhớ.
+          s.series = s.series ?? [];
+          const prev = s.settings;
+          s.settings = {
+            walkToStationMin: prev?.walkToStationMin ?? 12,
+            defaultPrepMinutes: prev?.defaultPrepMinutes ?? 90,
+            homeAddress: prev?.homeAddress ?? "",
+            calendarView: prev?.calendarView ?? "week",
+          };
         }
         return s as LowtechieState;
       },

@@ -57,6 +57,22 @@ const IATA_DEST: Record<string, Destination> = {
   DMK: "bkk",
 };
 
+/**
+ * Offset múi giờ (phút) theo sân bay — cho cảnh báo giờ địa phương của
+ * chuỗi ngày bay khi dữ liệu cũ lưu ISO dạng Z (mất offset).
+ */
+export const IATA_TZ_MIN: Record<string, number> = {
+  SGN: 420,
+  HAN: 420,
+  DAD: 420,
+  BKK: 420,
+  DMK: 420,
+  CNX: 420,
+  NRT: 540,
+  HND: 540,
+  KIX: 540,
+};
+
 function hhmm(iso: string): string {
   const m = iso.match(/T(\d{2}):(\d{2})/);
   return m ? `${parseInt(m[1], 10)}:${m[2]}` : "";

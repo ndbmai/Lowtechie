@@ -74,6 +74,11 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Xóa chuyến (§5.9 6a): thẻ xác nhận liệt kê block/lịch/file vé, chọn nhiều trong Lịch sử, Hoàn tác 10 phút, không hủy vé với hãng
 - [x] Tự lưu vé PDF vào chuyến (v2.0): xác nhận chuyến là vé trong email tự tải về máy (IndexedDB), tên chuẩn `Ve_SGN-BKK_2026-10-02_OADC5J.pdf`, đổi vé → bản mới nhất + lịch sử
 - [x] Book lịch có xem trước (§5.4, bản đầu): thẻ sự kiện cảnh báo trùng giờ/ngày bay, tick mới book lên Google Calendar, có Hoàn tác
+- [x] Cảnh báo chuỗi bay theo GIỜ ĐỊA PHƯƠNG (v2.3, sửa lỗi "7:13 sáng bị coi là nửa đêm"): đọc offset từ vé, dữ liệu cũ suy từ mã sân bay; test 7:13/4:30 giờ HCMC
+- [x] Phương tiện v2.3: Grab/taxi · Ô tô riêng · Tàu điện · Xe bus · Xe máy (chế độ hai bánh, tự rơi về lái xe); bỏ "Người đón"
+- [x] Màn Lịch v2.3 (§5.4.0): xem Ngày/Tuần/Tháng/Danh sách (app nhớ chế độ), lưới tháng chấm màu dự án + ✈️❗📄, không giới hạn quá khứ/tương lai (tải theo tháng), tìm kiếm toàn bộ lịch (app + Google), lọc dự án/loại/nguồn
+- [x] Hẹn định kỳ dài hạn (§5.4.0): chu kỳ bất kỳ (3 tháng, năm, N ngày), "Đã làm" tính lại từ ngày thật, đếm ngược 30/14/7/1, việc chuẩn bị tự vào Hộp duyệt trước 30 ngày, lịch sử từng lần, cảnh báo trùng ngày bay
+- [x] Khách hàng nhập MỘT lần (v2.3, sửa lỗi nhập lại "Đô Thị"): tên gõ tay rồi Lưu là vào danh bạ, tìm không dấu, tên gần giống dùng lại không tạo trùng, gợi ý theo gần đây → hay dùng → thứ tự Mai đặt
 - [x] Tạm ngưng dự án + xóa phải chọn nơi chuyển việc (§5.3.1)
 - [ ] Speech-to-text server (voice note VI/TH/EN trộn) — đang dùng Web Speech của trình duyệt
 - [ ] Sync Google Sheets · ghi âm họp offline + recap

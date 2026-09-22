@@ -30,13 +30,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   let origin = "";
   let destination = "";
-  let mode: "transit" | "drive" = "transit";
+  let mode: "transit" | "drive" | "bike" = "transit";
   let arriveByMs = 0;
   try {
     const body = (await req.json()) as Record<string, unknown>;
     if (typeof body.origin === "string") origin = body.origin.slice(0, 300);
     if (typeof body.destination === "string") destination = body.destination.slice(0, 300);
     if (body.mode === "drive") mode = "drive";
+    if (body.mode === "bike") mode = "bike";
     if (typeof body.arriveByMs === "number" && Number.isFinite(body.arriveByMs))
       arriveByMs = body.arriveByMs;
   } catch {
@@ -46,24 +47,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Thiếu origin/destination" }, { status: 400 });
   }
 
-  const payload: Record<string, unknown> = {
-    origin: { address: origin },
-    destination: { address: destination },
-    travelMode: mode === "transit" ? "TRANSIT" : "DRIVE",
-    computeAlternativeRoutes: false,
+  const buildPayload = (travelMode: string): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      origin: { address: origin },
+      destination: { address: destination },
+      travelMode,
+      computeAlternativeRoutes: false,
+    };
+    if (travelMode === "TRANSIT") {
+      if (arriveByMs > Date.now()) payload.arrivalTime = new Date(arriveByMs).toISOString();
+    } else {
+      // Lái xe/xe máy chỉ nhận giờ ĐI: ước lượng rời trước giờ đến ~45
+      // phút, không được ở quá khứ (giới hạn PRD §5.4.1 đã ghi).
+      const dep = Math.max(Date.now() + 60_000, arriveByMs - 45 * 60_000);
+      payload.departureTime = new Date(dep).toISOString();
+      if (travelMode === "DRIVE") payload.routingPreference = "TRAFFIC_AWARE_OPTIMAL";
+    }
+    return payload;
   };
-  if (mode === "transit") {
-    if (arriveByMs > Date.now()) payload.arrivalTime = new Date(arriveByMs).toISOString();
-  } else {
-    // Ô tô chỉ nhận giờ ĐI: ước lượng rời trước giờ đến ~45 phút,
-    // không được ở quá khứ (giới hạn PRD §5.4.1 đã ghi).
-    const dep = Math.max(Date.now() + 60_000, arriveByMs - 45 * 60_000);
-    payload.departureTime = new Date(dep).toISOString();
-    payload.routingPreference = "TRAFFIC_AWARE_OPTIMAL";
-  }
 
-  try {
-    const res = await fetch(ROUTES_URL, {
+  const call = async (travelMode: string) =>
+    fetch(ROUTES_URL, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -71,12 +75,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         "X-Goog-FieldMask":
           "routes.duration,routes.legs.steps.travelMode,routes.legs.steps.staticDuration",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(buildPayload(travelMode)),
     });
-    const data = (await res.json().catch(() => null)) as {
+
+  try {
+    // Xe máy dùng TWO_WHEELER; khu vực không hỗ trợ → rơi về DRIVE (v2.3).
+    let res = await call(mode === "transit" ? "TRANSIT" : mode === "bike" ? "TWO_WHEELER" : "DRIVE");
+    let data = (await res.json().catch(() => null)) as {
       routes?: { duration?: string; legs?: { steps?: Step[] }[] }[];
       error?: { message?: string; status?: string };
     } | null;
+    if (mode === "bike" && (!res.ok || !data?.routes?.length)) {
+      res = await call("DRIVE");
+      data = (await res.json().catch(() => null)) as typeof data;
+    }
     if (!res.ok || !data?.routes?.length) {
       const detail =
         data?.error?.message?.slice(0, 200) ??
@@ -86,8 +98,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const route = data.routes[0];
     const totalMin = Math.max(1, toMin(secs(route.duration)));
-    if (mode === "drive") {
-      return NextResponse.json({ mode, totalMin, driveMin: totalMin });
+    if (mode !== "transit") {
+      return NextResponse.json({ mode: "drive", totalMin, driveMin: totalMin });
     }
 
     // Tách: đi bộ đầu → (tàu + đổi tuyến + chờ) → đi bộ cuối.

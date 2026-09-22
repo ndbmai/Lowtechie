@@ -44,6 +44,9 @@ export interface Client {
   status: "danglam" | "tiemnang" | "ketthuc";
   contact?: string;
   notes?: string;
+  /** Gợi ý "vừa dùng gần đây / hay dùng nhất" trong ô chọn (v2.3). */
+  lastUsedAt?: string;
+  useCount?: number;
 }
 
 /** Học từ sửa đổi phân loại: gặp lại term này → dự án/category này. */

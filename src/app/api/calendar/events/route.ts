@@ -18,22 +18,28 @@ async function token(req: NextRequest): Promise<string | null> {
   return accessToken(link);
 }
 
-/** Sự kiện Google Calendar (lịch chính) trong khoảng fromMs–toMs. */
+/**
+ * Sự kiện Google Calendar (lịch chính) trong khoảng fromMs–toMs, hoặc
+ * TÌM TOÀN BỘ LỊCH với ?q= (quá khứ lẫn tương lai — §5.4.0 v2.3).
+ */
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const at = await token(req);
   if (!at) return NextResponse.json({ error: "not-connected" }, { status: 401 });
 
+  const q = req.nextUrl.searchParams.get("q")?.slice(0, 100) ?? "";
   const fromMs = Number(req.nextUrl.searchParams.get("fromMs")) || Date.now();
   const toMs =
     Number(req.nextUrl.searchParams.get("toMs")) || fromMs + 7 * 86_400_000;
 
-  const p = new URLSearchParams({
-    timeMin: new Date(fromMs).toISOString(),
-    timeMax: new Date(toMs).toISOString(),
-    singleEvents: "true",
-    orderBy: "startTime",
-    maxResults: "100",
-  });
+  const p = q
+    ? new URLSearchParams({ q, singleEvents: "true", orderBy: "startTime", maxResults: "50" })
+    : new URLSearchParams({
+        timeMin: new Date(fromMs).toISOString(),
+        timeMax: new Date(toMs).toISOString(),
+        singleEvents: "true",
+        orderBy: "startTime",
+        maxResults: "100",
+      });
   const res = await fetch(`${CAL_BASE}/calendars/primary/events?${p}`, {
     headers: { authorization: `Bearer ${at}` },
   });

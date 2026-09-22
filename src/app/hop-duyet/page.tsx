@@ -5,7 +5,7 @@ import { Blossom } from "@/components/Blossom";
 import { DueEditor } from "@/components/DueEditor";
 import { SearchSelect, type PickOption } from "@/components/SearchSelect";
 import { CONFIDENCE_THRESHOLD, learnableTerms } from "@/core/classify";
-import { clientsFor } from "@/core/clients";
+import { clientsFor, findClientByName, orderClientsForPick } from "@/core/clients";
 import { activeProjects, categoriesFor, categoryName, projectById, PROJECT_COLORS } from "@/core/projects";
 import type { DueType, ProjectId, SourceChannel } from "@/core/types";
 import { fmtDayFull, fmtDayTime } from "@/lib/format";
@@ -49,6 +49,8 @@ export default function TriagePage() {
   const [projectId, setProjectId] = useState<ProjectId>("canhan");
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [clientId, setClientId] = useState<string | undefined>();
+  /** Tên khách Mai đang gõ dở trong ô chọn — Lưu là vào danh bạ (v2.3). */
+  const [clientQuery, setClientQuery] = useState("");
   const [dueAt, setDueAt] = useState<string | undefined>();
   const [dueType, setDueType] = useState<DueType | undefined>();
   const [dueTouched, setDueTouched] = useState(false);
@@ -70,8 +72,9 @@ export default function TriagePage() {
     activeProjects(projects).map((pr) => ({ id: pr.id, label: pr.name, color: pr.color }));
   const categoryOptions = (pid: ProjectId): PickOption[] =>
     categoriesFor(categories, pid).map((c) => ({ id: c.id, label: c.name }));
+  // Gợi ý: vừa dùng gần đây → hay dùng nhất → thứ tự Mai đặt (v2.3).
   const clientOptions = (pid: ProjectId): PickOption[] =>
-    clientsFor(clients, pid).map((c) => ({
+    orderClientsForPick(clientsFor(clients, pid)).map((c) => ({
       id: c.id,
       label: c.name,
       hint: CLIENT_TYPE_LABELS[c.type],
@@ -83,6 +86,7 @@ export default function TriagePage() {
     setAskDue(false);
     setDueTouched(false);
     setGroupOpen(false);
+    setClientQuery("");
   }
 
   function startEdit() {
@@ -106,12 +110,20 @@ export default function TriagePage() {
       return;
     }
     const finalTitle = title.trim() || top.draft.title;
+    // Nhập một lần (v2.3): tên khách gõ tay chưa bấm "Tạo mới" vẫn vào
+    // danh bạ — khớp tên gần giống (khác dấu/hoa thường) thì dùng lại.
+    let finalClient = clientId;
+    if (!finalClient && clientQuery.trim()) {
+      const found = findClientByName(clients, clientQuery);
+      finalClient = found?.id ?? useStore.getState().addClient(clientQuery, projectId)?.id;
+    }
+    if (finalClient) useStore.getState().touchClient(finalClient);
     useStore.getState().addTask({
       ...top.draft,
       title: finalTitle,
       projectId,
       categoryId,
-      clientId,
+      clientId: finalClient,
       dueAt,
       dueType: dueAt ? (dueType ?? "soft") : undefined,
       dueSource: dueAt ? (dueTouched ? "mai" : (top.draft.dueSource ?? "nguon")) : undefined,
@@ -346,8 +358,9 @@ export default function TriagePage() {
                   options={clientOptions(projectId)}
                   emptyLabel="Không có"
                   onPick={setClientId}
+                  onQueryChange={setClientQuery}
                   onCreate={(name) => {
-                    const c = addClient(name, projectId);
+                    const c = findClientByName(clients, name) ?? addClient(name, projectId);
                     if (c) setClientId(c.id);
                   }}
                 />

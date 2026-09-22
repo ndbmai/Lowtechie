@@ -57,6 +57,18 @@ export interface GcalEvent extends Omit<CalEvent, "id" | "kind"> {
   allDay?: boolean;
 }
 
+/** Tìm trên TOÀN BỘ lịch Google (quá khứ + tương lai, §5.4.0 v2.3). */
+export async function searchGcalEvents(q: string): Promise<GcalEvent[]> {
+  try {
+    const res = await fetch(`/api/calendar/events?q=${encodeURIComponent(q)}`);
+    if (!res.ok) return [];
+    const d = (await res.json()) as { events?: GcalEvent[] };
+    return d.events ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /** Sự kiện Google trong khoảng thời gian; [] khi chưa nối. */
 export function useGoogleEvents(fromMs: number, toMs: number, enabled: boolean) {
   const [events, setEvents] = useState<GcalEvent[]>([]);
@@ -218,7 +230,8 @@ export interface RouteResult {
 export async function fetchRoute(params: {
   origin: string;
   destination: string;
-  mode: "transit" | "drive";
+  /** "bike" = xe máy: server dùng chế độ hai bánh, không có thì lái xe. */
+  mode: "transit" | "drive" | "bike";
   arriveByMs: number;
 }): Promise<{ ok: true; route: RouteResult } | { ok: false; detail: string }> {
   try {

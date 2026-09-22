@@ -13,6 +13,45 @@ function norm(s: string): string {
   return s.normalize("NFC").toLowerCase().trim();
 }
 
+/**
+ * Chuẩn hóa tên để TÌM và CHỐNG TRÙNG (v2.3): bỏ dấu, thường hóa, gộp
+ * khoảng trắng — "do thi", "đô thị", "Đô  Thị " đều thành "do thi".
+ */
+export function foldName(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Tìm khách theo tên gõ tay (không phân biệt hoa/thường/dấu, so cả tên
+ * gọi tắt) — dùng để KHÔNG tạo trùng khi Mai nhập lại "Đô Thị" (v2.3).
+ */
+export function findClientByName(clients: Client[], raw: string): Client | undefined {
+  const q = foldName(raw);
+  if (!q) return undefined;
+  return clients.find((c) => foldName(c.name) === q || c.aliases.some((a) => foldName(a) === q));
+}
+
+/**
+ * Thứ tự gợi ý ô Khách hàng (v2.3): vừa dùng gần đây → hay dùng nhất →
+ * còn lại theo thứ tự Mai đặt.
+ */
+export function orderClientsForPick(clients: Client[]): Client[] {
+  const recent = clients
+    .filter((c) => c.lastUsedAt)
+    .sort((a, b) => (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? ""));
+  const frequent = clients
+    .filter((c) => !c.lastUsedAt && (c.useCount ?? 0) > 0)
+    .sort((a, b) => (b.useCount ?? 0) - (a.useCount ?? 0));
+  const rest = clients.filter((c) => !c.lastUsedAt && !(c.useCount ?? 0));
+  return [...recent, ...frequent, ...rest];
+}
+
 /** Khách đang dùng được cho một dự án (đã kết thúc vẫn chọn được để tra cứu). */
 export function clientsFor(clients: Client[], projectId: ProjectId): Client[] {
   return clients.filter((c) => c.projectIds.includes(projectId));

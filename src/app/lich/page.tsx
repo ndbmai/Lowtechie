@@ -2,16 +2,26 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Bubble } from "@/components/Bubble";
+import { projectById } from "@/core/projects";
+import {
+  activeReminder,
+  daysUntil,
+  intervalLabel,
+  isSeriesDay,
+  type RecurringSeries,
+  type SeriesUnit,
+} from "@/core/series";
 import { proposeSlots } from "@/core/slots";
 import { carChain, transitChain, type Chain } from "@/core/timeback";
-import type { CalEvent } from "@/core/types";
-import { fmtDay, fmtRange, fmtTime } from "@/lib/format";
+import type { CalEvent, Task, Trip } from "@/core/types";
+import { fmtDay, fmtDayFull, fmtRange, fmtTime, isSameDay } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
 import {
   createGcalEvent,
   deleteGcalEvent,
   fetchRoute,
+  searchGcalEvents,
   useGoogleEvents,
   useGoogleStatus,
 } from "@/lib/useGoogle";
@@ -287,13 +297,410 @@ function ChainForm({
   );
 }
 
+type ViewMode = "day" | "week" | "month" | "list";
+
+const KIND_FILTERS = [
+  { id: "", label: "Mọi loại" },
+  { id: "event", label: "Sự kiện" },
+  { id: "block", label: "Block" },
+  { id: "flight", label: "Chuyến bay" },
+] as const;
+
+function startOfDay(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+function matchKind(e: CalEvent, kind: string): boolean {
+  if (!kind) return true;
+  if (kind === "event") return e.kind === "event";
+  if (kind === "flight") return e.kind === "flight" || e.kind === "airport";
+  return e.kind === "block" || e.kind === "prep" || e.kind === "travel";
+}
+
+/** Lưới tháng (§5.4.0): chấm màu dự án, biểu tượng bay/hạn cứng/hẹn định kỳ. */
+function MonthGrid({
+  year,
+  month,
+  events,
+  tasks,
+  trips,
+  series,
+  selected,
+  onSelect,
+}: {
+  year: number;
+  month: number; // 0-11
+  events: CalEvent[];
+  tasks: Task[];
+  trips: Trip[];
+  series: RecurringSeries[];
+  selected: Date;
+  onSelect: (d: Date) => void;
+}) {
+  const { projects } = useStore();
+  const first = new Date(year, month, 1);
+  const lead = (first.getDay() + 6) % 7; // Thứ Hai đầu tuần
+  const start = new Date(year, month, 1 - lead);
+  const today = new Date();
+  const cells = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    return d;
+  });
+
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+        {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((w) => (
+          <span key={w} className="muted small" style={{ textAlign: "center" }}>
+            {w}
+          </span>
+        ))}
+        {cells.map((d) => {
+          const inMonth = d.getMonth() === month;
+          const dayEvents = events.filter((e) => isSameDay(e.startAt, d));
+          const colors = [
+            ...new Set(
+              dayEvents
+                .map((e) => (e.projectId ? projectById(projects, e.projectId).color : "#7D8AA5"))
+                .slice(0, 6),
+            ),
+          ];
+          const hasFlight =
+            dayEvents.some((e) => e.kind === "flight") ||
+            trips.some(
+              (t) => isSameDay(t.departAt, d) || (t.returnAt ? isSameDay(t.returnAt, d) : false),
+            );
+          const hasHardDue = tasks.some(
+            (t) =>
+              t.dueAt &&
+              t.dueType === "hard" &&
+              (t.status === "todo" || t.status === "doing") &&
+              isSameDay(t.dueAt, d),
+          );
+          const hasSeries = series.some((s) => isSeriesDay(s, d));
+          const isToday =
+            d.getFullYear() === today.getFullYear() &&
+            d.getMonth() === today.getMonth() &&
+            d.getDate() === today.getDate();
+          const isSelected =
+            d.getFullYear() === selected.getFullYear() &&
+            d.getMonth() === selected.getMonth() &&
+            d.getDate() === selected.getDate();
+          return (
+            <button
+              key={d.toISOString()}
+              onClick={() => onSelect(d)}
+              aria-label={`Ngày ${d.getDate()}/${d.getMonth() + 1}`}
+              style={{
+                minHeight: 46,
+                borderRadius: 10,
+                border: isToday ? "2px solid var(--mai)" : "1.5px solid var(--line)",
+                background: isSelected ? "var(--ink)" : "var(--surface)",
+                color: isSelected ? "var(--bg)" : inMonth ? "var(--ink)" : "var(--ink-2)",
+                opacity: inMonth ? 1 : 0.45,
+                padding: "3px 2px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 2,
+              }}
+            >
+              <span className="small" style={{ fontWeight: 600 }}>
+                {d.getDate()}
+              </span>
+              <span style={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+                {colors.slice(0, 3).map((c) => (
+                  <span key={c} style={{ width: 5, height: 5, borderRadius: 3, background: c }} />
+                ))}
+                {colors.length > 3 && <span style={{ fontSize: 8 }}>+{colors.length - 3}</span>}
+                {hasFlight && <span style={{ fontSize: 9 }}>✈️</span>}
+                {hasSeries && <span style={{ fontSize: 9 }}>📄</span>}
+                {hasHardDue && <span style={{ fontSize: 9 }}>❗</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const SERIES_PRESETS: { id: string; label: string; unit: SeriesUnit; count: number }[] = [
+  { id: "w1", label: "mỗi tuần", unit: "week", count: 1 },
+  { id: "m1", label: "mỗi tháng", unit: "month", count: 1 },
+  { id: "m3", label: "mỗi 3 tháng", unit: "month", count: 3 },
+  { id: "m6", label: "mỗi 6 tháng", unit: "month", count: 6 },
+  { id: "y1", label: "mỗi năm", unit: "year", count: 1 },
+  { id: "custom", label: "tùy chỉnh (ngày)", unit: "day", count: 90 },
+];
+
+/** Hẹn định kỳ dài hạn (§5.4.0): gia hạn visa 3 tháng, khám mỗi năm… */
+function SeriesSection() {
+  const { series, trips, addSeries, updateSeries, deleteSeries, completeSeries } = useStore();
+  const [adding, setAdding] = useState(false);
+  const [title, setTitle] = useState("");
+  const [preset, setPreset] = useState("m3");
+  const [customDays, setCustomDays] = useState(90);
+  const [date, setDate] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [doneFor, setDoneFor] = useState<string | null>(null);
+  const [doneDate, setDoneDate] = useState("");
+  const [doneNotes, setDoneNotes] = useState("");
+  const now = new Date();
+
+  function add() {
+    const p = SERIES_PRESETS.find((x) => x.id === preset)!;
+    if (!title.trim() || !date) return;
+    addSeries({
+      title,
+      intervalUnit: p.unit,
+      intervalCount: p.id === "custom" ? Math.max(1, customDays) : p.count,
+      nextDate: date,
+    });
+    setTitle("");
+    setDate("");
+    setAdding(false);
+  }
+
+  return (
+    <section className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="hdr">
+        <h3 style={{ fontSize: 18 }}>📄 Hẹn định kỳ</h3>
+        <button className="btn ghost small" onClick={() => setAdding((v) => !v)}>
+          {adding ? "Thôi" : "+ Thêm"}
+        </button>
+      </div>
+
+      {adding && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <input
+            className="transcript"
+            style={{ minHeight: 0, padding: 9 }}
+            placeholder="Tên hẹn (ví dụ: Gia hạn visa Thái)"
+            aria-label="Tên hẹn định kỳ"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <select className="btn small" value={preset} aria-label="Chu kỳ" onChange={(e) => setPreset(e.target.value)}>
+              {SERIES_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            {preset === "custom" && (
+              <label className="small" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                mỗi
+                <input
+                  type="number"
+                  min={1}
+                  max={3650}
+                  value={customDays}
+                  aria-label="Số ngày chu kỳ"
+                  onChange={(e) => setCustomDays(Math.max(1, Number(e.target.value) || 90))}
+                  style={{ width: 64, padding: "4px 6px", borderRadius: 9, border: "1.5px solid var(--line)", background: "var(--surface-2)" }}
+                />
+                ngày
+              </label>
+            )}
+            <input
+              type="date"
+              className="btn small"
+              value={date}
+              aria-label="Lần kế tiếp"
+              onChange={(e) => setDate(e.target.value)}
+            />
+            <button className="btn primary small" disabled={!title.trim() || !date} onClick={add}>
+              Thêm
+            </button>
+          </div>
+        </div>
+      )}
+
+      {series.length === 0 && !adding && (
+        <p className="muted small" style={{ margin: 0 }}>
+          Chưa có hẹn định kỳ nào — ví dụ: gia hạn visa mỗi 3 tháng, khám răng mỗi 6 tháng.
+        </p>
+      )}
+
+      {series.map((s) => {
+        const left = daysUntil(s.nextDate, now);
+        const rem = activeReminder(s, now);
+        const flightClash = trips.some(
+          (t) =>
+            t.departAt.slice(0, 10) === s.nextDate ||
+            (t.returnAt ? t.returnAt.slice(0, 10) === s.nextDate : false),
+        );
+        return (
+          <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span
+                className="small"
+                style={{ flex: 1, minWidth: 140, display: "flex", flexDirection: "column", gap: 2 }}
+              >
+                <b>{s.title}</b>
+                <span className="muted">
+                  {intervalLabel(s.intervalUnit, s.intervalCount)} · lần tới{" "}
+                  {fmtDayFull(`${s.nextDate}T09:00:00`)}
+                </span>
+              </span>
+              {left >= 0 ? (
+                <span
+                  className="small"
+                  style={
+                    rem !== null
+                      ? { color: "var(--note-ink)", background: "var(--note)", borderRadius: 999, padding: "1px 10px" }
+                      : { color: "var(--ink-2)" }
+                  }
+                >
+                  còn {left} ngày
+                </span>
+              ) : (
+                <span className="small" style={{ color: "var(--note-ink)", background: "var(--note)", borderRadius: 999, padding: "1px 10px" }}>
+                  quá hạn {-left} ngày
+                </span>
+              )}
+              <button className="btn small" onClick={() => { setDoneFor(s.id); setDoneDate(new Date().toISOString().slice(0, 10)); setDoneNotes(""); }}>
+                Đã làm
+              </button>
+              <button className="btn ghost small" aria-label={`Sửa ${s.title}`} onClick={() => setEditing(editing === s.id ? null : s.id)}>
+                ✎
+              </button>
+              <button
+                className="btn ghost small"
+                aria-label={`Xóa ${s.title}`}
+                onClick={() => {
+                  if (window.confirm(`Xóa hẹn định kỳ "${s.title}"? Lịch sử các lần đã làm sẽ mất.`)) deleteSeries(s.id);
+                }}
+              >
+                ×
+              </button>
+            </div>
+            {flightClash && (
+              <div className="note-box small">⚠ Lần hẹn tới trùng ngày bay — Mai tính dời sớm/muộn một chút?</div>
+            )}
+            {doneFor === s.id && (
+              <div className="note-box small" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                Ngày làm thật:
+                <input type="date" className="btn small" value={doneDate} aria-label="Ngày làm thật" onChange={(e) => setDoneDate(e.target.value)} />
+                <input
+                  className="transcript"
+                  style={{ minHeight: 0, padding: "4px 8px", flex: "1 1 120px" }}
+                  placeholder="Ghi chú (nơi làm, biên nhận…)"
+                  aria-label="Ghi chú lần làm"
+                  value={doneNotes}
+                  onChange={(e) => setDoneNotes(e.target.value)}
+                />
+                <button
+                  className="btn primary small"
+                  disabled={!doneDate}
+                  onClick={() => {
+                    completeSeries(s.id, doneDate, doneNotes.trim() || undefined);
+                    setDoneFor(null);
+                  }}
+                >
+                  Lưu (lần sau tính từ ngày này)
+                </button>
+                <button className="btn small" onClick={() => setDoneFor(null)}>
+                  Thôi
+                </button>
+              </div>
+            )}
+            {editing === s.id && (
+              <div className="note-box small" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <input
+                  className="transcript"
+                  style={{ minHeight: 0, padding: 8 }}
+                  value={s.title}
+                  aria-label="Tên hẹn"
+                  onChange={(e) => updateSeries(s.id, { title: e.target.value })}
+                />
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  mỗi
+                  <input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={s.intervalCount}
+                    aria-label="Số chu kỳ"
+                    onChange={(e) => updateSeries(s.id, { intervalCount: Math.max(1, Number(e.target.value) || 1) })}
+                    style={{ width: 56, padding: "4px 6px", borderRadius: 9, border: "1.5px solid var(--line)", background: "var(--surface-2)" }}
+                  />
+                  <select
+                    className="btn small"
+                    value={s.intervalUnit}
+                    aria-label="Đơn vị chu kỳ"
+                    onChange={(e) => updateSeries(s.id, { intervalUnit: e.target.value as SeriesUnit })}
+                  >
+                    <option value="day">ngày</option>
+                    <option value="week">tuần</option>
+                    <option value="month">tháng</option>
+                    <option value="year">năm</option>
+                  </select>
+                  · lần tới
+                  <input
+                    type="date"
+                    className="btn small"
+                    value={s.nextDate}
+                    aria-label="Ngày lần tới"
+                    onChange={(e) => e.target.value && updateSeries(s.id, { nextDate: e.target.value, prepCreatedFor: undefined })}
+                  />
+                </div>
+                <textarea
+                  className="transcript"
+                  style={{ minHeight: 52, padding: 8 }}
+                  aria-label="Mẫu việc chuẩn bị (mỗi dòng một việc)"
+                  value={s.prepTemplate}
+                  onChange={(e) => updateSeries(s.id, { prepTemplate: e.target.value })}
+                />
+                {s.history.length > 0 && (
+                  <div className="small muted">
+                    Lịch sử:{" "}
+                    {s.history
+                      .slice(0, 4)
+                      .map((h) => `${fmtDay(`${h.actualDate}T09:00:00`)}${h.notes ? ` (${h.notes})` : ""}`)
+                      .join(" · ")}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 export default function CalendarPage() {
   const mounted = useMounted();
-  const { events, pendingBlock, setPendingBlock, addEvent, removeChain } = useStore();
+  const {
+    events,
+    tasks,
+    trips,
+    series,
+    settings,
+    pendingBlock,
+    setPendingBlock,
+    addEvent,
+    addTriage,
+    removeChain,
+    setCalendarView,
+    updateSeries,
+  } = useStore();
   const [chainFor, setChainFor] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [when, setWhen] = useState("");
+  const [focus, setFocus] = useState(() => new Date());
+  const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<CalEvent[] | null>(null);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [fProject, setFProject] = useState("");
+  const [fKind, setFKind] = useState("");
+  const [fSource, setFSource] = useState("");
+  const { projects } = useStore();
 
+  const view: ViewMode = settings.calendarView;
   const now = mounted ? new Date() : null;
   const gs = useGoogleStatus();
   const [gmsg, setGmsg] = useState<string | null>(null);
@@ -317,12 +724,47 @@ export default function CalendarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cửa sổ 7 ngày, tính một lần cho ổn định.
-  const [range] = useState(() => {
-    const d = new Date();
-    const from = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    return { from, to: from + 7 * 86_400_000 };
-  });
+  // Việc chuẩn bị cho hẹn định kỳ: đến mốc nhắc 30 ngày là vào Hộp duyệt,
+  // mỗi lần hẹn chỉ tạo một lần (§5.4.0).
+  useEffect(() => {
+    if (!mounted) return;
+    const today = new Date();
+    for (const s of series) {
+      const left = daysUntil(s.nextDate, today);
+      if (left < 0 || left > 30 || s.prepCreatedFor === s.nextDate) continue;
+      for (const line of s.prepTemplate.split("\n").map((x) => x.trim()).filter(Boolean)) {
+        addTriage({
+          title: `${line} — ${s.title}`,
+          projectId: s.projectId,
+          categoryId: s.categoryId,
+          assignee: "mai",
+          dueAt: new Date(`${s.nextDate}T09:00:00`).toISOString(),
+          dueType: s.isHard ? "hard" : "soft",
+          dueSource: "nguon",
+          source: {
+            channel: "manual",
+            quote: `Hẹn định kỳ "${s.title}" — ${fmtDayFull(`${s.nextDate}T09:00:00`)}`,
+          },
+          confidence: 1,
+        });
+      }
+      updateSeries(s.id, { prepCreatedFor: s.nextDate });
+    }
+  }, [mounted, series, addTriage, updateSeries]);
+
+  // Khoảng dữ liệu theo chế độ xem — tháng nào tải tháng đó (không giới hạn).
+  const range = useMemo(() => {
+    const base = new Date(focus.getFullYear(), focus.getMonth(), focus.getDate());
+    if (view === "day") return { from: base.getTime(), to: base.getTime() + 86_400_000 };
+    if (view === "month") {
+      const first = new Date(focus.getFullYear(), focus.getMonth(), 1).getTime() - 7 * 86_400_000;
+      const last = new Date(focus.getFullYear(), focus.getMonth() + 1, 1).getTime() + 7 * 86_400_000;
+      return { from: first, to: last };
+    }
+    const todayStart = now ? startOfDay(now) : Date.now();
+    return { from: todayStart, to: todayStart + (view === "list" ? 60 : 7) * 86_400_000 };
+  }, [view, focus, now]);
+
   const gcal = useGoogleEvents(range.from, range.to, mounted && gs.connected);
 
   // Sự kiện Google (bỏ những block chính Lowtechie đã ghi sang, tránh trùng).
@@ -346,24 +788,51 @@ export default function CalendarPage() {
     () => new Set(gcal.events.filter((g) => g.allDay).map((g) => `g:${g.gcalId}`)),
     [gcal.events],
   );
-  const allEvents = useMemo(() => [...events, ...googleAsCal], [events, googleAsCal]);
 
-  const upcoming = useMemo(() => {
-    if (!now) return [];
-    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    return allEvents
-      .filter((e) => new Date(e.endAt).getTime() >= from)
-      .sort((a, b) => a.startAt.localeCompare(b.startAt));
-  }, [allEvents, now]);
+  const applyFilters = useMemo(
+    () => (list: CalEvent[]) =>
+      list.filter(
+        (e) =>
+          matchKind(e, fKind) &&
+          (!fProject || e.projectId === fProject) &&
+          (!fSource || (fSource === "google" ? e.id.startsWith("g:") : !e.id.startsWith("g:"))),
+      ),
+    [fKind, fProject, fSource],
+  );
+  const allEvents = useMemo(
+    () => applyFilters([...events, ...googleAsCal]),
+    [events, googleAsCal, applyFilters],
+  );
+
+  const inRange = useMemo(
+    () =>
+      allEvents
+        .filter((e) => Date.parse(e.endAt) >= range.from && Date.parse(e.startAt) < range.to)
+        .sort((a, b) => a.startAt.localeCompare(b.startAt)),
+    [allEvents, range],
+  );
 
   const byDay = useMemo(() => {
     const m = new Map<string, CalEvent[]>();
-    for (const e of upcoming) {
+    for (const e of inRange) {
       const k = fmtDay(e.startAt);
       m.set(k, [...(m.get(k) ?? []), e]);
     }
     return [...m.entries()];
-  }, [upcoming]);
+  }, [inRange]);
+
+  const focusEvents = useMemo(
+    () => allEvents.filter((e) => isSameDay(e.startAt, focus)).sort((a, b) => a.startAt.localeCompare(b.startAt)),
+    [allEvents, focus],
+  );
+  const focusTasks = useMemo(
+    () =>
+      tasks.filter(
+        (t) => t.dueAt && (t.status === "todo" || t.status === "doing") && isSameDay(t.dueAt, focus),
+      ),
+    [tasks, focus],
+  );
+  const focusSeries = useMemo(() => series.filter((s) => isSeriesDay(s, focus)), [series, focus]);
 
   const slots = useMemo(
     () =>
@@ -386,6 +855,67 @@ export default function CalendarPage() {
     void gcal.reload();
   }
 
+  /** Tìm trên TOÀN BỘ lịch: sự kiện trong app (mọi thời điểm) + Google. */
+  async function runSearch() {
+    const q = search.trim();
+    if (!q) return;
+    setSearchBusy(true);
+    const fold = (s: string) =>
+      s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase();
+    const local = events.filter((e) => fold(`${e.title} ${e.location ?? ""}`).includes(fold(q)));
+    const remote = gs.connected ? await searchGcalEvents(q) : [];
+    const localIds = new Set(local.map((e) => e.gcalId).filter(Boolean));
+    const merged: CalEvent[] = [
+      ...local,
+      ...remote
+        .filter((g) => !localIds.has(g.gcalId))
+        .map(
+          (g): CalEvent => ({
+            id: `g:${g.gcalId}`,
+            title: g.title,
+            startAt: g.startAt,
+            endAt: g.endAt,
+            location: g.location,
+            kind: "event",
+            gcalId: g.gcalId,
+          }),
+        ),
+    ].sort((a, b) => a.startAt.localeCompare(b.startAt));
+    setSearchResults(merged.slice(0, 50));
+    setSearchBusy(false);
+  }
+
+  const eventRow = (e: CalEvent, withChainButtons = true) => {
+    const hasChain = events.some((x) => x.chainOf === e.id);
+    return (
+      <div key={e.id} style={{ marginTop: 6 }}>
+        <div className={`block-line${e.kind !== "event" ? " faded" : ""}`}>
+          <span className="time">
+            {allDayIds.has(e.id) ? "Cả ngày" : fmtRange(e.startAt, e.endAt)}
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            {e.gcalId && e.kind === "event" ? "📆 " : ""}
+            {e.title}
+            {e.location ? <span className="muted small"> · {e.location}</span> : null}
+          </span>
+          {withChainButtons &&
+            e.kind === "event" &&
+            (hasChain ? (
+              <button className="btn ghost small" onClick={() => void removeChainEverywhere(e)}>
+                Gỡ chuỗi
+              </button>
+            ) : (
+              <button className="btn small" onClick={() => setChainFor(e.id)}>
+                + Chuỗi
+              </button>
+            ))}
+        </div>
+      </div>
+    );
+  };
+
+  const monthLabel = `Tháng ${focus.getMonth() + 1}/${focus.getFullYear()}`;
+
   return (
     <main className="screen-body">
       <div className="hdr">
@@ -404,7 +934,7 @@ export default function CalendarPage() {
             🔗 Nối Google Calendar
           </a>
         ) : (
-          <span className="muted small">local — chưa cấu hình Google</span>
+          <span className="muted small">local</span>
         )}
       </div>
       {gmsg && (
@@ -416,7 +946,105 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {mounted && pendingBlock && (
+      {mounted && (
+        <>
+          <div className="seg" role="radiogroup" aria-label="Chế độ xem">
+            {(
+              [
+                ["day", "Ngày"],
+                ["week", "Tuần"],
+                ["month", "Tháng"],
+                ["list", "Danh sách"],
+              ] as [ViewMode, string][]
+            ).map(([v, label]) => (
+              <button key={v} aria-pressed={view === v} onClick={() => setCalendarView(v)}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <form
+            style={{ display: "flex", gap: 6 }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              void runSearch();
+            }}
+          >
+            <input
+              className="transcript"
+              style={{ minHeight: 0, padding: 8, flex: 1 }}
+              placeholder="Tìm cả lịch cũ lẫn tương lai…"
+              aria-label="Tìm kiếm lịch"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                if (!e.target.value.trim()) setSearchResults(null);
+              }}
+            />
+            <button className="btn small" type="submit" disabled={searchBusy || !search.trim()}>
+              {searchBusy ? "…" : "Tìm"}
+            </button>
+            {searchResults && (
+              <button
+                className="btn ghost small"
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setSearchResults(null);
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </form>
+
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <select className="btn small" value={fProject} aria-label="Lọc dự án" onChange={(e) => setFProject(e.target.value)}>
+              <option value="">Mọi dự án</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select className="btn small" value={fKind} aria-label="Lọc loại" onChange={(e) => setFKind(e.target.value)}>
+              {KIND_FILTERS.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.label}
+                </option>
+              ))}
+            </select>
+            <select className="btn small" value={fSource} aria-label="Lọc nguồn" onChange={(e) => setFSource(e.target.value)}>
+              <option value="">Mọi nguồn</option>
+              <option value="app">Trong app</option>
+              <option value="google">Google</option>
+            </select>
+          </div>
+        </>
+      )}
+
+      {mounted && searchResults && (
+        <>
+          <div className="group-title">Kết quả “{search.trim()}” · {searchResults.length}</div>
+          {searchResults.map((e) => (
+            <div key={e.id} style={{ marginTop: 6 }}>
+              <div className="block-line">
+                <span className="time">{fmtDay(e.startAt)} · {fmtRange(e.startAt, e.endAt)}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  {e.gcalId ? "📆 " : ""}
+                  {e.title}
+                  {e.location ? <span className="muted small"> · {e.location}</span> : null}
+                </span>
+              </div>
+            </div>
+          ))}
+          {searchResults.length === 0 && (
+            <p className="muted small">Không thấy sự kiện nào khớp.</p>
+          )}
+        </>
+      )}
+
+      {mounted && pendingBlock && !searchResults && (
         <>
           <Bubble>
             <b>{pendingBlock.title}</b>
@@ -469,89 +1097,171 @@ export default function CalendarPage() {
         />
       )}
 
-      {mounted && byDay.length === 0 && !pendingBlock && (
-        <div className="empty card">
-          <p>
-            Lịch đang trống. Nói với bông mai kiểu <i>&ldquo;Tối nay 7 giờ hẹn ở Thonglor, đi
-            tàu&rdquo;</i> — sự kiện sẽ hiện ở đây kèm chuỗi chuẩn bị + di chuyển.
-          </p>
+      {mounted && !searchResults && (view === "month" || view === "day") && (
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <button
+            className="btn small"
+            aria-label="Lùi"
+            onClick={() =>
+              setFocus((d) =>
+                view === "month"
+                  ? new Date(d.getFullYear(), d.getMonth() - 1, 1)
+                  : new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1),
+              )
+            }
+          >
+            ◀
+          </button>
+          <b style={{ flex: 1, textAlign: "center" }}>
+            {view === "month" ? monthLabel : fmtDayFull(focus.toISOString())}
+          </b>
+          <button
+            className="btn small"
+            aria-label="Tới"
+            onClick={() =>
+              setFocus((d) =>
+                view === "month"
+                  ? new Date(d.getFullYear(), d.getMonth() + 1, 1)
+                  : new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1),
+              )
+            }
+          >
+            ▶
+          </button>
+          <button className="btn ghost small" onClick={() => setFocus(new Date())}>
+            Hôm nay
+          </button>
+          {view === "month" && (
+            <input
+              type="month"
+              className="btn small"
+              aria-label="Chọn tháng/năm"
+              value={`${focus.getFullYear()}-${String(focus.getMonth() + 1).padStart(2, "0")}`}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split("-").map(Number);
+                if (y && m) setFocus(new Date(y, m - 1, 1));
+              }}
+            />
+          )}
         </div>
       )}
 
-      {byDay.map(([day, evs]) => (
-        <div key={day}>
-          <div className="group-title">{day}</div>
-          {evs.map((e) => {
-            const hasChain = events.some((x) => x.chainOf === e.id);
-            return (
-              <div key={e.id} style={{ marginTop: 6 }}>
-                <div className={`block-line${e.kind !== "event" ? " faded" : ""}`}>
-                  <span className="time">
-                    {allDayIds.has(e.id) ? "Cả ngày" : fmtRange(e.startAt, e.endAt)}
-                  </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    {e.gcalId && e.kind === "event" ? "📆 " : ""}
-                    {e.title}
-                    {e.location ? <span className="muted small"> · {e.location}</span> : null}
-                  </span>
-                  {e.kind === "event" &&
-                    (hasChain ? (
-                      <button
-                        className="btn ghost small"
-                        onClick={() => void removeChainEverywhere(e)}
-                      >
-                        Gỡ chuỗi
-                      </button>
-                    ) : (
-                      <button className="btn small" onClick={() => setChainFor(e.id)}>
-                        + Chuỗi
-                      </button>
-                    ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ))}
+      {mounted && !searchResults && view === "month" && (
+        <>
+          <MonthGrid
+            year={focus.getFullYear()}
+            month={focus.getMonth()}
+            events={allEvents}
+            tasks={tasks}
+            trips={trips}
+            series={series}
+            selected={focus}
+            onSelect={setFocus}
+          />
+          <div className="group-title">{fmtDayFull(focus.toISOString())}</div>
+          {focusSeries.map((s) => (
+            <div key={s.id} className="block-line" style={{ marginTop: 6 }}>
+              <span className="time">📄</span>
+              <span>{s.title} ({intervalLabel(s.intervalUnit, s.intervalCount)})</span>
+            </div>
+          ))}
+          {focusTasks.map((t) => (
+            <div key={t.id} className="block-line faded" style={{ marginTop: 6 }}>
+              <span className="time">{t.dueType === "hard" ? "❗ hạn" : "hạn"}</span>
+              <span>{t.title}</span>
+            </div>
+          ))}
+          {focusEvents.map((e) => eventRow(e))}
+          {focusEvents.length + focusTasks.length + focusSeries.length === 0 && (
+            <p className="muted small">Ngày này trống.</p>
+          )}
+        </>
+      )}
 
-      <div className="card" style={{ marginTop: 8 }}>
-        <div className="group-title" style={{ marginTop: 0 }}>
-          Thêm sự kiện nhanh
+      {mounted && !searchResults && view === "day" && (
+        <>
+          {focusSeries.map((s) => (
+            <div key={s.id} className="block-line" style={{ marginTop: 6 }}>
+              <span className="time">📄</span>
+              <span>{s.title}</span>
+            </div>
+          ))}
+          {focusTasks.map((t) => (
+            <div key={t.id} className="block-line faded" style={{ marginTop: 6 }}>
+              <span className="time">{t.dueType === "hard" ? "❗ hạn" : "hạn"}</span>
+              <span>{t.title}</span>
+            </div>
+          ))}
+          {focusEvents.map((e) => eventRow(e))}
+          {focusEvents.length + focusTasks.length + focusSeries.length === 0 && (
+            <div className="empty card">
+              <p>Ngày này trống.</p>
+            </div>
+          )}
+        </>
+      )}
+
+      {mounted && !searchResults && (view === "week" || view === "list") && (
+        <>
+          {byDay.length === 0 && !pendingBlock && (
+            <div className="empty card">
+              <p>
+                Lịch đang trống. Nói với bông mai kiểu <i>&ldquo;Tối nay 7 giờ hẹn ở Thonglor, đi
+                tàu&rdquo;</i> — sự kiện sẽ hiện ở đây kèm chuỗi chuẩn bị + di chuyển.
+              </p>
+            </div>
+          )}
+          {byDay.map(([day, evs]) => (
+            <div key={day}>
+              <div className="group-title">{day}</div>
+              {evs.map((e) => eventRow(e))}
+            </div>
+          ))}
+        </>
+      )}
+
+      {mounted && !searchResults && <SeriesSection />}
+
+      {mounted && !searchResults && (
+        <div className="card" style={{ marginTop: 8 }}>
+          <div className="group-title" style={{ marginTop: 0 }}>
+            Thêm sự kiện nhanh
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+            <input
+              className="transcript"
+              style={{ minHeight: 0, padding: 10 }}
+              placeholder="Tên sự kiện"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+            <input
+              type="datetime-local"
+              className="btn"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+              aria-label="Thời điểm"
+            />
+            <button
+              className="btn primary"
+              disabled={!title.trim() || !when}
+              onClick={() => {
+                const start = new Date(when);
+                addEvent({
+                  title: title.trim(),
+                  startAt: start.toISOString(),
+                  endAt: new Date(start.getTime() + 60 * 60_000).toISOString(),
+                  kind: "event",
+                });
+                setTitle("");
+                setWhen("");
+              }}
+            >
+              Thêm (60 phút)
+            </button>
+          </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-          <input
-            className="transcript"
-            style={{ minHeight: 0, padding: 10 }}
-            placeholder="Tên sự kiện"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <input
-            type="datetime-local"
-            className="btn"
-            value={when}
-            onChange={(e) => setWhen(e.target.value)}
-            aria-label="Thời điểm"
-          />
-          <button
-            className="btn primary"
-            disabled={!title.trim() || !when}
-            onClick={() => {
-              const start = new Date(when);
-              addEvent({
-                title: title.trim(),
-                startAt: start.toISOString(),
-                endAt: new Date(start.getTime() + 60 * 60_000).toISOString(),
-                kind: "event",
-              });
-              setTitle("");
-              setWhen("");
-            }}
-          >
-            Thêm (60 phút)
-          </button>
-        </div>
-      </div>
+      )}
     </main>
   );
 }

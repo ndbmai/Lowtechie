@@ -160,9 +160,22 @@ export interface FullFlightBlock {
   endAt: string;
 }
 
+/** Offset ±hh:mm trong chuỗi ISO → phút; null khi thiếu hoặc là Z. */
+export function parseOffsetMin(iso: string): number | null {
+  const m = iso.match(/([+-])(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  return (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3]));
+}
+
 export interface FullFlightOpts {
   /** Giờ cất cánh (ISO kèm offset sân bay đi) — mốc cứng. */
   departureAt: string;
+  /**
+   * Offset múi giờ (phút) của THÀNH PHỐ ĐI, cho cảnh báo "nửa đêm" (v2.3:
+   * kiểm tra bằng giờ địa phương, không phải UTC máy chủ). Không truyền
+   * thì đọc từ offset trong departureAt; dữ liệu cũ lưu dạng Z phải truyền.
+   */
+  originTzOffsetMin?: number;
   /** Giờ hạ cánh (ISO kèm offset sân bay đến) — thiếu thì chuỗi dừng ở cất cánh. */
   arrivalAt?: string;
   international: boolean;
@@ -192,10 +205,8 @@ export interface FullFlightChainResult {
   warnings: string[];
 }
 
-/** Giờ địa phương (0–23) của một mốc, theo offset ghi trong ISO gốc. */
-function localHourAt(ms: number, isoWithOffset: string): number {
-  const m = isoWithOffset.match(/([+-])(\d{2}):(\d{2})$/);
-  const offsetMin = m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
+/** Giờ địa phương (0–23) của một mốc theo offset phút cho trước. */
+function localHourAt(ms: number, offsetMin: number): number {
   return new Date(ms + offsetMin * 60_000).getUTCHours();
 }
 
@@ -265,7 +276,10 @@ export function fullFlightChain(o: FullFlightOpts): FullFlightChainResult {
   // Cảnh báo bắt buộc của v2.0 (lỗi thật 22/9: ô di chuyển 1020 phút).
   if (o.travelToAirportMin > 180) warnings.push("di chuyển ra sân bay hơn 3 tiếng — kiểm tra lại số phút");
   if ((o.travelAfterMin ?? 0) > 180) warnings.push("di chuyển sau khi đáp hơn 3 tiếng — kiểm tra lại số phút");
-  const prepHour = localHourAt(prepStart, o.departureAt);
+  // v2.3: giờ kiểm tra là GIỜ ĐỊA PHƯƠNG thành phố đi (7:13 HCMC không
+  // phải nửa đêm dù bằng 0:13 UTC).
+  const originOffset = o.originTzOffsetMin ?? parseOffsetMin(o.departureAt) ?? 0;
+  const prepHour = localHourAt(prepStart, originOffset);
   if (o.prepMinutes > 0 && prepHour >= 0 && prepHour < 5) {
     warnings.push("giờ bắt đầu chuẩn bị rơi vào nửa đêm (0:00–5:00) — đổi phương tiện hay rút ngắn chuẩn bị?");
   }

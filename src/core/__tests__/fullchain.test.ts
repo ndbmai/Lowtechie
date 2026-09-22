@@ -85,6 +85,43 @@ describe("kiểm tra bắt buộc + cảnh báo (lỗi thật 22/9)", () => {
     expect(c.warnings.join()).toContain("nửa đêm");
   });
 
+  // Test bắt buộc của v2.3: giờ kiểm tra là GIỜ ĐỊA PHƯƠNG, không phải UTC.
+  it("chuẩn bị 7:13 giờ HCMC → KHÔNG cảnh báo nửa đêm (dù bằng 0:13 UTC)", () => {
+    const c = fullFlightChain({
+      departureAt: "2026-10-02T11:50:00+07:00",
+      international: true,
+      prepMinutes: 90,
+      travelToAirportMin: 47,
+      checkinOverrideMin: 150,
+    });
+    // 11:50 − 150' = 9:20; − 47' = 8:33 rời nhà; − 90' = 7:03… đúng khung sáng.
+    expect(c.warnings.join()).not.toContain("nửa đêm");
+  });
+
+  it("chuẩn bị 4:30 giờ HCMC → CÓ cảnh báo nửa đêm", () => {
+    const c = fullFlightChain({
+      departureAt: "2026-10-02T09:00:00+07:00",
+      international: true,
+      prepMinutes: 90,
+      travelToAirportMin: 60,
+      checkinOverrideMin: 120,
+    });
+    // 9:00 − 120' = 7:00; − 60' = 6:00; − 90' = 4:30 giờ HCMC.
+    expect(c.warnings.join()).toContain("nửa đêm");
+  });
+
+  it("dữ liệu cũ lưu dạng Z (mất offset) + originTzOffsetMin → vẫn đúng giờ địa phương", () => {
+    const zed = fullFlightChain({
+      departureAt: "2026-10-02T04:50:00.000Z", // = 11:50 +07 nhưng chuỗi mất offset
+      international: true,
+      prepMinutes: 90,
+      travelToAirportMin: 47,
+      checkinOverrideMin: 150,
+      originTzOffsetMin: 420,
+    });
+    expect(zed.warnings.join()).not.toContain("nửa đêm");
+  });
+
   it("block đè nhau hoặc chạy lùi → trả lỗi, UI không được vẽ", () => {
     expect(
       validateChainBlocks([

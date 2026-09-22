@@ -7,7 +7,14 @@ import { Bubble } from "@/components/Bubble";
 import { DueEditor } from "@/components/DueEditor";
 import { SearchSelect, type PickOption } from "@/components/SearchSelect";
 import { classify, findDuplicate, learnableTerms, CONFIDENCE_THRESHOLD } from "@/core/classify";
-import { clientProjectHint, clientsFor, matchClient, sanitizeClientId } from "@/core/clients";
+import {
+  clientProjectHint,
+  clientsFor,
+  findClientByName,
+  matchClient,
+  orderClientsForPick,
+  sanitizeClientId,
+} from "@/core/clients";
 import { detectProject, parseCommand, parseWhen } from "@/core/parse";
 import {
   PROJECT_COLORS,
@@ -114,8 +121,11 @@ export default function CapturePage() {
     addProject,
     addCategory,
     addClient,
+    touchClient,
     removeEvent,
   } = useStore();
+  /** Tên khách đang gõ dở theo từng thẻ — Lưu là vào danh bạ (v2.3). */
+  const [clientQ, setClientQ] = useState<Record<number, string>>({});
   const [dueEdits, setDueEdits] = useState<Record<number, { dueAt?: string; dueType?: DueType }>>({});
   const gs = useGoogleStatus();
   /** Book sự kiện lên Google Calendar sau khi xem trước (§5.4 v2.0). */
@@ -132,6 +142,7 @@ export default function CapturePage() {
       setDueEdits({});
       setBook({});
       setLastBooked(null);
+      setClientQ({});
       const r = await parseViaApi(t.trim(), { projects, categories, clients });
       setResult(r);
       setBusy(false);
@@ -284,11 +295,19 @@ export default function CapturePage() {
         const r = resolveTask(a, i);
         // Hạn: nguồn tự điền, Mai sửa trên thẻ thắng nguồn (3c).
         const due = i in dueEdits ? dueEdits[i] : { dueAt: a.dueAt, dueType: a.dueType };
+        // Nhập một lần (v2.3): tên khách gõ tay chưa bấm "Tạo mới" vẫn
+        // vào danh bạ; tên gần giống thì dùng lại, không tạo trùng.
+        let clientId = r.clientId;
+        const typed = clientQ[i]?.trim();
+        if (!clientId && typed) {
+          clientId = (findClientByName(clients, typed) ?? addClient(typed, r.projectId))?.id;
+        }
+        if (clientId) touchClient(clientId);
         addTask({
           title: a.title,
           projectId: r.projectId,
           categoryId: r.categoryId,
-          clientId: r.clientId,
+          clientId,
           assignee: a.assignee ?? "mai",
           dueAt: due.dueAt,
           dueType: due.dueAt ? (due.dueType ?? "soft") : undefined,
@@ -695,7 +714,10 @@ export default function CapturePage() {
                   <SearchSelect
                     label="Khách hàng / đối tác"
                     value={client?.id}
-                    options={clientsFor(clients, r.projectId).map((c) => ({ id: c.id, label: c.name }))}
+                    options={orderClientsForPick(clientsFor(clients, r.projectId)).map((c) => ({
+                      id: c.id,
+                      label: c.name,
+                    }))}
                     emptyLabel="Không có"
                     onPick={(id) =>
                       applyOverride(
@@ -705,8 +727,9 @@ export default function CapturePage() {
                         false,
                       )
                     }
+                    onQueryChange={(q) => setClientQ((s) => ({ ...s, [i]: q }))}
                     onCreate={(name) => {
-                      const c = addClient(name, r.projectId);
+                      const c = findClientByName(clients, name) ?? addClient(name, r.projectId);
                       if (c)
                         applyOverride(
                           i,

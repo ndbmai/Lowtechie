@@ -11,8 +11,15 @@ export interface PickOption {
   color?: string;
 }
 
+/** Bỏ dấu + thường hóa: "do thi" tìm ra "Đô Thị" (v2.3). */
 function norm(s: string): string {
-  return s.normalize("NFC").toLowerCase();
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -29,6 +36,7 @@ export function SearchSelect({
   onCreate,
   emptyLabel,
   placeholder,
+  onQueryChange,
 }: {
   label: string;
   value?: string;
@@ -39,6 +47,11 @@ export function SearchSelect({
   /** Nhãn lựa chọn bỏ trống (trường không bắt buộc), ví dụ "Không có". */
   emptyLabel?: string;
   placeholder?: string;
+  /**
+   * Báo chữ Mai đang gõ cho cha giữ lại — v2.3: tên khách gõ tay rồi Lưu
+   * (không bấm "Tạo mới") vẫn phải vào danh bạ, không mất.
+   */
+  onQueryChange?: (q: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -54,6 +67,7 @@ export function SearchSelect({
     onPick(id);
     setOpen(false);
     setQ("");
+    onQueryChange?.("");
   }
 
   return (
@@ -92,7 +106,10 @@ export function SearchSelect({
             placeholder={placeholder ?? "Gõ để lọc…"}
             value={q}
             aria-label={`Tìm ${label}`}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              onQueryChange?.(e.target.value);
+            }}
           />
           <div style={{ maxHeight: 190, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
             {emptyLabel && !q.trim() && (
@@ -136,6 +153,7 @@ export function SearchSelect({
                   onCreate(q.trim());
                   setOpen(false);
                   setQ("");
+                  onQueryChange?.("");
                 }}
               >
                 ＋ Tạo mới: “{q.trim()}”
