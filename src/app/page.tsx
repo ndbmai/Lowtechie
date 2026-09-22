@@ -10,6 +10,8 @@ import { projectById } from "@/core/projects";
 import { fmtRange, fmtRelativeDay, todayLabel } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
+import { useGoogleEvents, useGoogleStatus } from "@/lib/useGoogle";
+import type { CalEvent } from "@/core/types";
 
 export default function TodayPage() {
   const mounted = useMounted();
@@ -18,9 +20,37 @@ export default function TodayPage() {
   const [suggestionGone, setSuggestionGone] = useState(false);
   const [held, setHeld] = useState(false);
 
+  // Lịch Google hôm nay (nếu đã nối) hòa vào brief — vẫn chỉ đọc, không ghi.
+  const gs = useGoogleStatus();
+  const [range] = useState(() => {
+    const d = new Date();
+    const from = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    return { from, to: from + 86_400_000 };
+  });
+  const gcal = useGoogleEvents(range.from, range.to, mounted && gs.connected);
+  const allEvents = useMemo(() => {
+    const localIds = new Set(events.map((e) => e.gcalId).filter(Boolean));
+    return [
+      ...events,
+      ...gcal.events
+        .filter((g) => !localIds.has(g.gcalId))
+        .map(
+          (g): CalEvent => ({
+            id: `g:${g.gcalId}`,
+            title: g.title,
+            startAt: g.startAt,
+            endAt: g.endAt,
+            location: g.location,
+            kind: "event",
+            gcalId: g.gcalId,
+          }),
+        ),
+    ];
+  }, [events, gcal.events]);
+
   const brief = useMemo(
-    () => (mounted ? composeBrief(tasks, projects, events, new Date()) : null),
-    [mounted, tasks, projects, events],
+    () => (mounted ? composeBrief(tasks, projects, allEvents, new Date()) : null),
+    [mounted, tasks, projects, allEvents],
   );
 
   const hasAnything = tasks.length > 0 || events.length > 0;

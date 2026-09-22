@@ -102,6 +102,8 @@ export interface CalEvent {
   kind: "event" | "prep" | "travel" | "airport" | "flight" | "block";
   /** id sự kiện chính mà block phụ thuộc vào (event_chains của PRD §8). */
   chainOf?: string;
+  /** id trên Google Calendar khi block đã được ghi sang đó (PRD §5.4). */
+  gcalId?: string;
 }
 
 export type Destination = "tokyo" | "hcmc" | "bkk";

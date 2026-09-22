@@ -57,7 +57,7 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Lịch v0: sự kiện local + chuỗi Chuẩn bị → Di chuyển → Hẹn tính ngược (mặc định BTS từ Bang Na)
 - [x] Chuyến đi + checklist bay theo điểm đến, học món tự thêm
 - [x] Brief sáng + weekly review (thời gian vs mục tiêu, việc dời ≥ 3 lần)
-- [ ] Google Calendar thật (OAuth, đọc/ghi có duyệt) — đang là lịch local
+- [x] Google Calendar thật (OAuth trong app, PRD §5.4): sự kiện Google hiện trong Lịch + brief sáng; chuỗi chuẩn bị/di chuyển ghi vào GCal khi Mai bấm khóa (tick tắt được); token nằm trong cookie mã hóa của từng thiết bị, không có database — cần `GOOGLE_CLIENT_ID/SECRET` (xem `.env.example`)
 - [ ] Google Maps Routes (giờ đến cho phương tiện công cộng) — đang dùng đệm nhập tay
 - [ ] Speech-to-text server (voice note VI/TH/EN trộn) — đang dùng Web Speech của trình duyệt
 - [ ] Sync Google Sheets · ghi âm họp offline + recap

@@ -25,6 +25,7 @@ npm run build    # bắt buộc xanh trước khi push
 - **Store**: Zustand + persist vào `localStorage` (key `lowtechie-v1`), xem `src/lib/store.ts`. Ngày giờ lưu dạng ISO string, không lưu `Date`. Đây là chỗ sẽ thay bằng Supabase (+RLS) ở Giai đoạn 3 — giữ mọi truy cập dữ liệu đi qua store, đừng đọc localStorage trực tiếp.
 - **Màn hình** trong `src/app/` là client component; mọi màn hình phải render được khi store rỗng (empty state tử tế).
 - **`/api/parse`**: proxy Claude API (fetch trực tiếp, không SDK) khi có `ANTHROPIC_API_KEY`; không có key thì trả 501 và **client tự chạy `src/core/parse.ts` trên trình duyệt** — cố ý như vậy để ngày giờ tính theo múi giờ của Mai chứ không phải server (UTC). Model qua env `LOWTECHIE_MODEL`, mặc định `claude-sonnet-5`.
+- **Google Calendar (PRD §5.4)**: OAuth thuần fetch trong `src/lib/googleServer.ts` — refresh token MÃ HÓA AES-GCM nằm trong cookie httpOnly (khóa dẫn xuất từ `GOOGLE_CLIENT_SECRET`; đổi secret = mọi thiết bị nối lại), server không lưu gì (đúng local-first, mỗi thiết bị tự nối). Routes: `/api/google/{auth,callback,status,disconnect}` + `/api/calendar/events` (GET/POST/DELETE). Client chỉ đụng qua `src/lib/useGoogle.ts`. Block ghi sang GCal mang `gcalId` trong store để dedupe khi fetch về và xóa được khi gỡ chuỗi. Ghi lịch LUÔN sau bước Mai bấm duyệt. Scope hiện tại chỉ `calendar.events` + email; Gmail (đọc vé máy bay, §5.9) là bước sau — thêm scope là phải nối lại.
 - Font nạp bằng `<link>` Google Fonts (giống prototype) — đừng đổi sang `next/font` (build offline sẽ vỡ).
 
 ## Design system
