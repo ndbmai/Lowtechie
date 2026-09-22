@@ -69,8 +69,7 @@ describe("detectProject", () => {
   it("gắn đúng dự án theo từ khóa", () => {
     expect(detectProject("gửi báo giá, dự án Circle").id).toBe("circle");
     expect(detectProject("sửa slide pitch deck").id).toBe("sorene");
-    expect(detectProject("báo cáo OTA cho khách sạn").id).toBe("favstay");
-    expect(detectProject("viết newsletter tuần này").id).toBe("edge");
+    expect(detectProject("nộp khai thuế quý 3").id).toBe("admin");
     expect(detectProject("học tiếng Thái 20 phút").id).toBe("hoctap");
     expect(detectProject("đặt lịch spa").id).toBe("canhan");
   });

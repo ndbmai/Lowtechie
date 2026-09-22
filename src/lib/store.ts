@@ -4,14 +4,23 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   CalEvent,
+  Category,
   Destination,
   FeedbackEntry,
   Project,
+  ProjectId,
   Task,
   TriageItem,
   Trip,
 } from "@/core/types";
-import { DEFAULT_PROJECTS } from "@/core/projects";
+import {
+  DEFAULT_CATEGORIES,
+  DEFAULT_PROJECTS,
+  WEEKLY_CAPACITY_HOURS,
+  fallbackProjectId,
+  makeCategoryId,
+  makeProjectId,
+} from "@/core/projects";
 
 /**
  * Store local-first của Giai đoạn 1 (chỉ Mai dùng): Zustand + localStorage.
@@ -32,6 +41,8 @@ interface LowtechieState {
   tasks: Task[];
   triage: TriageItem[];
   projects: Project[];
+  /** Category 2 tầng — Mai tự thêm/sửa/xóa (PRD §5.2.1). */
+  categories: Category[];
   events: CalEvent[];
   trips: Trip[];
   /** Món checklist Mai tự thêm, học cho các chuyến sau cùng điểm đến. */
@@ -80,6 +91,17 @@ interface LowtechieState {
 
   setWalkToStation: (min: number) => void;
   setHomeAddress: (address: string) => void;
+
+  addProject: (name: string, color: string) => void;
+  updateProject: (
+    id: ProjectId,
+    patch: Partial<Pick<Project, "name" | "color" | "targetHoursPerWeek" | "goal">>,
+  ) => void;
+  /** Xóa dự án: việc/thẻ chờ/feedback gắn vào nó chuyển về dự án rơi. */
+  deleteProject: (id: ProjectId) => void;
+  addCategory: (projectId: ProjectId, name: string) => void;
+  renameCategory: (id: string, name: string) => void;
+  deleteCategory: (id: string) => void;
 }
 
 function uid(): string {
@@ -108,6 +130,7 @@ export const useStore = create<LowtechieState>()(
       tasks: [],
       triage: [],
       projects: DEFAULT_PROJECTS,
+      categories: DEFAULT_CATEGORIES,
       events: [],
       trips: [],
       learnedItems: { tokyo: [], hcmc: [], bkk: [] },
@@ -318,11 +341,92 @@ export const useStore = create<LowtechieState>()(
         set((s) => ({ settings: { ...s.settings, walkToStationMin: min } })),
       setHomeAddress: (address) =>
         set((s) => ({ settings: { ...s.settings, homeAddress: address.slice(0, 300) } })),
+
+      addProject: (name, color) =>
+        set((s) => {
+          const trimmed = name.trim().slice(0, 40);
+          if (!trimmed) return s;
+          const id = makeProjectId(trimmed, s.projects);
+          return {
+            projects: [
+              ...s.projects,
+              { id, name: trimmed, color, weight: 0, targetHoursPerWeek: 0 },
+            ],
+          };
+        }),
+      updateProject: (id, patch) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  ...patch,
+                  name: (patch.name ?? p.name).trim().slice(0, 40) || p.name,
+                  weight:
+                    patch.targetHoursPerWeek !== undefined
+                      ? patch.targetHoursPerWeek / WEEKLY_CAPACITY_HOURS
+                      : p.weight,
+                }
+              : p,
+          ),
+        })),
+      deleteProject: (id) =>
+        set((s) => {
+          if (s.projects.length <= 1) return s;
+          const projects = s.projects.filter((p) => p.id !== id);
+          const fb = fallbackProjectId(projects);
+          const move = <T extends { projectId: ProjectId; categoryId?: string }>(x: T): T =>
+            x.projectId === id ? { ...x, projectId: fb, categoryId: undefined } : x;
+          return {
+            projects,
+            categories: s.categories.filter((c) => c.projectId !== id),
+            tasks: s.tasks.map(move),
+            triage: s.triage.map((t) => ({ ...t, draft: move(t.draft) })),
+            feedback: s.feedback.filter((f) => f.projectId !== id),
+            events: s.events.map((e) =>
+              e.projectId === id ? { ...e, projectId: undefined } : e,
+            ),
+            pendingBlock:
+              s.pendingBlock?.projectId === id
+                ? { ...s.pendingBlock, projectId: fb }
+                : s.pendingBlock,
+          };
+        }),
+      addCategory: (projectId, name) =>
+        set((s) => {
+          const trimmed = name.trim().slice(0, 40);
+          if (!trimmed) return s;
+          return {
+            categories: [
+              ...s.categories,
+              { id: makeCategoryId(projectId, trimmed, s.categories), projectId, name: trimmed },
+            ],
+          };
+        }),
+      renameCategory: (id, name) =>
+        set((s) => ({
+          categories: s.categories.map((c) =>
+            c.id === id ? { ...c, name: name.trim().slice(0, 40) || c.name } : c,
+          ),
+        })),
+      deleteCategory: (id) =>
+        set((s) => {
+          const clear = <T extends { categoryId?: string }>(x: T): T =>
+            x.categoryId === id ? { ...x, categoryId: undefined } : x;
+          return {
+            categories: s.categories.filter((c) => c.id !== id),
+            tasks: s.tasks.map(clear),
+            triage: s.triage.map((t) => ({ ...t, draft: clear(t.draft) })),
+            feedback: s.feedback.map((f) =>
+              f.categoryId === id ? { ...f, categoryId: undefined } : f,
+            ),
+          };
+        }),
     }),
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -360,6 +464,25 @@ export const useStore = create<LowtechieState>()(
             homeAddress: "",
             ...(s.settings ?? {}),
           };
+        }
+        if (version < 5) {
+          // v5: dự án/category thành dữ liệu Mai tự quản; bỏ Favstay & Edge
+          // (quyết định 22/9/2026) — việc gắn vào đó chuyển về Cá nhân.
+          const gone = new Set(["favstay", "edge"]);
+          s.projects = (s.projects ?? DEFAULT_PROJECTS).filter((p) => !gone.has(p.id));
+          if (s.projects.length === 0) s.projects = DEFAULT_PROJECTS;
+          s.categories = (s.categories ?? DEFAULT_CATEGORIES).filter(
+            (c) => !gone.has(c.projectId),
+          );
+          const fb = fallbackProjectId(s.projects);
+          const move = <T extends { projectId: ProjectId; categoryId?: string }>(x: T): T =>
+            gone.has(x.projectId) ? { ...x, projectId: fb, categoryId: undefined } : x;
+          s.tasks = (s.tasks ?? []).map(move);
+          s.triage = (s.triage ?? []).map((t) => ({ ...t, draft: move(t.draft) }));
+          s.feedback = (s.feedback ?? []).filter((f) => !gone.has(f.projectId));
+          s.events = (s.events ?? []).map((e) =>
+            e.projectId && gone.has(e.projectId) ? { ...e, projectId: undefined } : e,
+          );
         }
         return s as LowtechieState;
       },

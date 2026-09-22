@@ -6,11 +6,18 @@ import { Blossom } from "@/components/Blossom";
 import { Bubble } from "@/components/Bubble";
 import { classify, findDuplicate, learnableTerms, CONFIDENCE_THRESHOLD } from "@/core/classify";
 import { detectProject, parseCommand, parseWhen } from "@/core/parse";
-import { categoriesFor, categoryName, projectById } from "@/core/projects";
+import {
+  categoriesFor,
+  categoryName,
+  projectById,
+  sanitizeTaxonomy,
+} from "@/core/projects";
 import type {
+  Category,
   ImageParseResult,
   ParseResult,
   ParsedAction,
+  Project,
   ProjectId,
 } from "@/core/types";
 import { fmtDayTime, fmtRelativeDay, fmtTime } from "@/lib/format";
@@ -18,7 +25,10 @@ import { compressImage } from "@/lib/image";
 import { useSpeech } from "@/lib/speech";
 import { useStore, type TaskDraft } from "@/lib/store";
 
-async function parseViaApi(text: string): Promise<ParseResult> {
+async function parseViaApi(
+  text: string,
+  taxonomy: { projects: Project[]; categories: Category[] },
+): Promise<ParseResult> {
   try {
     const res = await fetch("/api/parse", {
       method: "POST",
@@ -28,6 +38,15 @@ async function parseViaApi(text: string): Promise<ParseResult> {
         epochMs: Date.now(),
         tzOffsetMin: new Date().getTimezoneOffset(),
         tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        // Taxonomy thật của Mai — dự án/category tự thêm cũng phân loại được.
+        taxonomy: {
+          projects: taxonomy.projects.map((p) => ({ id: p.id, name: p.name })),
+          categories: taxonomy.categories.map((c) => ({
+            id: c.id,
+            projectId: c.projectId,
+            name: c.name,
+          })),
+        },
       }),
     });
     if (!res.ok) throw new Error(String(res.status));
@@ -65,6 +84,7 @@ export default function CapturePage() {
   const {
     tasks,
     projects,
+    categories,
     feedback,
     addTask,
     addEvent,
@@ -74,16 +94,19 @@ export default function CapturePage() {
     recordFeedback,
   } = useStore();
 
-  const runParse = useCallback(async (t: string) => {
-    if (!t.trim()) return;
-    setBusy(true);
-    setSavedLines(null);
-    setOverrides({});
-    setMerge({});
-    const r = await parseViaApi(t.trim());
-    setResult(r);
-    setBusy(false);
-  }, []);
+  const runParse = useCallback(
+    async (t: string) => {
+      if (!t.trim()) return;
+      setBusy(true);
+      setSavedLines(null);
+      setOverrides({});
+      setMerge({});
+      const r = await parseViaApi(t.trim(), { projects, categories });
+      setResult(r);
+      setBusy(false);
+    },
+    [projects, categories],
+  );
 
   const onSpeech = useCallback(
     (final: string) => {
@@ -94,23 +117,36 @@ export default function CapturePage() {
   );
   const { supported, listening, start, stop } = useSpeech(onSpeech);
 
-  /** Hợp nhất đề xuất của parser/Claude + học từ sửa + override của Mai. */
+  /** Hợp nhất đề xuất của parser/Claude + học từ sửa + override của Mai,
+   *  rồi đối chiếu với taxonomy thật (dự án đã xóa → rơi về Cá nhân). */
   const resolveTask = useCallback(
     (a: Extract<ParsedAction, { kind: "task" }>, index: number): Resolved => {
+      const clean = (projectId: ProjectId | undefined, categoryId?: string) =>
+        sanitizeTaxonomy(projects, categories, projectId, categoryId);
       const o = overrides[index];
-      if (o) return { ...o, confidence: 1, alternatives: [] };
+      if (o) return { ...clean(o.projectId, o.categoryId), confidence: 1, alternatives: [] };
       const cls = classify(a.title, feedback);
       // Điều Mai đã dạy (feedback) thắng cả đề xuất của parser.
-      if (cls.confidence >= 0.9) return cls;
+      if (cls.confidence >= 0.9) {
+        return { ...clean(cls.projectId, cls.categoryId), confidence: cls.confidence, alternatives: [] };
+      }
       const categoryId =
         a.categoryId ?? (cls.projectId === a.projectId ? cls.categoryId : undefined);
-      const alternatives =
+      const alternatives = (
         cls.projectId !== a.projectId
           ? [{ projectId: cls.projectId, categoryId: cls.categoryId }, ...cls.alternatives].slice(0, 2)
-          : cls.alternatives;
-      return { projectId: a.projectId, categoryId, confidence: a.confidence, alternatives };
+          : cls.alternatives
+      )
+        .map((alt) => clean(alt.projectId, alt.categoryId))
+        .filter((alt, i, arr) => arr.findIndex((x) => x.projectId === alt.projectId) === i);
+      const main = clean(a.projectId, categoryId);
+      return {
+        ...main,
+        confidence: a.confidence,
+        alternatives: alternatives.filter((alt) => alt.projectId !== main.projectId),
+      };
     },
-    [overrides, feedback],
+    [overrides, feedback, projects, categories],
   );
 
   const taskActions = useMemo(
@@ -253,6 +289,14 @@ export default function CapturePage() {
           caption: text.trim(),
           epochMs: Date.now(),
           tzOffsetMin: new Date().getTimezoneOffset(),
+          taxonomy: {
+            projects: projects.map((p) => ({ id: p.id, name: p.name })),
+            categories: categories.map((c) => ({
+              id: c.id,
+              projectId: c.projectId,
+              name: c.name,
+            })),
+          },
         }),
       });
       if (res.status === 501) {
@@ -282,9 +326,15 @@ export default function CapturePage() {
 
       const drafts: TaskDraft[] = active.map((it) => {
         const cls = classify(it.title, feedback);
-        const projectId = capProject.explicit ? capProject.id : (it.projectId ?? cls.projectId);
-        const categoryId =
-          it.categoryId ?? (cls.projectId === projectId ? cls.categoryId : undefined);
+        const rawProject = capProject.explicit ? capProject.id : (it.projectId ?? cls.projectId);
+        const rawCategory =
+          it.categoryId ?? (cls.projectId === rawProject ? cls.categoryId : undefined);
+        const { projectId, categoryId } = sanitizeTaxonomy(
+          projects,
+          categories,
+          rawProject,
+          rawCategory,
+        );
         return {
           title: it.title,
           projectId,
@@ -445,7 +495,7 @@ export default function CapturePage() {
 
             const r = resolveTask(a, i);
             const p = projectById(projects, r.projectId);
-            const cat = categoryName(r.categoryId);
+            const cat = categoryName(categories, r.categoryId);
             const pastDue = a.dueAt && new Date(a.dueAt).getTime() < Date.now();
             return (
               <div className="parsed" style={{ borderLeftColor: p.color }} key={i}>
@@ -477,7 +527,9 @@ export default function CapturePage() {
                         onClick={() => applyOverride(i, a.title, alt)}
                       >
                         → {ap.name}
-                        {categoryName(alt.categoryId) ? ` · ${categoryName(alt.categoryId)}` : ""}
+                        {categoryName(categories, alt.categoryId)
+                          ? ` · ${categoryName(categories, alt.categoryId)}`
+                          : ""}
                       </button>
                     );
                   })}
@@ -495,7 +547,7 @@ export default function CapturePage() {
                     }}
                   >
                     {projects.map((pr) => {
-                      const cats = categoriesFor(pr.id);
+                      const cats = categoriesFor(categories, pr.id);
                       return cats.length ? (
                         <optgroup key={pr.id} label={pr.name}>
                           <option value={`${pr.id}|`}>{pr.name}</option>

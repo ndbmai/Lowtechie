@@ -49,7 +49,8 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Design system từ mockup (vàng mai / mực chàm, Baloo 2 + Be Vietnam Pro, dark mode)
 - [x] Task engine + triage inbox (nguồn gốc + độ tin cậy trên từng thẻ)
 - [x] Giao việc bằng chat & voice (Web Speech; 1 câu → nhiều hành động; hỏi lại tối đa 1 câu)
-- [x] Phân loại 2 tầng Dự án → Category (§5.2.1, có Admin chung) + **học từ sửa đổi** ("Rạng Đông" → Favstay)
+- [x] Phân loại 2 tầng Dự án → Category (§5.2.1) + **học từ sửa đổi** — nhớ cả dự án Mai tự thêm
+- [x] **Dự án & category tự quản** (Dự án → ⚙️ Quản lý): thêm/đổi tên/màu/mục tiêu giờ, thêm-sửa-xóa category; xóa dự án thì việc chuyển về Cá nhân (22/9: đã bỏ Favstay & Edge)
 - [x] Thẻ xác nhận trước khi lưu: tóm tắt nhóm, sửa phân loại một chạm, bắt việc trùng (đề xuất gộp), cảnh báo hạn đã qua
 - [x] Nhập việc từ **ảnh** (§5.1.1): chụp checklist/bảng trắng → Claude vision đọc → nhóm trong Hộp duyệt kèm ảnh nguồn, bỏ qua mục đã tick (cần `ANTHROPIC_API_KEY`)
 - [x] `/api/parse` dùng Claude API khi có key, tự fallback bộ phân tích luật

@@ -5,7 +5,14 @@ import {
   isSimilarTitle,
   learnableTerms,
 } from "../classify";
-import { DEFAULT_CATEGORIES, DEFAULT_PROJECTS, categoriesFor } from "../projects";
+import {
+  DEFAULT_CATEGORIES,
+  DEFAULT_PROJECTS,
+  categoriesFor,
+  makeCategoryId,
+  makeProjectId,
+  sanitizeTaxonomy,
+} from "../projects";
 import type { Task } from "../types";
 
 describe("phân loại 2 tầng (PRD §5.2.1)", () => {
@@ -21,14 +28,6 @@ describe("phân loại 2 tầng (PRD §5.2.1)", () => {
     expect(classify("Sửa slide pitch deck")).toMatchObject({
       projectId: "sorene",
       categoryId: "sorene:goivon",
-    });
-    expect(classify("Gửi báo cáo OTA tháng 9")).toMatchObject({
-      projectId: "favstay",
-      categoryId: "favstay:ota",
-    });
-    expect(classify("Viết newsletter tuần này")).toMatchObject({
-      projectId: "edge",
-      categoryId: "edge:vietbai",
     });
     expect(classify("Đặt lịch spa")).toMatchObject({
       projectId: "canhan",
@@ -57,19 +56,20 @@ describe("phân loại 2 tầng (PRD §5.2.1)", () => {
   });
 
   it("nhiều dự án cùng khớp → chắc chắn giảm + hiện lựa chọn kia", () => {
-    const c = classify("Viết bài về khách sạn cho newsletter");
+    const c = classify("Soạn hợp đồng cho vòng gọi vốn");
     expect(c.confidence).toBeLessThan(0.7);
     expect(c.alternatives.length).toBeGreaterThan(0);
   });
 
-  it("học từ sửa đổi thắng luật: 'Rạng Đông' luôn là Favstay (ví dụ PRD)", () => {
+  it("học từ sửa đổi thắng luật — kể cả dự án Mai TỰ THÊM (ví dụ PRD)", () => {
+    // "khachsan" là dự án Mai tự tạo trong app, không có trong luật nào.
     const feedback = [
-      { term: "rạng đông", projectId: "favstay" as const, categoryId: "favstay:vanhanh" },
+      { term: "rạng đông", projectId: "khachsan", categoryId: "khachsan:vanhanh" },
     ];
-    // "hợp đồng" theo luật là Circle, nhưng Mai đã dạy Rạng Đông → Favstay.
+    // "hợp đồng" theo luật là Circle, nhưng Mai đã dạy Rạng Đông → dự án riêng.
     const c = classify("Gửi hợp đồng cho khách sạn Rạng Đông", feedback);
-    expect(c.projectId).toBe("favstay");
-    expect(c.categoryId).toBe("favstay:vanhanh");
+    expect(c.projectId).toBe("khachsan");
+    expect(c.categoryId).toBe("khachsan:vanhanh");
     expect(c.confidence).toBeGreaterThanOrEqual(0.9);
   });
 
@@ -111,10 +111,10 @@ describe("kiểm tra trùng trước khi lưu", () => {
   });
 });
 
-describe("dự án + category mặc định", () => {
-  it("có Admin chung (PRD §5.2.1) và đủ 7 dự án", () => {
-    expect(DEFAULT_PROJECTS.map((p) => p.id)).toContain("admin");
-    expect(DEFAULT_PROJECTS).toHaveLength(7);
+describe("dự án + category mặc định (Mai tự quản, đã bỏ Favstay & Edge)", () => {
+  it("seed gồm 5 dự án, có Admin chung, không còn Favstay/Edge", () => {
+    const ids = DEFAULT_PROJECTS.map((p) => p.id);
+    expect(ids).toEqual(["sorene", "circle", "canhan", "hoctap", "admin"]);
   });
 
   it("mỗi category thuộc đúng dự án, id không trùng", () => {
@@ -123,6 +123,25 @@ describe("dự án + category mặc định", () => {
     for (const c of DEFAULT_CATEGORIES) {
       expect(c.id.startsWith(`${c.projectId}:`)).toBe(true);
     }
-    expect(categoriesFor("circle").map((c) => c.name)).toContain("Hợp đồng");
+    expect(categoriesFor(DEFAULT_CATEGORIES, "circle").map((c) => c.name)).toContain("Hợp đồng");
+  });
+
+  it("id dự án/category mới: slug không dấu, tự tránh trùng", () => {
+    expect(makeProjectId("Tuyển dụng", DEFAULT_PROJECTS)).toBe("tuyendung");
+    expect(makeProjectId("Sorene", DEFAULT_PROJECTS)).toBe("sorene2");
+    expect(makeCategoryId("circle", "Tuyển dụng", DEFAULT_CATEGORIES)).toBe("circle:tuyendung");
+  });
+
+  it("sanitizeTaxonomy: dự án đã xóa rơi về Cá nhân, category lạ bị bỏ", () => {
+    expect(
+      sanitizeTaxonomy(DEFAULT_PROJECTS, DEFAULT_CATEGORIES, "favstay", "favstay:ota"),
+    ).toEqual({ projectId: "canhan", categoryId: undefined });
+    expect(
+      sanitizeTaxonomy(DEFAULT_PROJECTS, DEFAULT_CATEGORIES, "circle", "circle:hopdong"),
+    ).toEqual({ projectId: "circle", categoryId: "circle:hopdong" });
+    // Category không thuộc dự án đã chọn thì cũng bỏ.
+    expect(
+      sanitizeTaxonomy(DEFAULT_PROJECTS, DEFAULT_CATEGORIES, "sorene", "circle:hopdong").categoryId,
+    ).toBeUndefined();
   });
 });

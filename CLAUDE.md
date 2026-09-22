@@ -2,7 +2,7 @@
 
 Mai Lowtechie là trợ lý AI chief-of-staff cá nhân của Mai. **Nguồn sự thật sản phẩm là `docs/PRD.md` (v0.7)** cùng hai prototype trong `docs/prototypes/`. Khi PRD và code lệch nhau, ưu tiên PRD hoặc hỏi Mai.
 
-Quyết định của Mai (21/9/2026), đã sửa bảng §5.2.1 trong PRD cho khớp: **Học tập là dự án riêng** với category Tiếng Thái (`hoctap:tiengthai`), không phải category dưới Cá nhân. Tổng cộng 7 dự án: 5 của mockup + Học tập + Admin chung.
+Quyết định của Mai (đã sửa PRD §5.2.1/§5.3 cho khớp): 21/9 — **Học tập là dự án riêng** với category Tiếng Thái (`hoctap:tiengthai`); 22/9 — **bỏ Favstay & Edge**, và **dự án/category là dữ liệu Mai tự quản** (màn Dự án → Quản lý). Seed 5 dự án: Sorene, Circle, Cá nhân, Học tập, Admin chung. `ProjectId` là chuỗi mở; mọi id từ `classify()`/Claude phải đi qua `sanitizeTaxonomy(projects, categories, …)` trước khi lưu (dự án đã xóa rơi về Cá nhân). Client gửi taxonomy thật kèm `/api/parse` và `/api/parse-image` (`src/lib/taxonomy.ts`); dự án tự thêm được phân loại nhờ học-từ-sửa (feedback), không cần thêm luật cứng.
 
 ## Ngôn ngữ & giọng điệu
 

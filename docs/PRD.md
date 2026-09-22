@@ -126,8 +126,6 @@ flowchart LR
 |---|---|
 | Sorene | Sản phẩm · Gọi vốn · Tăng trưởng & cohort · Pháp lý & công ty |
 | The Circle Technology | Khách hàng & bán hàng · Delivery dự án · Đào tạo · Marketing & nội dung · Hợp đồng |
-| Favstay / Favultimate | Khách sạn & vận hành · OTA · Marketing · Đối tác |
-| The Intelligent Edge | Viết bài · Phân phối · Cộng đồng |
 | Cá nhân | Sức khỏe & làm đẹp · Chuyến đi · Nhà cửa · Giấy tờ & tài chính cá nhân |
 | Học tập | Tiếng Thái |
 | Admin chung | Thuế & hạn pháp lý · Hóa đơn · Công cụ & tài khoản |
@@ -158,7 +156,8 @@ flowchart LR
 
 ### 5.3 Dự án
 - Mỗi dự án có: mục tiêu quý, trọng số thời gian, thành viên, kênh chat liên kết, file liên kết, decision log.
-- Dự án mặc định: Sorene, Circle, Favstay, Intelligent Edge, Cá nhân, Học tập.
+- Dự án khởi tạo: Sorene, Circle, Cá nhân, Học tập, Admin chung. *(Quyết định 22/9/2026: bỏ Favstay và Intelligent Edge khỏi danh sách.)*
+- **Mai tự thêm / đổi tên / xóa dự án và category** trong app (Dự án → Quản lý) hoặc bằng chat/voice; xóa dự án thì việc đang mở chuyển về Cá nhân.
 
 ### 5.4 Calendar agent
 - Đọc/ghi Google Calendar.

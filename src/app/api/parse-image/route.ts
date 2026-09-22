@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readTaxonomy, taxonomyText, type TaxonomyPayload } from "@/lib/taxonomy";
 import type { ImageItem, ImageParseResult } from "@/core/types";
 
 /**
@@ -37,9 +38,12 @@ const TOOL_SCHEMA = {
             dueAt: { type: "string", description: "ISO 8601 kèm offset, nếu ảnh ghi ngày" },
             projectId: {
               type: "string",
-              enum: ["sorene", "circle", "favstay", "edge", "canhan", "hoctap", "admin"],
+              description: "Id dự án — CHỈ dùng id có trong danh sách ở system prompt",
             },
-            categoryId: { type: "string" },
+            categoryId: {
+              type: "string",
+              description: "Id category — CHỈ dùng id có trong danh sách ở system prompt",
+            },
             confidence: {
               type: "number",
               description: "0–1; thấp khi chữ tay khó đọc, ảnh mờ/lóa",
@@ -54,10 +58,11 @@ const TOOL_SCHEMA = {
   },
 };
 
-function systemPrompt(localNow: string): string {
+function systemPrompt(localNow: string, taxonomy: TaxonomyPayload): string {
   return `Bạn đọc ảnh cho Mai Lowtechie: checklist viết tay, bảng trắng, sticky note, ảnh chụp màn hình — tiếng Việt/Thái/Anh, kể cả viết trộn.
 Bây giờ ở chỗ Mai là ${localNow}. Mỗi dòng trong ảnh thành một việc bắt đầu bằng động từ; giữ tên nhóm/mục con nếu ảnh có cấu trúc; dòng đã tick hoặc gạch ngang → done=true; đọc ngày, tên người, dấu ưu tiên (*, !, khoanh tròn) nếu có.
-Lời nhắn kèm ảnh (nếu có) cho biết dự án và hạn áp cho CẢ danh sách. Dự án: sorene (pitch deck, gọi vốn), circle (tư vấn, báo giá, hợp đồng, đào tạo), favstay (khách sạn, OTA), edge (newsletter), canhan (spa, sức khỏe, chuyến đi, giấy tờ), hoctap (tiếng Thái), admin (thuế, hóa đơn, công cụ).
+Lời nhắn kèm ảnh (nếu có) cho biết dự án và hạn áp cho CẢ danh sách. Dự án và category CỦA MAI (chỉ dùng đúng các id này):
+${taxonomyText(taxonomy)}
 Chữ khó đọc → vẫn trả dòng đó với confidence thấp, đừng bỏ. Không bịa dòng không có trong ảnh.`;
 }
 
@@ -86,13 +91,16 @@ export async function POST(req: Request): Promise<NextResponse> {
   let caption = "";
   let epochMs = Date.now();
   let tzOffsetMin = 0;
+  let taxonomy = readTaxonomy(undefined);
   try {
     const body = (await req.json()) as {
       images?: unknown;
       caption?: unknown;
       epochMs?: unknown;
       tzOffsetMin?: unknown;
+      taxonomy?: unknown;
     };
+    taxonomy = readTaxonomy(body.taxonomy);
     if (Array.isArray(body.images)) {
       images = body.images.filter((x): x is string => typeof x === "string").slice(0, MAX_IMAGES);
     }
@@ -138,7 +146,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         // giữa chừng và hỏng tool input (phần suy nghĩ cũng ăn vào trần).
         max_tokens: 12000,
         output_config: { effort: "low" },
-        system: systemPrompt(localIso(epochMs, tzOffsetMin)),
+        system: systemPrompt(localIso(epochMs, tzOffsetMin), taxonomy),
         tools: [TOOL_SCHEMA],
         tool_choice: { type: "tool", name: "emit_checklist" },
         messages: [

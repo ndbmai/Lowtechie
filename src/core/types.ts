@@ -3,14 +3,11 @@
  * cho bản local-first Giai đoạn 1). Mọi thời điểm là chuỗi ISO 8601.
  */
 
-export type ProjectId =
-  | "sorene"
-  | "circle"
-  | "favstay"
-  | "edge"
-  | "canhan"
-  | "hoctap"
-  | "admin";
+/**
+ * Id dự án — chuỗi mở vì Mai tự thêm/xóa dự án trong app (PRD §5.2.1).
+ * Các id gốc: sorene, circle, canhan, hoctap, admin.
+ */
+export type ProjectId = string;
 
 export interface Project {
   id: ProjectId;

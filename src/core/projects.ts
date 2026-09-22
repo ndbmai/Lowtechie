@@ -4,25 +4,33 @@ import type { Category, Project, ProjectId } from "./types";
 export const WEEKLY_CAPACITY_HOURS = 40;
 
 /**
- * Dự án mặc định (PRD §5.3 + Admin chung từ bảng category §5.2.1)
- * với màu cố định từ mockup; màu Admin chung và Học tập là màu chọn thêm.
- * Trọng số ví dụ trong PRD: Sorene 40%, Circle 30%…, Mai chỉnh trong app.
+ * Dự án khởi tạo — Mai tự thêm/sửa/xóa trong app (Dự án → Quản lý),
+ * đây chỉ là seed cho thiết bị mới. Quyết định của Mai (22/9/2026):
+ * bỏ Favstay và Edge khỏi danh sách.
  */
 export const DEFAULT_PROJECTS: Project[] = [
   { id: "sorene", name: "Sorene", color: "#8B7BFF", weight: 0.4, targetHoursPerWeek: 16, goal: "Pitch deck + gọi vốn" },
   { id: "circle", name: "Circle", color: "#1FA9B8", weight: 0.3, targetHoursPerWeek: 12, goal: "Tư vấn AI — Bangkok, HCMC, Tokyo" },
-  { id: "favstay", name: "Favstay", color: "#FF8A5B", weight: 0.2, targetHoursPerWeek: 8, goal: "Revenue management 150+ khách sạn" },
-  { id: "edge", name: "Edge", color: "#3D62E0", weight: 0.1, targetHoursPerWeek: 4, goal: "Newsletter ~10k subscriber" },
   { id: "canhan", name: "Cá nhân", color: "#FF7FA8", weight: 0, targetHoursPerWeek: 0, goal: "Spa, sức khỏe, giấy tờ" },
   { id: "hoctap", name: "Học tập", color: "#7C9A3E", weight: 0, targetHoursPerWeek: 0, goal: "Tiếng Thái mỗi ngày" },
   { id: "admin", name: "Admin chung", color: "#7D8AA5", weight: 0, targetHoursPerWeek: 0, goal: "Thuế, hóa đơn, công cụ" },
 ];
 
-/**
- * Category mặc định theo bảng PRD §5.2.1. Quyết định của Mai (21/9/2026):
- * Học tập là DỰ ÁN RIÊNG với category Tiếng Thái — không phải category
- * dưới Cá nhân.
- */
+/** Bảng màu cho dự án mới (gồm hai màu vừa giải phóng từ Favstay/Edge). */
+export const PROJECT_COLORS = [
+  "#8B7BFF",
+  "#1FA9B8",
+  "#FF8A5B",
+  "#3D62E0",
+  "#FF7FA8",
+  "#7C9A3E",
+  "#7D8AA5",
+  "#E0A13D",
+  "#C25FA3",
+  "#4C9F8B",
+];
+
+/** Category khởi tạo theo bảng PRD §5.2.1 (đã bỏ Favstay/Edge). */
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: "sorene:sanpham", projectId: "sorene", name: "Sản phẩm" },
   { id: "sorene:goivon", projectId: "sorene", name: "Gọi vốn" },
@@ -33,13 +41,6 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: "circle:daotao", projectId: "circle", name: "Đào tạo" },
   { id: "circle:marketing", projectId: "circle", name: "Marketing & nội dung" },
   { id: "circle:hopdong", projectId: "circle", name: "Hợp đồng" },
-  { id: "favstay:vanhanh", projectId: "favstay", name: "Khách sạn & vận hành" },
-  { id: "favstay:ota", projectId: "favstay", name: "OTA" },
-  { id: "favstay:marketing", projectId: "favstay", name: "Marketing" },
-  { id: "favstay:doitac", projectId: "favstay", name: "Đối tác" },
-  { id: "edge:vietbai", projectId: "edge", name: "Viết bài" },
-  { id: "edge:phanphoi", projectId: "edge", name: "Phân phối" },
-  { id: "edge:congdong", projectId: "edge", name: "Cộng đồng" },
   { id: "canhan:suckhoe", projectId: "canhan", name: "Sức khỏe & làm đẹp" },
   { id: "canhan:chuyendi", projectId: "canhan", name: "Chuyến đi" },
   { id: "canhan:nhacua", projectId: "canhan", name: "Nhà cửa" },
@@ -54,10 +55,69 @@ export function projectById(projects: Project[], id: ProjectId): Project {
   return projects.find((p) => p.id === id) ?? projects[0];
 }
 
-export function categoriesFor(projectId: ProjectId): Category[] {
-  return DEFAULT_CATEGORIES.filter((c) => c.projectId === projectId);
+export function categoriesFor(categories: Category[], projectId: ProjectId): Category[] {
+  return categories.filter((c) => c.projectId === projectId);
 }
 
-export function categoryName(categoryId: string | undefined): string | undefined {
-  return DEFAULT_CATEGORIES.find((c) => c.id === categoryId)?.name;
+export function categoryName(
+  categories: Category[],
+  categoryId: string | undefined,
+): string | undefined {
+  return categories.find((c) => c.id === categoryId)?.name;
+}
+
+/** Dự án rơi về khi id không còn tồn tại: Cá nhân, hoặc dự án đầu tiên. */
+export function fallbackProjectId(projects: Project[]): ProjectId {
+  return projects.find((p) => p.id === "canhan")?.id ?? projects[0]?.id ?? "canhan";
+}
+
+/**
+ * Kiểm tra id do phân loại/Claude trả về so với taxonomy thật của Mai —
+ * dự án đã xóa thì rơi về Cá nhân, category lạ thì bỏ.
+ */
+export function sanitizeTaxonomy(
+  projects: Project[],
+  categories: Category[],
+  projectId: ProjectId | undefined,
+  categoryId: string | undefined,
+): { projectId: ProjectId; categoryId?: string } {
+  const pid =
+    projectId && projects.some((p) => p.id === projectId)
+      ? projectId
+      : fallbackProjectId(projects);
+  const cat = categories.find((c) => c.id === categoryId && c.projectId === pid);
+  return { projectId: pid, categoryId: cat?.id };
+}
+
+/** Slug không dấu, chữ thường cho id mới. */
+function slug(name: string): string {
+  return (
+    name
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/đ/gi, "d")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, 24) || "duan"
+  );
+}
+
+export function makeProjectId(name: string, existing: Project[]): ProjectId {
+  const base = slug(name);
+  let id = base;
+  let n = 2;
+  while (existing.some((p) => p.id === id)) id = `${base}${n++}`;
+  return id;
+}
+
+export function makeCategoryId(
+  projectId: ProjectId,
+  name: string,
+  existing: Category[],
+): string {
+  const base = `${projectId}:${slug(name)}`;
+  let id = base;
+  let n = 2;
+  while (existing.some((c) => c.id === id)) id = `${base}${n++}`;
+  return id;
 }

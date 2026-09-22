@@ -15,6 +15,7 @@ export function ProjectChip({ project }: { project: Project }) {
 
 export function TaskRow({ task, showDue = true }: { task: Task; showDue?: boolean }) {
   const projects = useStore((s) => s.projects);
+  const categories = useStore((s) => s.categories);
   const toggleTask = useStore((s) => s.toggleTask);
   const p = projectById(projects, task.projectId);
   const done = task.status === "done";
@@ -32,7 +33,9 @@ export function TaskRow({ task, showDue = true }: { task: Task; showDue?: boolea
         <b>{task.title}</b>
         <span className="small muted">
           <ProjectChip project={p} />
-          {categoryName(task.categoryId) ? ` ${categoryName(task.categoryId)} ·` : ""}
+          {categoryName(categories, task.categoryId)
+            ? ` ${categoryName(categories, task.categoryId)} ·`
+            : ""}
           {showDue && task.dueAt && (
             <>
               {" "}

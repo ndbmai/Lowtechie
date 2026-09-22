@@ -26,6 +26,7 @@ export default function TriagePage() {
     triage,
     triageImages,
     projects,
+    categories,
     acceptTriage,
     dismissTriage,
     acceptGroup,
@@ -76,14 +77,14 @@ export default function TriagePage() {
 
   function addDemo() {
     addTriage({
-      title: "Gửi báo cáo OTA tháng 9 cho khách sạn Rạng Đông",
-      projectId: "favstay",
-      categoryId: "favstay:ota",
-      assignee: "Linh",
+      title: "Gửi báo giá gói AIO cho anh Tuấn bên OKR",
+      projectId: "circle",
+      categoryId: "circle:banhang",
+      assignee: "mai",
       dueAt: undefined,
       source: {
         channel: "zalo",
-        quote: "“ok chị, thứ 2 em gửi bản OTA tháng 9 cho bên Rạng Đông nha” (thẻ ví dụ)",
+        quote: "“chị gửi em báo giá gói AIO trước thứ Sáu nha chị” (thẻ ví dụ)",
       },
       confidence: 0.86,
     });
@@ -168,7 +169,7 @@ export default function TriagePage() {
                   aria-label="Chọn dự án / category"
                 >
                   {projects.map((pr) => {
-                    const cats = categoriesFor(pr.id);
+                    const cats = categoriesFor(categories, pr.id);
                     return cats.length ? (
                       <optgroup key={pr.id} label={pr.name}>
                         <option value={`${pr.id}|`}>{pr.name}</option>
@@ -204,8 +205,8 @@ export default function TriagePage() {
                   <span className="chip" style={{ background: p.color }}>
                     {p.name}
                   </span>
-                  {categoryName(top.draft.categoryId) && (
-                    <span className="muted"> · {categoryName(top.draft.categoryId)}</span>
+                  {categoryName(categories, top.draft.categoryId) && (
+                    <span className="muted"> · {categoryName(categories, top.draft.categoryId)}</span>
                   )}
                   {top.draft.assignee && top.draft.assignee !== "mai" && (
                     <>

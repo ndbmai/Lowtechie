@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readTaxonomy, taxonomyText, type TaxonomyPayload } from "@/lib/taxonomy";
 import type { ParseResult, ParsedAction } from "@/core/types";
 
 /**
@@ -28,11 +29,11 @@ const TOOL_SCHEMA = {
             what: { type: "string", description: "Thứ cần dời (kind=reschedule)" },
             projectId: {
               type: "string",
-              enum: ["sorene", "circle", "favstay", "edge", "canhan", "hoctap", "admin"],
+              description: "Id dự án — CHỈ dùng id có trong danh sách ở system prompt",
             },
             categoryId: {
               type: "string",
-              description: "Category cấp 2 dạng '<project>:<slug>' theo danh sách trong system prompt",
+              description: "Id category — CHỈ dùng id có trong danh sách ở system prompt",
             },
             dueAt: { type: "string", description: "ISO 8601, có offset múi giờ" },
             dueType: { type: "string", enum: ["hard", "soft"] },
@@ -56,12 +57,13 @@ const TOOL_SCHEMA = {
   },
 };
 
-function systemPrompt(localNow: string, tzName: string): string {
+function systemPrompt(localNow: string, tzName: string, taxonomy: TaxonomyPayload): string {
   return `Bạn là bộ tách lệnh của Mai Lowtechie — trợ lý của Mai (founder ở Bangkok, nói tiếng Việt/Thái/Anh trộn).
 Bây giờ ở chỗ Mai là ${localNow} (múi giờ ${tzName}). Dùng mốc này cho "ngày mai", "thứ Ba tuần sau"…; mọi ISO trả về phải kèm đúng offset múi giờ này.
 Tách câu của Mai thành các hành động: task (việc, có projectId + categoryId + dueAt nếu nói), event (hẹn/họp/bay/block deep work; kèm startAt hoặc durationMinutes, location, mode nếu Mai nói "đi tàu"/"ô tô"), reschedule (dời lịch; keepTime=true khi chỉ nói ngày mới).
 Tiêu đề việc bắt đầu bằng động từ rõ ràng ("Gửi báo giá cho OKR", không phải "báo giá OKR").
-Dự án và category (PRD §5.2.1): sorene (sorene:sanpham | sorene:goivon | sorene:tangtruong | sorene:phaply) · circle (circle:banhang | circle:delivery | circle:daotao | circle:marketing | circle:hopdong) · favstay (favstay:vanhanh | favstay:ota | favstay:marketing | favstay:doitac) · edge (edge:vietbai | edge:phanphoi | edge:congdong) · canhan (canhan:suckhoe | canhan:chuyendi | canhan:nhacua | canhan:giayto) · hoctap (hoctap:tiengthai — dự án riêng cho việc học) · admin (admin:thue | admin:hoadon | admin:congcu).
+Dự án và category CỦA MAI (chỉ dùng đúng các id này, Mai tự quản danh sách):
+${taxonomyText(taxonomy)}
 Không chắc category thì bỏ trống, đừng đoán bừa; confidence phản ánh độ chắc của phân loại.
 Giờ không nói rõ: nhắc việc = 9:00. "tối"=19:00, "chiều"=15:00, "sáng"=9:00.
 Hỏi lại TỐI ĐA MỘT câu, chỉ khi thiếu thông tin thật sự quan trọng. Không bịa hành động Mai không nói.`;
@@ -88,14 +90,17 @@ export async function POST(req: Request): Promise<NextResponse> {
   let epochMs = Date.now();
   let tzOffsetMin = 0;
   let tzName = "UTC";
+  let taxonomy = readTaxonomy(undefined);
   try {
     const body = (await req.json()) as {
       text?: unknown;
       epochMs?: unknown;
       tzOffsetMin?: unknown;
       tz?: unknown;
+      taxonomy?: unknown;
     };
     text = typeof body.text === "string" ? body.text.slice(0, 2000) : "";
+    taxonomy = readTaxonomy(body.taxonomy);
     if (typeof body.epochMs === "number" && Number.isFinite(body.epochMs)) epochMs = body.epochMs;
     if (typeof body.tzOffsetMin === "number" && Number.isFinite(body.tzOffsetMin))
       tzOffsetMin = body.tzOffsetMin;
@@ -131,7 +136,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         model: process.env.LOWTECHIE_MODEL || "claude-sonnet-5",
         max_tokens: 4096,
         output_config: { effort: "low" },
-        system: systemPrompt(localIso(epochMs, tzOffsetMin), tzName),
+        system: systemPrompt(localIso(epochMs, tzOffsetMin), tzName, taxonomy),
         tools: [TOOL_SCHEMA],
         tool_choice: { type: "tool", name: "emit_actions" },
         messages: [{ role: "user", content: text }],

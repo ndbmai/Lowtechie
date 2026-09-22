@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 import { mostStarved, weekStats } from "@/core/stats";
 import { rankTasks } from "@/core/priority";
@@ -45,7 +46,9 @@ export default function ProjectsPage() {
     <main className="screen-body">
       <div className="hdr">
         <h1>Dự án</h1>
-        <span className="muted small">thời gian tuần này</span>
+        <Link href="/du-an/quan-ly" className="btn small" style={{ textDecoration: "none" }}>
+          ⚙️ Quản lý
+        </Link>
       </div>
 
       <div className="pgrid">

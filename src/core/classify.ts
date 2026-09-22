@@ -35,13 +35,8 @@ export const RULES: Rule[] = [
   [/hợp đồng|contract/i, "circle", "circle:hopdong"],
   [/đào tạo|training|học viên|workshop/i, "circle", "circle:daotao"],
   [/circle|\baio\b/i, "circle"],
-  // Favstay
-  [/\bota\b|agoda|booking\.com/i, "favstay", "favstay:ota"],
-  [/khách sạn|resort/i, "favstay", "favstay:vanhanh"],
-  [/favstay|favultimate/i, "favstay"],
-  // Edge
-  [/newsletter|bản tin|viết bài/i, "edge", "edge:vietbai"],
-  [/subscriber|intelligent edge|\bedge\b/i, "edge"],
+  // (Favstay & Edge đã bỏ theo quyết định của Mai 22/9/2026 — dự án
+  // Mai tự thêm sau này được phân loại nhờ feedback học từ sửa đổi.)
   // Học tập — dự án riêng theo quyết định của Mai (không phải category Cá nhân)
   [/tiếng thái|học tiếng/i, "hoctap", "hoctap:tiengthai"],
   // Cá nhân

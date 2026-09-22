@@ -115,7 +115,7 @@ describe("brief sáng (PRD §5.10)", () => {
       task({ title: "A", dueAt: new Date(2026, 8, 18, 17).toISOString(), dueType: "hard", projectId: "sorene" }),
       task({ title: "B", projectId: "circle" }),
       task({ title: "C", projectId: "hoctap" }),
-      task({ title: "D chờ Linh", waitingOn: { person: "Linh" }, projectId: "favstay" }),
+      task({ title: "D chờ Linh", waitingOn: { person: "Linh" }, projectId: "circle" }),
     ];
     const brief = composeBrief(tasks, DEFAULT_PROJECTS, [], NOW);
     expect(brief.top.map((t) => t.title)).not.toContain("D chờ Linh");
