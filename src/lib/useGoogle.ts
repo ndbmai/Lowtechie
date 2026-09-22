@@ -120,6 +120,10 @@ export interface FlightTripCandidate {
   departAt: string;
   returnAt?: string;
   pnr?: string;
+  /** "SGN (nhà ga 2) → BKK" — hướng bay rõ ràng (PRD §5.9 6b). */
+  route?: string;
+  /** Đệm sân bay theo quy định ghi trên vé (phút). */
+  airportBufferMin?: number;
   flights: string;
   subject: string;
   confidence: number;

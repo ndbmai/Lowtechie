@@ -116,6 +116,10 @@ export interface Trip {
   returnAt?: string;
   /** Mã đặt chỗ — chống tạo trùng chuyến khi quét lại vé (§5.9). */
   pnr?: string;
+  /** Hướng bay rõ ràng từ vé, ví dụ "SGN (nhà ga 2) → BKK" (§5.9 6b). */
+  route?: string;
+  /** Đệm sân bay theo quy định ghi trên vé (phút), thay mặc định 150. */
+  airportBufferMin?: number;
   purpose?: string;
   /** Tick checklist: itemId → đã xong. */
   done: Record<string, boolean>;

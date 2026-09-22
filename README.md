@@ -62,6 +62,7 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Google Maps Routes (§5.4.1): nút "Tính bằng Google Maps" trong form chuỗi — tàu tính theo *giờ đến*, tách đi bộ → tàu → đi bộ đổ vào phép tính ngược; ô tô ước lượng theo giao thông (cần `GOOGLE_MAPS_API_KEY`)
 - [x] Gmail vé máy bay (§5.9): nút "Quét vé máy bay trong Gmail" ở Chuyến đi — Claude trích chuyến sắp tới, Mai duyệt mới tạo chuyến + checklist (scope gmail.readonly, cần nối lại Google sau khi cập nhật)
 - [x] Vé bay **đúng ngày, đúng chuyến** (§5.9 v1.0): mốc "🕐 Hôm nay" theo giờ thiết bị Mai đi kèm mọi lần trích; chỉ lấy chặng tương lai (server chặn lần hai); chặng đã bay/hủy hiện ở mục "Bỏ qua"; trùng PNR → Cập nhật giờ, không tạo bản sao
+- [x] Trích vé **theo chặng** (§5.9 6b, sửa lỗi vé OADC5J): AI trả thô mọi chặng từ email + PDF đính kèm, `src/core/flights.ts` khử trùng (PNR+số hiệu+ngày) và phân loại bằng code có test hồi quy; chuỗi ngày bay đề "Cất cánh SGN (nhà ga 2) → BKK", đệm sân bay theo quy định trên vé; chuyến đã bay chuyển vào mục "Lịch sử", không vẽ chuỗi nữa
 - [x] Tạm ngưng dự án + xóa phải chọn nơi chuyển việc (§5.3.1)
 - [ ] Speech-to-text server (voice note VI/TH/EN trộn) — đang dùng Web Speech của trình duyệt
 - [ ] Sync Google Sheets · ghi âm họp offline + recap

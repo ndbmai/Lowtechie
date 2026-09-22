@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 1.0 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé.*
+*Phiên bản 1.2 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -333,7 +333,20 @@ Mã đặt chỗ (PNR) · số vé điện tử · tên hành khách · hãng + 
 - Nhiều file cho một chuyến (vé, boarding pass, xác nhận khách sạn, bảo hiểm) được gom chung.
 - Vé chứa thông tin cá nhân → lưu mã hóa, chỉ Mai xem (không chia sẻ sang không gian dự án), tự xóa sau khi chuyến kết thúc một thời gian (ví dụ 90 ngày), trừ khi Mai chọn giữ.
 
+*6b. Quy tắc kỹ thuật rút ra từ lỗi thật (vé OADC5J, 22/9)*
+Lỗi: vé khứ hồi có 2 chặng (VU-130 BKK → SGN 7/9 đã bay; VU-131 SGN → BKK 2/10 sắp tới). App bỏ qua đúng chặng 7/9 nhưng không trích chặng 2/10, và màn Chuyến đi vẫn hiện chuỗi ngày bay 7/9.
+- **Trích theo chặng, không theo vé:** AI trả về một **mảng tất cả các chặng** trong email và mọi file đính kèm; một mã đặt chỗ (PNR) có thể có nhiều chặng. Khóa gộp/khử trùng là PNR + số hiệu + ngày bay, không bao giờ chỉ là PNR.
+- **Đọc cả file đính kèm:** PDF xác nhận vé thường chứa đầy đủ hành trình hơn nội dung email.
+- **Lọc bằng code, không để AI lọc:** AI chỉ trích dữ liệu thô (kèm giờ địa phương và múi giờ sân bay); việc so với "bây giờ" và gán trạng thái sắp tới / đã bay do code làm, có thể kiểm thử.
+- **Đổi giờ tính theo từng chặng:** email đổi lịch cập nhật đúng chặng bị đổi, không ghi đè cả vé; chặng chưa có email đổi lịch giữ giờ trong vé và được đối chiếu với dữ liệu lịch bay.
+- **Giao diện chỉ dựng từ chặng "sắp tới":** tab chuyến, chuỗi ngày bay và checklist không bao giờ hiện chặng đã bay; chặng đã bay nằm trong mục "Lịch sử".
+- **Nhãn hướng bay rõ ràng:** "Cất cánh BKK → SGN", không phải "Cất cánh HCMC".
+- **Điểm xuất phát theo thành phố của chặng:** chặng về từ SGN tính đường từ nơi ở tại HCMC, không phải từ nhà ở Bangkok.
+- **Giờ có mặt tại sân bay** lấy theo quy định ghi trên vé nếu có (vé OADC5J: có mặt tại quầy ít nhất 2 tiếng trước giờ bay quốc tế), cộng đệm của Mai.
+
 *7. Bộ test bắt buộc trước khi phát hành*
+- **Test hồi quy OADC5J:** với "hôm nay" = 22/9/2026 17:47 giờ Bangkok, kết quả phải là đúng 1 chặng sắp tới: VU-131, SGN (nhà ga 2) → BKK, Thứ Sáu 2/10/2026 11:50 → 13:25, ghế 12F, hành lý ký gửi 15kg; chặng VU-130 7/9 nằm trong Lịch sử; màn Chuyến đi hiện tab "Về Bangkok · 2/10".
+
 Vé khứ hồi đã bay chặng đi · email đổi vé (cũ + mới) · vé không ghi năm · chuyến qua nửa đêm (+1) · bay qua múi giờ (BKK → Tokyo) · chuyến đã hủy · PDF nhiều hành khách · ảnh chụp màn hình vé trong app hãng · vé tiếng Thái / tiếng Việt / tiếng Anh. Mỗi test chạy với nhiều ngày "hôm nay" khác nhau.
 
 **Checklist đồ mang theo** (mẫu gốc: trang "Checklist bay của Mai")
@@ -347,7 +360,7 @@ Vé khứ hồi đã bay chặng đi · email đổi vé (cũ + mới) · vé kh
 | Mốc | Việc |
 |---|---|
 | 1 tuần trước | Kiểm tra hộ chiếu (còn ≥ 6 tháng) và yêu cầu nhập cảnh; đặt nơi ở; bảo hiểm; eSIM; báo cộng sự lịch vắng; dời/chuyển online các cuộc họp trùng ngày bay; đặt spa/làm tóc nếu muốn |
-| 3 ngày trước | Tờ khai nhập cảnh điện tử theo điểm đến (Visit Japan Web; TDAC trong vòng 3 ngày trước khi đến Thái Lan, chỉ dùng trang chính thức, miễn phí); xem thời tiết; giặt đồ; đổi tiền; tải bản đồ và tài liệu offline; check-in online |
+| 3 ngày trước | Tờ khai nhập cảnh điện tử theo điểm đến (Visit Japan Web; TDAC trong vòng 3 ngày trước khi đến Thái Lan, chỉ dùng trang chính thức https://tdac.immigration.go.th, miễn phí; Lowtechie gửi kèm link này trong nhắc việc); xem thời tiết; giặt đồ; đổi tiền; tải bản đồ và tài liệu offline; check-in online |
 | Tối hôm trước | Sạc thiết bị; xếp hành lý theo checklist; cân hành lý; kiểm tra giờ bay và nhà ga; đặt xe; thanh toán hóa đơn sắp đến hạn; bật trả lời tự động email nếu đi dài ngày |
 | Sáng ngày bay | Kiểm tra hộ chiếu, điện thoại, ví; kiểm tra chuyến bay có đổi giờ; tắt điện, bình nóng lạnh, điều hòa; đổ rác, tưới cây; khóa cửa |
 | Ở sân bay | Có mặt trước 2 tiếng 30 (quốc tế); nhắn giờ đến cho người đón/cộng sự |

@@ -1,10 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { classifyAndGroup, type FlightSegment } from "@/core/flights";
 import { GCAL_COOKIE, accessToken, unseal } from "@/lib/googleServer";
 
 /**
- * Quét Gmail tìm email xác nhận vé máy bay → Claude trích thành các
- * chuyến đi ứng viên (PRD §5.9). Chỉ ĐỌC email; chuyến chỉ được tạo
- * khi Mai bấm duyệt ở màn Chuyến đi.
+ * Quét Gmail tìm email xác nhận vé máy bay (PRD §5.9, bản 6b — sửa lỗi
+ * vé OADC5J): AI chỉ TRÍCH THÔ tất cả các chặng từ email + PDF đính kèm;
+ * việc so với "bây giờ", khử trùng và gộp thành chuyến là của CODE
+ * (`src/core/flights.ts` — có test hồi quy). Chỉ ĐỌC email; chuyến chỉ
+ * được tạo khi Mai bấm duyệt ở màn Chuyến đi.
  */
 
 export const runtime = "nodejs";
@@ -15,18 +18,9 @@ const SEARCH_Q =
   '{"e-ticket" eticket itinerary "boarding pass" "booking confirmation" "vé điện tử" "vé máy bay" "chuyến bay" flight} newer_than:90d';
 const MAX_EMAILS = 12;
 const MAX_BODY_CHARS = 3500;
-
-export interface FlightTripCandidate {
-  destination: "tokyo" | "hcmc" | "bkk" | "other";
-  destinationName?: string;
-  departAt: string;
-  returnAt?: string;
-  /** Mã đặt chỗ để chống tạo trùng (§5.9). */
-  pnr?: string;
-  flights: string;
-  subject: string;
-  confidence: number;
-}
+/** Hành trình đầy đủ hay nằm trong PDF (lỗi OADC5J) — đọc tối đa 3 tệp nhỏ. */
+const MAX_PDFS = 3;
+const MAX_PDF_BYTES = 1_500_000;
 
 /** "Thứ Ba 22/9/2026, 14:30" theo giờ địa phương của Mai. */
 function localLabel(epochMs: number, tzOffsetMin: number): string {
@@ -46,7 +40,8 @@ function localIso(epochMs: number, tzOffsetMin: number): string {
 
 interface GmailPart {
   mimeType?: string;
-  body?: { data?: string };
+  filename?: string;
+  body?: { data?: string; attachmentId?: string; size?: number };
   parts?: GmailPart[];
 }
 
@@ -56,6 +51,13 @@ function b64urlDecode(s: string): string {
   } catch {
     return "";
   }
+}
+
+/** Gmail trả base64url; Claude cần base64 chuẩn có padding. */
+function b64urlToB64(s: string): string {
+  let out = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (out.length % 4) out += "=";
+  return out;
 }
 
 function extractText(part: GmailPart | undefined): string {
@@ -75,54 +77,77 @@ function extractText(part: GmailPart | undefined): string {
   return "";
 }
 
+/** Gom các PDF đính kèm (id + tên + cỡ) trong cây MIME của một email. */
+function listPdfParts(part: GmailPart | undefined): { attachmentId: string; filename: string; size: number }[] {
+  if (!part) return [];
+  const out: { attachmentId: string; filename: string; size: number }[] = [];
+  const isPdf =
+    part.mimeType === "application/pdf" || /\.pdf$/i.test(part.filename ?? "");
+  if (isPdf && part.body?.attachmentId) {
+    out.push({
+      attachmentId: part.body.attachmentId,
+      filename: part.filename || "dinh-kem.pdf",
+      size: part.body.size ?? 0,
+    });
+  }
+  for (const p of part.parts ?? []) out.push(...listPdfParts(p));
+  return out;
+}
+
 const TOOL_SCHEMA = {
-  name: "emit_trips",
-  description: "Các chuyến bay SẮP TỚI trích được từ email xác nhận vé.",
+  name: "emit_segments",
+  description:
+    "TẤT CẢ các chặng bay tìm thấy trong email và PDF đính kèm — trích thô, không tự lọc theo thời gian.",
   input_schema: {
     type: "object" as const,
     properties: {
-      trips: {
+      segments: {
         type: "array",
         items: {
           type: "object",
           properties: {
-            destination: {
+            pnr: { type: "string", description: "Mã đặt chỗ (PNR / booking reference) nếu thấy" },
+            flightNo: { type: "string", description: 'Số hiệu chuyến, ví dụ "VU-131", "VJ903"' },
+            airline: { type: "string", description: "Tên hãng bay" },
+            fromIata: { type: "string", description: "Mã IATA sân bay ĐI, ví dụ SGN" },
+            toIata: { type: "string", description: "Mã IATA sân bay ĐẾN, ví dụ BKK" },
+            fromTerminal: { type: "string", description: 'Nhà ga đi nếu vé ghi, ví dụ "2"' },
+            toTerminal: { type: "string", description: "Nhà ga đến nếu vé ghi" },
+            departLocal: {
               type: "string",
-              enum: ["tokyo", "hcmc", "bkk", "other"],
-              description: "Theo sân bay ĐẾN của chặng đi: NRT/HND=tokyo, SGN=hcmc, BKK/DMK=bkk",
+              description:
+                "Giờ cất cánh ISO 8601 KÈM offset múi giờ sân bay đi, ví dụ 2026-10-02T11:50:00+07:00",
             },
-            destinationName: { type: "string", description: "Tên điểm đến nếu là other" },
-            departAt: {
+            arriveLocal: {
               type: "string",
-              description: "Giờ cất cánh chặng đi, ISO 8601 theo múi giờ sân bay đi",
+              description: "Giờ hạ cánh ISO 8601 theo múi giờ sân bay đến",
             },
-            returnAt: { type: "string", description: "Giờ cất cánh chặng về nếu có" },
-            pnr: { type: "string", description: "Mã đặt chỗ (PNR) nếu có" },
-            flights: {
-              type: "string",
-              description: 'Tóm tắt chuyến, ví dụ "VJ903 BKK→SGN 08:30 · VJ904 về 20:15"',
+            seat: { type: "string", description: 'Số ghế, ví dụ "12F"' },
+            baggage: { type: "string", description: 'Hành lý ký gửi, ví dụ "15kg"' },
+            checkinMinutes: {
+              type: "number",
+              description: 'Vé ghi "có mặt trước X phút/tiếng" → đổi ra phút',
+            },
+            cancelled: { type: "boolean", description: "Email báo chặng này đã HỦY" },
+            superseded: {
+              type: "boolean",
+              description: "Lịch trình cũ đã bị email đổi vé mới hơn (cùng PNR) thay thế",
             },
             subject: { type: "string", description: "Subject email nguồn" },
             confidence: { type: "number" },
           },
-          required: ["destination", "departAt", "flights", "subject", "confidence"],
+          required: ["flightNo", "departLocal", "confidence"],
         },
       },
-      skipped: {
-        type: "array",
-        items: { type: "string" },
-        description:
-          'Các chặng BỎ QUA kèm lý do, ví dụ "VJ901 15/9 — đã bay", "TG123 — chuyến đã hủy", "lịch trình cũ trước khi đổi vé"',
-      },
     },
-    required: ["trips"],
+    required: ["segments"],
   },
 };
 
 interface ClaudeContent {
   type: string;
   name?: string;
-  input?: { trips?: FlightTripCandidate[]; skipped?: string[] };
+  input?: { segments?: FlightSegment[] };
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -159,7 +184,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ trips: [], skipped: [], scanned: 0, todayLocal });
   }
 
-  // 2. Lấy nội dung từng email (song song).
+  // 2. Lấy nội dung từng email (song song), kèm danh sách PDF đính kèm.
   const emails = await Promise.all(
     ids.map(async (id) => {
       const r = await fetch(`${GMAIL}/messages/${id}?format=full`, { headers: gauth });
@@ -170,12 +195,38 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const h = (name: string) =>
         m.payload?.headers?.find((x) => x.name.toLowerCase() === name)?.value ?? "";
       const body = extractText(m.payload).replace(/\s+/g, " ").slice(0, MAX_BODY_CHARS);
-      return { subject: h("subject"), from: h("from"), date: h("date"), body };
+      const pdfs = listPdfParts(m.payload).filter((p) => p.size > 0 && p.size <= MAX_PDF_BYTES);
+      return { id, subject: h("subject"), from: h("from"), date: h("date"), body, pdfs };
     }),
   );
-  const usable = emails.filter((e): e is NonNullable<typeof e> => Boolean(e?.body));
+  const usable = emails.filter((e): e is NonNullable<typeof e> => Boolean(e?.body || e?.pdfs.length));
 
-  // 3. Claude trích các chuyến sắp tới.
+  // 2b. Tải tối đa MAX_PDFS tệp PDF — hành trình đầy đủ (chặng về!) hay chỉ
+  // nằm trong đây chứ không nằm trong thân email (đúng lỗi OADC5J).
+  const seenPdf = new Set<string>();
+  const pdfDocs: { label: string; data: string }[] = [];
+  for (const e of usable) {
+    for (const p of e.pdfs) {
+      if (pdfDocs.length >= MAX_PDFS) break;
+      const dupKey = `${p.filename}|${p.size}`;
+      if (seenPdf.has(dupKey)) continue;
+      seenPdf.add(dupKey);
+      const r = await fetch(
+        `${GMAIL}/messages/${e.id}/attachments/${encodeURIComponent(p.attachmentId)}`,
+        { headers: gauth },
+      );
+      if (!r.ok) continue;
+      const a = (await r.json()) as { data?: string };
+      if (!a.data) continue;
+      pdfDocs.push({
+        label: `PDF "${p.filename}" đính kèm email "${e.subject.slice(0, 80)}"`,
+        data: b64urlToB64(a.data),
+      });
+    }
+    if (pdfDocs.length >= MAX_PDFS) break;
+  }
+
+  // 3. Claude trích THÔ mọi chặng (không lọc thời gian — code lọc ở bước 4).
   const headers: Record<string, string> = {
     "x-api-key": apiKey,
     "anthropic-version": "2023-06-01",
@@ -184,6 +235,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (process.env.ANTHROPIC_WORKSPACE_ID) {
     headers["anthropic-workspace-id"] = process.env.ANTHROPIC_WORKSPACE_ID;
   }
+  const emailsText = usable
+    .map(
+      (e, i) =>
+        `--- EMAIL ${i + 1} ---\nFrom: ${e.from}\nDate: ${e.date}\nSubject: ${e.subject}\n${e.body}`,
+    )
+    .join("\n\n");
+  const content: unknown[] = [
+    ...pdfDocs.map((p) => ({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: p.data },
+    })),
+    {
+      type: "text",
+      text:
+        (pdfDocs.length
+          ? `Các PDF phía trên theo thứ tự: ${pdfDocs.map((p, i) => `(${i + 1}) ${p.label}`).join("; ")}.\n\n`
+          : "") + emailsText,
+    },
+  ];
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -194,28 +264,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         // để hẹp là danh sách bị cắt và mất luôn tool_use (lỗi "HTTP 200").
         max_tokens: 16000,
         output_config: { effort: "low" },
-        system: `Bạn trích vé máy bay cho Mai Lowtechie theo PRD §5.9 — BẮT BUỘC đúng ngày, đúng chuyến.
-MỐC THỜI GIAN THẬT (không được tự đoán): bây giờ là ${localIso(epochMs, tzOffsetMin)} — ${todayLocal}, múi giờ ${tzName} nơi Mai đang ở.
-Quy tắc chọn chặng:
-- CHỈ đưa vào trips những chặng có giờ khởi hành SAU thời điểm trên, so theo giờ địa phương của SÂN BAY ĐI (Bangkok/VN +07:00, Nhật +09:00).
-- Chặng đã bay, chặng bị hủy, lịch trình cũ trước khi đổi vé, email check-in/nhắc lại → đưa vào "skipped" kèm lý do ngắn, KHÔNG đưa vào trips.
-- Vé khứ hồi mà chặng đi đã qua → trips chỉ chứa chặng về.
-- Nhiều phiên bản lịch trình trong hộp thư → lấy phiên bản MỚI NHẤT theo ngày xuất/đổi vé.
-- Vé chỉ ghi ngày không ghi năm (kiểu "22SEP") → năm là lần xuất hiện gần nhất TỪ HÔM NAY TRỞ ĐI, đối chiếu với ngày gửi email.
-Chỉ trích chuyến THẬT từ email xác nhận vé (bỏ quảng cáo/khuyến mãi). Ghép chặng đi + về cùng PNR thành một chuyến. Ghi PNR nếu thấy. departAt/returnAt là ISO 8601 kèm đúng offset múi giờ sân bay đi. Không bịa chuyến không có trong email.`,
+        system: `Bạn trích vé máy bay cho Mai Lowtechie theo PRD §5.9 bản 6b — trích THEO CHẶNG, trả thô.
+MỐC THỜI GIAN THẬT: bây giờ là ${localIso(epochMs, tzOffsetMin)} — ${todayLocal}, múi giờ ${tzName} nơi Mai đang ở. Mốc này CHỈ để suy ra năm khi vé ghi kiểu "02OCT" không có năm (đối chiếu ngày gửi email) — KHÔNG dùng để lọc chặng.
+Quy tắc:
+- Trả về TẤT CẢ các chặng bay tìm thấy, kể cả chặng đã bay trong quá khứ. Việc so với "bây giờ" là của server, không phải của bạn — đừng tự bỏ chặng nào.
+- Mỗi chiều bay là MỘT chặng riêng (vé khứ hồi = 2 chặng; nối chuyến = mỗi đoạn 1 chặng). Đừng bao giờ trả chặng đi mà bỏ quên chặng về — hành trình đầy đủ thường nằm trong PDF đính kèm, đọc kỹ cả PDF.
+- departLocal/arriveLocal là ISO 8601 KÈM đúng offset múi giờ sân bay (Bangkok/VN +07:00, Nhật +09:00).
+- cancelled=true chỉ khi có email báo hủy chặng đó; superseded=true chỉ cho lịch trình CŨ khi có email đổi vé mới hơn cùng PNR.
+- Email check-in/nhắc chuyến lặp lại một chặng đã có → cứ trả bình thường, server tự khử trùng theo PNR + số hiệu + ngày bay.
+- Ghi đủ nếu vé có: PNR, nhà ga (terminal), ghế, hành lý ký gửi, quy định "có mặt trước X phút" (đổi ra checkinMinutes).
+- Chỉ trích chuyến THẬT từ email xác nhận/đổi/hủy vé; bỏ quảng cáo, khuyến mãi, gợi ý giá. Không bịa chặng không có trong nguồn.`,
         tools: [TOOL_SCHEMA],
-        tool_choice: { type: "tool", name: "emit_trips" },
-        messages: [
-          {
-            role: "user",
-            content: usable
-              .map(
-                (e, i) =>
-                  `--- EMAIL ${i + 1} ---\nFrom: ${e.from}\nDate: ${e.date}\nSubject: ${e.subject}\n${e.body}`,
-              )
-              .join("\n\n"),
-          },
-        ],
+        tool_choice: { type: "tool", name: "emit_segments" },
+        messages: [{ role: "user", content }],
       }),
     });
     const data = (await res.json().catch(() => null)) as {
@@ -224,24 +285,17 @@ Chỉ trích chuyến THẬT từ email xác nhận vé (bỏ quảng cáo/khuy�
       error?: { type?: string; message?: string };
     } | null;
     if (res.ok && data) {
-      const toolUse = data.content?.find((c) => c.type === "tool_use" && c.name === "emit_trips");
-      if (Array.isArray(toolUse?.input?.trips)) {
-        // Hàng rào thứ hai (§5.9): dù model có lỡ trả chặng quá khứ,
-        // server vẫn gạt sang "skipped" — không bao giờ thành chuyến.
-        const skipped = [...(toolUse.input.skipped ?? [])];
-        const trips = toolUse.input.trips.filter((t) => {
-          const departMs = Date.parse(t.departAt);
-          if (!Number.isFinite(departMs)) {
-            skipped.push(`${t.flights} — không đọc được ngày giờ`);
-            return false;
-          }
-          if (departMs <= epochMs) {
-            skipped.push(`${t.flights} — đã bay (server chặn)`);
-            return false;
-          }
-          return true;
+      const toolUse = data.content?.find((c) => c.type === "tool_use" && c.name === "emit_segments");
+      if (Array.isArray(toolUse?.input?.segments)) {
+        // 4. CODE phân loại + khử trùng + gộp (hàng rào thật của §5.9 —
+        // giữ nguyên tên trường trả về để client cũ vẫn chạy).
+        const { candidates, history } = classifyAndGroup(toolUse.input.segments, epochMs);
+        return NextResponse.json({
+          trips: candidates,
+          skipped: history,
+          scanned: usable.length,
+          todayLocal,
         });
-        return NextResponse.json({ trips, skipped, scanned: usable.length, todayLocal });
       }
     }
     const detail =

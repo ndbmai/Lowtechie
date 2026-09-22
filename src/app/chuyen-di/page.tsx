@@ -151,6 +151,8 @@ function GmailScan() {
                     departAt: new Date(c.departAt).toISOString(),
                     returnAt: c.returnAt,
                     pnr: c.pnr,
+                    route: c.route,
+                    airportBufferMin: c.airportBufferMin,
                   });
                   setCandidates((s) => s.filter((_, j) => j !== i));
                   setMsg(`Đã cập nhật giờ cho chuyến ${existing.label} (cùng PNR, không tạo bản sao).`);
@@ -169,6 +171,8 @@ function GmailScan() {
                     departAt: d.toISOString(),
                     returnAt: c.returnAt,
                     pnr: c.pnr,
+                    route: c.route,
+                    airportBufferMin: c.airportBufferMin,
                   });
                   setCandidates((s) => s.filter((_, j) => j !== i));
                 }}
@@ -180,7 +184,9 @@ function GmailScan() {
         );
       })}
       {skipped.length > 0 && (
-        <p className="muted small">Bỏ qua: {skipped.slice(0, 6).join(" · ")}</p>
+        <p className="muted small">
+          Lịch sử (đã bay / đã hủy / lịch cũ): {skipped.slice(0, 6).join(" · ")}
+        </p>
       )}
     </>
   );
@@ -197,6 +203,8 @@ function FlightDayChain({ trip }: { trip: Trip }) {
     international: true,
     prepMinutes: 90,
     travelMin,
+    // Vé ghi "có mặt trước X phút" → dùng đúng quy định đó thay mặc định.
+    buffers: trip.airportBufferMin ? { airportIntl: trip.airportBufferMin } : undefined,
   });
 
   return (
@@ -210,7 +218,8 @@ function FlightDayChain({ trip }: { trip: Trip }) {
       ))}
       <div className="block-line">
         <span className="time">{fmtTime(trip.departAt)}</span>
-        <span>✈️ Cất cánh {DESTINATION_LABELS[trip.destination]}</span>
+        {/* Nhãn hướng bay từ vé ("SGN (nhà ga 2) → BKK") — 6b, tránh nhầm chiều. */}
+        <span>✈️ Cất cánh {trip.route ?? DESTINATION_LABELS[trip.destination]}</span>
       </div>
       <div className="muted small">
         Bắt đầu chuẩn bị <b>{fmtTime(chain.prepStartAt)}</b> · rời nhà{" "}
@@ -235,7 +244,10 @@ function FlightDayChain({ trip }: { trip: Trip }) {
         onClick={() =>
           addEvents(
             chain.blocks.map((b) => ({
-              title: b.kind === "flight" ? `✈️ Bay ${DESTINATION_LABELS[trip.destination]}` : b.label,
+              title:
+                b.kind === "flight"
+                  ? `✈️ Bay ${trip.route ?? DESTINATION_LABELS[trip.destination]}`
+                  : b.label,
               startAt: b.startAt,
               endAt: b.endAt,
               kind: b.kind === "prep" ? "prep" : b.kind === "travel" ? "travel" : b.kind,
@@ -250,6 +262,11 @@ function FlightDayChain({ trip }: { trip: Trip }) {
   );
 }
 
+/** Chuyến coi là xong sau (giờ về ?? giờ đi) + 24h → chỉ còn ở Lịch sử (6b). */
+function isPastTrip(t: Trip, nowMs: number): boolean {
+  return Date.parse(t.returnAt ?? t.departAt) + 24 * 60 * 60_000 < nowMs;
+}
+
 export default function TripsPage() {
   const mounted = useMounted();
   const { trips, toggleTripItem, addCustomItem, removeTripItem, newRound } = useStore();
@@ -258,10 +275,13 @@ export default function TripsPage() {
   const [tripId, setTripId] = useState<string | null>(null);
   const [addText, setAddText] = useState<Record<string, string>>({});
 
-  const trip = useMemo(
-    () => trips.find((t) => t.id === tripId) ?? trips[0],
-    [trips, tripId],
-  );
+  // Chỉ chạy sau mounted (client) nên Date.now() không lệch hydration.
+  const nowMs = Date.now();
+  const upcoming = trips.filter((t) => !isPastTrip(t, nowMs));
+  const past = trips.filter((t) => isPastTrip(t, nowMs));
+
+  // Mặc định mở chuyến SẮP TỚI gần nhất; chuyến đã bay chỉ khi Mai tự chọn.
+  const trip = trips.find((t) => t.id === tripId) ?? upcoming[0] ?? trips[0];
 
   const groups = useMemo(() => {
     if (!trip) return [];
@@ -331,7 +351,7 @@ export default function TripsPage() {
       {trip && (
         <>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {trips.map((t) => (
+            {upcoming.map((t) => (
               <button
                 key={t.id}
                 className="btn"
@@ -350,7 +370,16 @@ export default function TripsPage() {
             </button>
           </div>
 
-          <FlightDayChain trip={trip} />
+          {isPastTrip(trip, nowMs) ? (
+            // 6b: chuyến đã bay không bao giờ được vẽ chuỗi ngày bay nữa
+            // (lỗi OADC5J: chuỗi 7/9 vẫn hiện sau khi đã bay).
+            <div className="note-box small">
+              ✈️ Chuyến này đã bay ({fmtDay(trip.departAt)}) — nằm trong Lịch sử nên mình không
+              vẽ chuỗi ngày bay nữa. Vé sắp tới cứ quét Gmail phía trên là ra.
+            </div>
+          ) : (
+            <FlightDayChain trip={trip} />
+          )}
 
           <div className="progress">
             <div className="bar-track">
@@ -467,6 +496,31 @@ export default function TripsPage() {
             kiểm tra trang chính thức trước mỗi chuyến. Chất lỏng xách tay tối đa 100ml mỗi chai;
             pin dự phòng không ký gửi.
           </div>
+
+          {past.length > 0 && (
+            <section className="card">
+              <div className="hdr">
+                <h3 style={{ fontSize: 18 }}>Lịch sử</h3>
+                <span className="muted small">{past.length} chuyến đã bay</span>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {past.map((t) => (
+                  <button
+                    key={t.id}
+                    className="btn small"
+                    style={
+                      t.id === trip.id
+                        ? { background: "var(--ink)", color: "var(--bg)", borderColor: "var(--ink)" }
+                        : { opacity: 0.65 }
+                    }
+                    onClick={() => setTripId(t.id)}
+                  >
+                    ✈️ {t.label} · {fmtDay(t.departAt)}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
     </main>

@@ -87,7 +87,7 @@ interface LowtechieState {
   /** Cập nhật chuyến đã có (cùng PNR quét lại → sửa giờ, không tạo bản sao §5.9). */
   updateTrip: (
     tripId: string,
-    patch: Partial<Pick<Trip, "departAt" | "returnAt" | "label" | "pnr">>,
+    patch: Partial<Pick<Trip, "departAt" | "returnAt" | "label" | "pnr" | "route" | "airportBufferMin">>,
   ) => void;
   toggleTripItem: (tripId: string, itemId: string) => void;
   addCustomItem: (tripId: string, groupId: string, text: string) => void;
