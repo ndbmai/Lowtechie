@@ -13,7 +13,8 @@ import {
 } from "@/core/series";
 import { proposeSlots } from "@/core/slots";
 import { carChain, transitChain, type Chain } from "@/core/timeback";
-import type { CalEvent, Task, Trip } from "@/core/types";
+import type { CalEvent, Destination, Task, Trip } from "@/core/types";
+import { PlaceSelect } from "@/components/PlaceSelect";
 import { fmtDay, fmtDayFull, fmtRange, fmtTime, isSameDay } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
@@ -44,7 +45,7 @@ function ChainForm({
   mapsAvailable: boolean;
   onClose: () => void;
 }) {
-  const { settings, addEvents, setWalkToStation, setHomeAddress } = useStore();
+  const { settings, addEvents, setWalkToStation, setHomeAddress, places } = useStore();
   const [mode, setMode] = useState<"transit" | "car">("transit");
   const [prep, setPrep] = useState(settings.defaultPrepMinutes);
   const [walkTo, setWalkTo] = useState(settings.walkToStationMin);
@@ -189,22 +190,28 @@ function ChainForm({
 
       {mapsAvailable && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <input
-            className="transcript"
-            style={{ minHeight: 0, padding: 9 }}
-            placeholder="Điểm đi (địa chỉ nhà — lưu lại cho lần sau)"
-            aria-label="Điểm đi"
-            value={origin}
-            onChange={(e) => setOrigin(e.target.value)}
-          />
-          <input
-            className="transcript"
-            style={{ minHeight: 0, padding: 9 }}
-            placeholder="Điểm đến (tên quán/địa chỉ, càng cụ thể càng chuẩn)"
-            aria-label="Điểm đến"
-            value={dest}
-            onChange={(e) => setDest(e.target.value)}
-          />
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <PlaceSelect places={places} onPick={setOrigin} label="Chọn điểm đi đã lưu" />
+            <input
+              className="transcript"
+              style={{ minHeight: 0, padding: 9, flex: 1 }}
+              placeholder="Điểm đi (địa chỉ nhà — lưu lại cho lần sau)"
+              aria-label="Điểm đi"
+              value={origin}
+              onChange={(e) => setOrigin(e.target.value)}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <PlaceSelect places={places} onPick={setDest} label="Chọn điểm đến đã lưu" />
+            <input
+              className="transcript"
+              style={{ minHeight: 0, padding: 9, flex: 1 }}
+              placeholder="Điểm đến (tên quán/địa chỉ, càng cụ thể càng chuẩn)"
+              aria-label="Điểm đến"
+              value={dest}
+              onChange={(e) => setDest(e.target.value)}
+            />
+          </div>
           <button className="btn" disabled={mapsBusy} onClick={() => void fillFromMaps()}>
             {mapsBusy ? "Đang hỏi Google Maps…" : "📍 Tính thời gian bằng Google Maps"}
           </button>
@@ -682,19 +689,37 @@ const BOOKING_METHODS = [
   { id: "web", label: "Website/app" },
 ] as const;
 
-/** Nơi cần đặt chỗ trước (§5.4.2): spa, salon, nhà hàng, phòng khám. */
+const CITY_OPTIONS: { id: "" | Destination; label: string }[] = [
+  { id: "", label: "— thành phố —" },
+  { id: "bkk", label: "Bangkok" },
+  { id: "hcmc", label: "HCMC" },
+  { id: "tokyo", label: "Tokyo" },
+];
+
+/**
+ * Địa điểm đã lưu (places §8): nhà ở từng thành phố (điểm đi/đến + link
+ * Google Maps) và nơi cần đặt chỗ trước (§5.4.2).
+ */
 function PlacesSection() {
   const { places, addPlace, updatePlace, deletePlace } = useStore();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState<"" | Destination>("");
+  const [isHome, setIsHome] = useState(false);
+  const [needsBook, setNeedsBook] = useState(false);
   const [lead, setLead] = useState(3);
   const [method, setMethod] = useState<(typeof BOOKING_METHODS)[number]["id"]>("call");
   const [contact, setContact] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+
+  const mapsSearch = (q: string) =>
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 
   return (
     <section className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div className="hdr">
-        <h3 style={{ fontSize: 18 }}>🔖 Nơi cần đặt chỗ</h3>
+        <h3 style={{ fontSize: 18 }}>📍 Địa điểm của Mai</h3>
         <button className="btn ghost small" onClick={() => setAdding((v) => !v)}>
           {adding ? "Thôi" : "+ Thêm"}
         </button>
@@ -705,104 +730,200 @@ function PlacesSection() {
           <input
             className="transcript"
             style={{ minHeight: 0, padding: 9 }}
-            placeholder="Tên nơi (ví dụ: Spa Sukhumvit 24)"
-            aria-label="Tên nơi cần đặt chỗ"
+            placeholder="Tên (Nhà ở HCM, Nhà Bang Na, Spa Sukhumvit…)"
+            aria-label="Tên địa điểm"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
+          <input
+            className="transcript"
+            style={{ minHeight: 0, padding: 9 }}
+            placeholder="Địa chỉ cho Google Maps"
+            aria-label="Địa chỉ"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+          />
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <label className="small" style={{ display: "flex", gap: 4, alignItems: "center" }}>
-              đặt trước
-              <input
-                type="number"
-                min={0}
-                max={60}
-                value={lead}
-                aria-label="Đặt trước bao nhiêu ngày"
-                onChange={(e) => setLead(Math.max(0, Number(e.target.value) || 0))}
-                style={{ width: 52, padding: "4px 6px", borderRadius: 9, border: "1.5px solid var(--line)", background: "var(--surface-2)" }}
-              />
-              ngày
-            </label>
-            <select className="btn small" value={method} aria-label="Cách đặt" onChange={(e) => setMethod(e.target.value as typeof method)}>
-              {BOOKING_METHODS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
+            <select className="btn small" value={city} aria-label="Thành phố" onChange={(e) => setCity(e.target.value as typeof city)}>
+              {CITY_OPTIONS.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
                 </option>
               ))}
             </select>
-            <input
-              className="transcript"
-              style={{ minHeight: 0, padding: "4px 8px", flex: "1 1 140px" }}
-              placeholder="SĐT hoặc link đặt chỗ"
-              aria-label="Liên hệ đặt chỗ"
-              value={contact}
-              onChange={(e) => setContact(e.target.value)}
-            />
-            <button
-              className="btn primary small"
-              disabled={!name.trim()}
-              onClick={() => {
-                addPlace({
-                  name,
-                  needsBooking: true,
-                  bookingLeadDays: lead,
-                  bookingMethod: method,
-                  bookingContact: contact.trim() || undefined,
-                });
-                setName("");
-                setContact("");
-                setAdding(false);
-              }}
-            >
-              Thêm
-            </button>
+            <label className="small" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <input type="checkbox" className="check" checked={isHome} onChange={(e) => setIsHome(e.target.checked)} />
+              🏠 nơi ở chính
+            </label>
+            <label className="small" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <input type="checkbox" className="check" checked={needsBook} onChange={(e) => setNeedsBook(e.target.checked)} />
+              🔖 cần đặt chỗ trước
+            </label>
           </div>
+          {needsBook && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <label className="small" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                đặt trước
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={lead}
+                  aria-label="Đặt trước bao nhiêu ngày"
+                  onChange={(e) => setLead(Math.max(0, Number(e.target.value) || 0))}
+                  style={{ width: 52, padding: "4px 6px", borderRadius: 9, border: "1.5px solid var(--line)", background: "var(--surface-2)" }}
+                />
+                ngày
+              </label>
+              <select className="btn small" value={method} aria-label="Cách đặt" onChange={(e) => setMethod(e.target.value as typeof method)}>
+                {BOOKING_METHODS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="transcript"
+                style={{ minHeight: 0, padding: "4px 8px", flex: "1 1 140px" }}
+                placeholder="SĐT hoặc link đặt chỗ"
+                aria-label="Liên hệ đặt chỗ"
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+              />
+            </div>
+          )}
+          <button
+            className="btn primary small"
+            style={{ alignSelf: "flex-start" }}
+            disabled={!name.trim()}
+            onClick={() => {
+              addPlace({
+                name,
+                address: address.trim() || undefined,
+                city: city || undefined,
+                isHome,
+                needsBooking: needsBook,
+                bookingLeadDays: needsBook ? lead : 0,
+                bookingMethod: needsBook ? method : undefined,
+                bookingContact: needsBook ? contact.trim() || undefined : undefined,
+              });
+              setName("");
+              setAddress("");
+              setIsHome(false);
+              setNeedsBook(false);
+              setContact("");
+              setAdding(false);
+            }}
+          >
+            Thêm
+          </button>
         </div>
       )}
 
       {places.length === 0 && !adding && (
         <p className="muted small" style={{ margin: 0 }}>
-          Thêm spa, salon, nhà hàng… hay đến — lịch ở đó sẽ mang trạng thái "Chưa đặt chỗ" và có
-          việc "Đặt lịch" nhắc trước.
+          Lưu "Nhà ở HCM", "Nhà Bang Na"… để chuỗi ngày bay tự chọn đúng nhà theo đầu chặng, và
+          spa/nhà hàng cần đặt chỗ để được nhắc đặt trước.
         </p>
       )}
 
       {places.map((p) => (
-        <div key={p.id} className="small" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <label style={{ display: "flex", gap: 6, alignItems: "center", flex: 1, minWidth: 140 }}>
-            <input
-              type="checkbox"
-              className="check"
-              checked={p.needsBooking}
-              aria-label={`${p.name} cần đặt trước`}
-              onChange={(e) => updatePlace(p.id, { needsBooking: e.target.checked })}
-            />
-            <b>{p.name}</b>
-          </label>
-          <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
-            trước
-            <input
-              type="number"
-              min={0}
-              max={60}
-              value={p.bookingLeadDays}
-              aria-label={`Số ngày đặt trước cho ${p.name}`}
-              onChange={(e) => updatePlace(p.id, { bookingLeadDays: Math.max(0, Number(e.target.value) || 0) })}
-              style={{ width: 48, padding: "3px 5px", borderRadius: 8, border: "1.5px solid var(--line)", background: "var(--surface-2)" }}
-            />
-            ngày
-          </label>
-          <span className="muted">{BOOKING_METHODS.find((m) => m.id === p.bookingMethod)?.label}</span>
-          <button
-            className="btn ghost small"
-            aria-label={`Xóa ${p.name}`}
-            onClick={() => {
-              if (window.confirm(`Xóa "${p.name}" khỏi danh sách nơi đặt chỗ?`)) deletePlace(p.id);
-            }}
-          >
-            ×
-          </button>
+        <div key={p.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div className="small" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="t" style={{ flex: 1, minWidth: 140 }}>
+              <b>
+                {p.isHome ? "🏠 " : ""}
+                {p.needsBooking ? "🔖 " : ""}
+                {p.name}
+              </b>
+              <span className="muted">
+                {CITY_OPTIONS.find((c) => c.id === (p.city ?? ""))?.label.replace("— thành phố —", "")}
+                {p.address ? ` · ${p.address}` : ""}
+                {p.needsBooking ? ` · đặt trước ${p.bookingLeadDays} ngày` : ""}
+              </span>
+            </span>
+            {(p.address || p.name) && (
+              <a
+                className="btn ghost small"
+                style={{ textDecoration: "none" }}
+                href={mapsSearch(p.address || p.name)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Mở Maps
+              </a>
+            )}
+            <button className="btn ghost small" aria-label={`Sửa ${p.name}`} onClick={() => setEditing(editing === p.id ? null : p.id)}>
+              ✎
+            </button>
+            <button
+              className="btn ghost small"
+              aria-label={`Xóa ${p.name}`}
+              onClick={() => {
+                if (window.confirm(`Xóa địa điểm "${p.name}"?`)) deletePlace(p.id);
+              }}
+            >
+              ×
+            </button>
+          </div>
+          {editing === p.id && (
+            <div className="note-box small" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <input
+                className="transcript"
+                style={{ minHeight: 0, padding: 8 }}
+                placeholder="Địa chỉ cho Google Maps"
+                aria-label={`Địa chỉ của ${p.name}`}
+                value={p.address ?? ""}
+                onChange={(e) => updatePlace(p.id, { address: e.target.value })}
+              />
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <select
+                  className="btn small"
+                  value={p.city ?? ""}
+                  aria-label={`Thành phố của ${p.name}`}
+                  onChange={(e) => updatePlace(p.id, { city: (e.target.value || undefined) as Destination | undefined })}
+                >
+                  {CITY_OPTIONS.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    className="check"
+                    checked={Boolean(p.isHome)}
+                    onChange={(e) => updatePlace(p.id, { isHome: e.target.checked })}
+                  />
+                  🏠 nơi ở chính
+                </label>
+                <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    className="check"
+                    checked={p.needsBooking}
+                    onChange={(e) => updatePlace(p.id, { needsBooking: e.target.checked })}
+                  />
+                  🔖 cần đặt trước
+                </label>
+                {p.needsBooking && (
+                  <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    <input
+                      type="number"
+                      min={0}
+                      max={60}
+                      value={p.bookingLeadDays}
+                      aria-label={`Số ngày đặt trước cho ${p.name}`}
+                      onChange={(e) => updatePlace(p.id, { bookingLeadDays: Math.max(0, Number(e.target.value) || 0) })}
+                      style={{ width: 48, padding: "3px 5px", borderRadius: 8, border: "1.5px solid var(--line)", background: "var(--surface-2)" }}
+                    />
+                    ngày
+                  </label>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       ))}
     </section>

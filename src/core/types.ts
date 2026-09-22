@@ -120,10 +120,20 @@ export interface Task {
   deferCount: number;
 }
 
-/** Nơi hay đến cần đặt chỗ trước — spa, nhà hàng, phòng khám (§5.4.2). */
+/**
+ * Địa điểm đã lưu (places §8): nhà ở từng thành phố, khách sạn, spa…
+ * Vừa là điểm đi/đến cho chuỗi di chuyển (kèm link Google Maps), vừa là
+ * nơi cần đặt chỗ trước (§5.4.2).
+ */
 export interface Place {
   id: string;
   name: string;
+  /** Địa chỉ cho Google Maps ("Nhà ở HCM", "Nhà Bang Na"…). */
+  address?: string;
+  /** Thành phố — để chuỗi ngày bay chọn đúng nhà theo đầu chặng. */
+  city?: Destination;
+  /** Nơi ở chính tại thành phố đó → mặc định của điểm đi/đến. */
+  isHome?: boolean;
   needsBooking: boolean;
   /** Đặt trước bao nhiêu ngày (spa 3, nhà hàng cuối tuần 7…). */
   bookingLeadDays: number;

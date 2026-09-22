@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bubble } from "@/components/Bubble";
 import {
   DESTINATION_LABELS,
   groupsFor,
   type ChecklistTab,
 } from "@/core/checklist";
-import { IATA_TZ_MIN } from "@/core/flights";
+import { IATA_TZ_MIN, iataCity } from "@/core/flights";
+import { PlaceSelect } from "@/components/PlaceSelect";
 import { fullFlightChain, parseOffsetMin, validateChainBlocks } from "@/core/timeback";
 import type { Destination, Trip, TripAttachment } from "@/core/types";
 import { deleteFile, getFile, putFile } from "@/lib/fileStore";
@@ -314,22 +315,28 @@ function GmailScan() {
 /** Chuỗi ngày bay ĐẦY ĐỦ HAI ĐẦU, mọi block chỉnh được (PRD §5.9 v2.0). */
 function FullChain({ trip }: { trip: Trip }) {
   const gs = useGoogleStatus();
-  const { addEvents, events, settings } = useStore();
+  const { addEvents, events, settings, places } = useStore();
   const { from, to } = iataPair(trip.route);
-  const fromBkk = from === "BKK" || from === "DMK";
-  const toBkk = to === "BKK" || to === "DMK" || trip.destination === "bkk";
+  const fromCity = iataCity(from);
+  const toCity = iataCity(to) ?? trip.destination;
+
+  // Mặc định theo THÀNH PHỐ của chặng (v2.0): chặng từ SGN đi từ nhà ở
+  // HCM, không phải nhà Bangkok — ưu tiên địa điểm 🏠 đã lưu đúng thành phố.
+  const homeAt = (city?: Destination) =>
+    places.find((p) => p.isHome && p.city === city)?.address?.trim() ??
+    (city === "bkk" ? settings.homeAddress : "");
 
   const [prepOn, setPrepOn] = useState(true);
   const [prepMin, setPrepMin] = useState(90);
   const [travelMin, setTravelMin] = useState(45);
   const [modeTo, setModeTo] = useState<TravelMode>("grab");
-  const [origin, setOrigin] = useState(fromBkk ? settings.homeAddress : "");
+  const [origin, setOrigin] = useState(() => homeAt(fromCity));
   const [checkinMin, setCheckinMin] = useState(Math.max(trip.airportBufferMin ?? 0, 150));
   const [arriveProcMin, setArriveProcMin] = useState(60);
   const [afterOn, setAfterOn] = useState(true);
   const [afterMin, setAfterMin] = useState(40);
   const [modeAfter, setModeAfter] = useState<TravelMode>("grab");
-  const [destPlace, setDestPlace] = useState(toBkk ? settings.homeAddress : "");
+  const [destPlace, setDestPlace] = useState(() => homeAt(toCity));
   const [mapsMsg, setMapsMsg] = useState<string | null>(null);
   const locked = events.some((e) => e.chainOf === trip.id);
 
@@ -449,6 +456,7 @@ function FullChain({ trip }: { trip: Trip }) {
         </label>
         <div className="small" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <span style={{ flex: "1 0 100%" }}>Ra sân bay {from ? `(${from})` : ""}</span>
+          <PlaceSelect places={places} city={fromCity} onPick={setOrigin} label="Chọn điểm xuất phát đã lưu" />
           <input
             className="transcript"
             style={{ minHeight: 0, padding: "4px 8px", flex: "1 1 130px" }}
@@ -496,6 +504,7 @@ function FullChain({ trip }: { trip: Trip }) {
               </label>
               {afterOn && (
                 <>
+                  <PlaceSelect places={places} city={toCity} onPick={setDestPlace} label="Chọn điểm đến đã lưu" />
                   <input
                     className="transcript"
                     style={{ minHeight: 0, padding: "4px 8px", flex: "1 1 130px" }}
@@ -559,10 +568,36 @@ function FullChain({ trip }: { trip: Trip }) {
   );
 }
 
-/** File vé đã lưu vào chuyến (v2.0) — mở từ IndexedDB. */
+/**
+ * File vé đã lưu vào chuyến (v2.0) — nạp sẵn blob từ IndexedDB thành URL
+ * rồi render THẺ LINK thật: window.open sau bước async bị Safari/PWA chặn
+ * popup, đó là lý do "bấm Mở không được".
+ */
 function TripFiles({ trip }: { trip: Trip }) {
-  const [msg, setMsg] = useState<string | null>(null);
   const atts = trip.attachments ?? [];
+  const [urls, setUrls] = useState<Record<string, string | null>>({});
+
+  useEffect(() => {
+    let alive = true;
+    const created: string[] = [];
+    void (async () => {
+      const out: Record<string, string | null> = {};
+      for (const a of trip.attachments ?? []) {
+        const blob = await getFile(a.id);
+        const url = blob ? URL.createObjectURL(blob) : null;
+        if (url) created.push(url);
+        out[a.id] = url;
+      }
+      if (alive) setUrls(out);
+      else created.forEach((u) => URL.revokeObjectURL(u));
+    })();
+    return () => {
+      alive = false;
+      created.forEach((u) => URL.revokeObjectURL(u));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip.id, atts.length]);
+
   if (atts.length === 0) {
     // Empty state (lần đầu): chuyến từ email mà chưa có file → chỉ đường.
     return trip.pnr ? (
@@ -576,30 +611,31 @@ function TripFiles({ trip }: { trip: Trip }) {
     ) : null;
   }
 
-  async function open(att: TripAttachment) {
-    const blob = await getFile(att.id);
-    if (!blob) {
-      setMsg(`"${att.filename}" không còn trên thiết bị này.`);
-      return;
-    }
-    window.open(URL.createObjectURL(blob), "_blank");
-  }
-
   return (
     <div className="card" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <b>🎫 Vé & file của chuyến</b>
       {atts.map((a) => (
-        <div key={a.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div key={a.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <span className="t small" style={{ opacity: a.isLatest ? 1 : 0.6 }}>
             {a.filename}
             {!a.isLatest && <span className="muted"> · bản cũ (v{a.version})</span>}
           </span>
-          <button className="btn small" onClick={() => void open(a)}>
-            Mở
-          </button>
+          {urls[a.id] === undefined ? (
+            <span className="muted small">…</span>
+          ) : urls[a.id] ? (
+            <>
+              <a className="btn small" style={{ textDecoration: "none" }} href={urls[a.id]!} target="_blank" rel="noreferrer">
+                Mở
+              </a>
+              <a className="btn ghost small" style={{ textDecoration: "none" }} href={urls[a.id]!} download={a.filename}>
+                Tải
+              </a>
+            </>
+          ) : (
+            <span className="muted small">không còn trên máy này — quét lại là có</span>
+          )}
         </div>
       ))}
-      {msg && <p className="muted small">{msg}</p>}
     </div>
   );
 }
@@ -760,7 +796,7 @@ export default function TripsPage() {
           {isPastTrip(trip, nowMs) ? (
             <div className="note-box small">✈️ Chuyến này đã bay ({fmtDay(trip.departAt)}) — nằm trong Lịch sử.</div>
           ) : (
-            <FullChain trip={trip} />
+            <FullChain key={trip.id} trip={trip} />
           )}
 
           <TripFiles trip={trip} />

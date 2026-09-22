@@ -57,6 +57,11 @@ const IATA_DEST: Record<string, Destination> = {
   DMK: "bkk",
 };
 
+/** Thành phố của một sân bay — để chọn đúng nhà đã lưu cho đầu chặng. */
+export function iataCity(iata?: string): Destination | undefined {
+  return iata ? IATA_DEST[iata.toUpperCase()] : undefined;
+}
+
 /**
  * Offset múi giờ (phút) theo sân bay — cho cảnh báo giờ địa phương của
  * chuỗi ngày bay khi dữ liệu cũ lưu ISO dạng Z (mất offset).

@@ -83,6 +83,8 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Hạn chỉ-có-ngày không hiện "0:00" (lỗi 22/9); việc còn hạn xa >14 ngày không leo lên Ưu tiên hôm nay trừ khi Mai gắn ⭐ hoặc việc đang chặn người khác
 - [x] Ghi chú trong từng việc (3d): nhật ký có giờ, sửa/xóa từng dòng, tách riêng với trích dẫn Nguồn; ô ghi chú ngay trên thẻ duyệt; lệnh "ghi chú cho việc X: …"
 - [x] Nhắc đặt lịch trước (§5.4.2): danh bạ nơi cần đặt (spa, nhà hàng…) với số ngày đặt trước + cách đặt; lịch ở đó mang "🔖 Chưa đặt" đến khi bấm Đã đặt, việc "Đặt lịch…" tự vào Hộp duyệt đúng hạn, cảnh báo khi còn <24h, nút Gọi/link đặt chỗ
+- [x] Địa điểm đã lưu theo thành phố (§8, trả nợ v2.0): "Nhà ở HCM", "Nhà Bang Na"… kèm địa chỉ + link Mở Maps; chuỗi ngày bay tự chọn đúng nhà 🏠 theo đầu chặng (chặng từ SGN đi từ nhà HCM), ô chọn nhanh ở cả chuỗi bay lẫn chuỗi hẹn
+- [x] Sửa nút "Mở" vé máy bay không hoạt động trên điện thoại: đổi window.open (bị chặn popup) thành link trực tiếp + nút Tải
 - [x] Tạm ngưng dự án + xóa phải chọn nơi chuyển việc (§5.3.1)
 - [ ] Speech-to-text server (voice note VI/TH/EN trộn) — đang dùng Web Speech của trình duyệt
 - [ ] Sync Google Sheets · ghi âm họp offline + recap
