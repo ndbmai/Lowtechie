@@ -58,7 +58,8 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Chuyến đi + checklist bay theo điểm đến, học món tự thêm
 - [x] Brief sáng + weekly review (thời gian vs mục tiêu, việc dời ≥ 3 lần)
 - [x] Google Calendar thật (OAuth trong app, PRD §5.4): sự kiện Google hiện trong Lịch + brief sáng; chuỗi chuẩn bị/di chuyển ghi vào GCal khi Mai bấm khóa (tick tắt được); token nằm trong cookie mã hóa của từng thiết bị, không có database — cần `GOOGLE_CLIENT_ID/SECRET` (xem `.env.example`)
-- [ ] Google Maps Routes (giờ đến cho phương tiện công cộng) — đang dùng đệm nhập tay
+- [x] Google Maps Routes (§5.4.1): nút "Tính bằng Google Maps" trong form chuỗi — tàu tính theo *giờ đến*, tách đi bộ → tàu → đi bộ đổ vào phép tính ngược; ô tô ước lượng theo giao thông (cần `GOOGLE_MAPS_API_KEY`)
+- [x] Gmail vé máy bay (§5.9): nút "Quét vé máy bay trong Gmail" ở Chuyến đi — Claude trích chuyến sắp tới, Mai duyệt mới tạo chuyến + checklist (scope gmail.readonly, cần nối lại Google sau khi cập nhật)
 - [ ] Speech-to-text server (voice note VI/TH/EN trộn) — đang dùng Web Speech của trình duyệt
 - [ ] Sync Google Sheets · ghi âm họp offline + recap
 - [ ] Giai đoạn 2: bot Telegram/Zalo 1:1, ingest group chat

@@ -9,9 +9,14 @@ import {
 } from "@/core/checklist";
 import { flightChain } from "@/core/timeback";
 import type { Destination, Trip } from "@/core/types";
-import { fmtDay, fmtRange, fmtTime } from "@/lib/format";
+import { fmtDay, fmtDayTime, fmtRange, fmtTime } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
+import {
+  fetchFlightTrips,
+  useGoogleStatus,
+  type FlightTripCandidate,
+} from "@/lib/useGoogle";
 
 function NewTripForm({ onDone }: { onDone: () => void }) {
   const addTrip = useStore((s) => s.addTrip);
@@ -55,6 +60,91 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
         giờ địa phương (PRD §5.9).
       </p>
     </div>
+  );
+}
+
+/** Quét Gmail tìm vé máy bay → chuyến ứng viên, Mai duyệt mới tạo (PRD §5.9). */
+function GmailScan() {
+  const gs = useGoogleStatus();
+  const addTrip = useStore((s) => s.addTrip);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<FlightTripCandidate[]>([]);
+
+  if (gs.loading || !gs.configured) return null;
+
+  if (!gs.connected || !gs.gmail) {
+    return (
+      <a className="btn" href="/api/google/auth" style={{ textDecoration: "none", textAlign: "center" }}>
+        📧 {gs.connected ? "Cấp quyền đọc Gmail (nối lại Google)" : "Nối Google để quét vé máy bay"}
+      </a>
+    );
+  }
+
+  async function scan() {
+    setBusy(true);
+    setMsg(null);
+    const r = await fetchFlightTrips();
+    setBusy(false);
+    if (!r.ok) {
+      setMsg(
+        r.reason === "no-key"
+          ? "Trích vé cần ANTHROPIC_API_KEY trên server."
+          : r.reason === "no-gmail-scope"
+            ? "Chưa có quyền Gmail — bấm nối lại Google nhé."
+            : `Quét không thành công${r.detail ? ` (${r.detail})` : ""}.`,
+      );
+      return;
+    }
+    setCandidates(r.trips);
+    setMsg(
+      r.trips.length === 0
+        ? `Mình đọc ${r.scanned} email gần đây mà không thấy vé máy bay sắp tới nào.`
+        : `Tìm thấy ${r.trips.length} chuyến trong ${r.scanned} email — Mai duyệt thì mình mới tạo:`,
+    );
+  }
+
+  return (
+    <>
+      <button className="btn" disabled={busy} onClick={() => void scan()}>
+        {busy ? "Đang đọc email…" : "📧 Quét vé máy bay trong Gmail"}
+      </button>
+      {msg && <p className="muted small">{msg}</p>}
+      {candidates.map((c, i) => (
+        <div className="card" key={i} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <span className="t small">
+            <b>
+              ✈️ {c.destination === "other" ? (c.destinationName ?? "Nơi khác") : DESTINATION_LABELS[c.destination]}
+              {" · "}
+              {fmtDayTime(c.departAt)}
+            </b>
+            <span className="muted">
+              {c.flights}
+              {c.returnAt ? ` · về ${fmtDay(c.returnAt)}` : ""} · từ email “{c.subject.slice(0, 60)}”
+            </span>
+          </span>
+          {c.destination === "other" ? (
+            <span className="muted small">chưa có checklist cho điểm đến này</span>
+          ) : (
+            <button
+              className="btn primary small"
+              onClick={() => {
+                const d = new Date(c.departAt);
+                addTrip({
+                  destination: c.destination as Destination,
+                  label: `${DESTINATION_LABELS[c.destination as Destination]} · ${d.getDate()}/${d.getMonth() + 1}`,
+                  departAt: d.toISOString(),
+                  returnAt: c.returnAt,
+                });
+                setCandidates((s) => s.filter((_, j) => j !== i));
+              }}
+            >
+              Tạo chuyến
+            </button>
+          )}
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -184,11 +274,14 @@ export default function TripsPage() {
         )}
       </div>
 
+      <GmailScan />
+
       {!trip && !creating && (
         <>
           <Bubble>
-            Chưa có chuyến nào. Tạo một chuyến là mình dựng sẵn checklist theo điểm đến — Tokyo
-            có Visit Japan Web và Suica, về Bangkok có TDAC, HCMC có tiền đồng.
+            Chưa có chuyến nào. Quét Gmail phía trên, hoặc tạo tay một chuyến — mình dựng sẵn
+            checklist theo điểm đến: Tokyo có Visit Japan Web và Suica, về Bangkok có TDAC, HCMC
+            có tiền đồng.
           </Bubble>
           <button className="btn primary" onClick={() => setCreating(true)}>
             ✈️ Thêm chuyến bay

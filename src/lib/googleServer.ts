@@ -14,8 +14,19 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 export const CAL_BASE = "https://www.googleapis.com/calendar/v3";
 
-/** Đọc + ghi sự kiện (sensitive, không phải restricted) + email hiển thị. */
-const SCOPES = ["https://www.googleapis.com/auth/calendar.events", "openid", "email"].join(" ");
+/**
+ * calendar.events: đọc + ghi sự kiện (§5.4). gmail.readonly: đọc email
+ * vé máy bay để tạo chuyến đi (§5.9) — scope restricted, chạy được ở
+ * chế độ Testing với test user. openid+email: hiển thị tài khoản.
+ */
+const SCOPES = [
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "openid",
+  "email",
+].join(" ");
+
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
 export function isConfigured(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
@@ -47,6 +58,8 @@ export interface GoogleLink {
   /** Refresh token của Google. */
   rt: string;
   email?: string;
+  /** Đã cấp quyền đọc Gmail chưa (cookie cũ nối trước khi thêm scope thì chưa). */
+  gm?: boolean;
 }
 
 export async function seal(link: GoogleLink): Promise<string> {
@@ -105,6 +118,8 @@ interface TokenResponse {
   access_token?: string;
   refresh_token?: string;
   id_token?: string;
+  /** Danh sách scope Google THẬT SỰ cấp (Mai có thể bỏ tick từng quyền). */
+  scope?: string;
   error?: string;
   error_description?: string;
 }
@@ -140,7 +155,8 @@ export async function exchangeCode(
       /* không có email cũng không sao */
     }
   }
-  return { link: { rt: data.refresh_token, email } };
+  const gm = (data.scope ?? "").includes(GMAIL_SCOPE);
+  return { link: { rt: data.refresh_token, email, gm } };
 }
 
 /** Refresh token → access token dùng ngay (không cache, mỗi request một lần). */

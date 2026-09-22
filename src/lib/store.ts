@@ -45,6 +45,8 @@ interface LowtechieState {
     /** Đi bộ nhà → BTS Bang Na, đo một lần rồi lưu (PRD §5.4.1). */
     walkToStationMin: number;
     defaultPrepMinutes: number;
+    /** Địa chỉ nhà — điểm xuất phát cho Google Maps (places của PRD §8). */
+    homeAddress: string;
   };
 
   addTask: (draft: TaskDraft) => Task;
@@ -77,6 +79,7 @@ interface LowtechieState {
   newRound: (tripId: string) => void;
 
   setWalkToStation: (min: number) => void;
+  setHomeAddress: (address: string) => void;
 }
 
 function uid(): string {
@@ -111,7 +114,7 @@ export const useStore = create<LowtechieState>()(
       feedback: [],
       triageImages: {},
       pendingBlock: undefined,
-      settings: { walkToStationMin: 12, defaultPrepMinutes: 90 },
+      settings: { walkToStationMin: 12, defaultPrepMinutes: 90, homeAddress: "" },
 
       addTask: (draft) => {
         const t: Task = {
@@ -313,11 +316,13 @@ export const useStore = create<LowtechieState>()(
 
       setWalkToStation: (min) =>
         set((s) => ({ settings: { ...s.settings, walkToStationMin: min } })),
+      setHomeAddress: (address) =>
+        set((s) => ({ settings: { ...s.settings, homeAddress: address.slice(0, 300) } })),
     }),
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 3,
+      version: 4,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -346,6 +351,15 @@ export const useStore = create<LowtechieState>()(
               ? { ...f, projectId: "hoctap", categoryId: "hoctap:tiengthai" }
               : f,
           );
+        }
+        if (version < 4) {
+          // v4: thêm địa chỉ nhà cho Google Maps (§5.4.1).
+          s.settings = {
+            walkToStationMin: 12,
+            defaultPrepMinutes: 90,
+            homeAddress: "",
+            ...(s.settings ?? {}),
+          };
         }
         return s as LowtechieState;
       },

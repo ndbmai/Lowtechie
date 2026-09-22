@@ -11,6 +11,7 @@ import { useStore } from "@/lib/store";
 import {
   createGcalEvent,
   deleteGcalEvent,
+  fetchRoute,
   useGoogleEvents,
   useGoogleStatus,
 } from "@/lib/useGoogle";
@@ -25,13 +26,15 @@ const PREP_PROFILES = [
 function ChainForm({
   event,
   gcalConnected,
+  mapsAvailable,
   onClose,
 }: {
   event: CalEvent;
   gcalConnected: boolean;
+  mapsAvailable: boolean;
   onClose: () => void;
 }) {
-  const { settings, addEvents, setWalkToStation } = useStore();
+  const { settings, addEvents, setWalkToStation, setHomeAddress } = useStore();
   const [mode, setMode] = useState<"transit" | "car">("transit");
   const [prep, setPrep] = useState(settings.defaultPrepMinutes);
   const [walkTo, setWalkTo] = useState(settings.walkToStationMin);
@@ -42,6 +45,45 @@ function ChainForm({
   const [writeGcal, setWriteGcal] = useState(true);
   const [saving, setSaving] = useState(false);
   const [gcalWarn, setGcalWarn] = useState(false);
+  const [origin, setOrigin] = useState(settings.homeAddress);
+  const [dest, setDest] = useState(event.location ?? "");
+  const [mapsBusy, setMapsBusy] = useState(false);
+  const [mapsMsg, setMapsMsg] = useState<string | null>(null);
+
+  /** Google Maps điền số phút vào form — Mai vẫn xem lại rồi mới Khóa. */
+  async function fillFromMaps() {
+    if (!origin.trim() || !dest.trim()) {
+      setMapsMsg("Mai điền điểm đi và điểm đến trước nhé.");
+      return;
+    }
+    setMapsBusy(true);
+    setMapsMsg(null);
+    // Giờ cần CÓ MẶT = giờ hẹn − đệm đến sớm 10 phút.
+    const arriveByMs = new Date(event.startAt).getTime() - 10 * 60_000;
+    const r = await fetchRoute({
+      origin: origin.trim(),
+      destination: dest.trim(),
+      mode: mode === "car" ? "drive" : "transit",
+      arriveByMs,
+    });
+    setMapsBusy(false);
+    if (!r.ok) {
+      setMapsMsg(`Maps không tính được (${r.detail}).`);
+      return;
+    }
+    setHomeAddress(origin.trim());
+    if (r.route.mode === "drive") {
+      setDriveMin(r.route.driveMin ?? r.route.totalMin);
+      setMapsMsg(`Maps: lái ~${r.route.totalMin} phút (đã tính giao thông dự báo).`);
+    } else {
+      setWalkTo(r.route.walkToMin ?? 0);
+      setTransitMin(r.route.transitMin ?? r.route.totalMin);
+      setWalkFrom(r.route.walkFromMin ?? 0);
+      setMapsMsg(
+        `Maps: tổng ~${r.route.totalMin} phút (đi bộ ${r.route.walkToMin ?? 0}’ → tàu ${r.route.transitMin ?? 0}’ → đi bộ ${r.route.walkFromMin ?? 0}’), theo giờ đến.`,
+      );
+    }
+  }
 
   const chain: Chain =
     mode === "transit"
@@ -135,6 +177,31 @@ function ChainForm({
         ))}
       </select>
 
+      {mapsAvailable && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <input
+            className="transcript"
+            style={{ minHeight: 0, padding: 9 }}
+            placeholder="Điểm đi (địa chỉ nhà — lưu lại cho lần sau)"
+            aria-label="Điểm đi"
+            value={origin}
+            onChange={(e) => setOrigin(e.target.value)}
+          />
+          <input
+            className="transcript"
+            style={{ minHeight: 0, padding: 9 }}
+            placeholder="Điểm đến (tên quán/địa chỉ, càng cụ thể càng chuẩn)"
+            aria-label="Điểm đến"
+            value={dest}
+            onChange={(e) => setDest(e.target.value)}
+          />
+          <button className="btn" disabled={mapsBusy} onClick={() => void fillFromMaps()}>
+            {mapsBusy ? "Đang hỏi Google Maps…" : "📍 Tính thời gian bằng Google Maps"}
+          </button>
+          {mapsMsg && <p className="muted small">{mapsMsg}</p>}
+        </div>
+      )}
+
       {mode === "transit" ? (
         <>
           {num(walkTo, setWalkTo, "Đi bộ nhà → BTS Bang Na (lưu lại)")}
@@ -212,8 +279,9 @@ function ChainForm({
         </div>
       )}
       <p className="muted small">
-        Số phút di chuyển đang nhập tay — Google Maps Routes sẽ điền tự động (chọn “giờ đến” có
-        với phương tiện công cộng, PRD §5.4.1).
+        {mapsAvailable
+          ? "Với tàu, Maps tính theo GIỜ ĐẾN nên số rất sát; với ô tô chỉ có giờ đi nên là ước lượng (PRD §5.4.1)."
+          : "Số phút di chuyển đang nhập tay — thêm GOOGLE_MAPS_API_KEY vào server là có nút tính tự động (PRD §5.4.1)."}
       </p>
     </div>
   );
@@ -396,6 +464,7 @@ export default function CalendarPage() {
         <ChainForm
           event={chainEvent}
           gcalConnected={gs.connected}
+          mapsAvailable={gs.maps}
           onClose={() => setChainFor(null)}
         />
       )}

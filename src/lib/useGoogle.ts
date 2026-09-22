@@ -3,22 +3,40 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CalEvent } from "@/core/types";
 
-/** Trạng thái nối Google Calendar của thiết bị này. */
+/** Trạng thái nối Google + dịch vụ server (Maps, Claude) của thiết bị này. */
 export function useGoogleStatus() {
   const [state, setState] = useState<{
     loading: boolean;
     configured: boolean;
     connected: boolean;
     email?: string;
-  }>({ loading: true, configured: false, connected: false });
+    gmail: boolean;
+    maps: boolean;
+    claude: boolean;
+  }>({ loading: true, configured: false, connected: false, gmail: false, maps: false, claude: false });
 
   const reload = useCallback(async () => {
     try {
       const res = await fetch("/api/google/status");
-      const d = (await res.json()) as { configured: boolean; connected: boolean; email?: string };
-      setState({ loading: false, ...d });
+      const d = (await res.json()) as {
+        configured: boolean;
+        connected: boolean;
+        email?: string;
+        gmail?: boolean;
+        maps?: boolean;
+        claude?: boolean;
+      };
+      setState({
+        loading: false,
+        configured: d.configured,
+        connected: d.connected,
+        email: d.email,
+        gmail: Boolean(d.gmail),
+        maps: Boolean(d.maps),
+        claude: Boolean(d.claude),
+      });
     } catch {
-      setState({ loading: false, configured: false, connected: false });
+      setState({ loading: false, configured: false, connected: false, gmail: false, maps: false, claude: false });
     }
   }, []);
 
@@ -91,5 +109,68 @@ export async function deleteGcalEvent(gcalId: string): Promise<void> {
     await fetch(`/api/calendar/events/${encodeURIComponent(gcalId)}`, { method: "DELETE" });
   } catch {
     /* xóa lỗi thì Mai xóa tay trên Google, block local vẫn gỡ */
+  }
+}
+
+// ── Gmail: vé máy bay → chuyến đi ứng viên (PRD §5.9) ──────────────────
+
+export interface FlightTripCandidate {
+  destination: "tokyo" | "hcmc" | "bkk" | "other";
+  destinationName?: string;
+  departAt: string;
+  returnAt?: string;
+  flights: string;
+  subject: string;
+  confidence: number;
+}
+
+export async function fetchFlightTrips(): Promise<
+  | { ok: true; trips: FlightTripCandidate[]; scanned: number }
+  | { ok: false; reason: "no-gmail-scope" | "no-key" | "not-connected" | "failed"; detail?: string }
+> {
+  try {
+    const res = await fetch("/api/gmail/flights");
+    if (res.status === 403) return { ok: false, reason: "no-gmail-scope" };
+    if (res.status === 501) return { ok: false, reason: "no-key" };
+    if (res.status === 401) return { ok: false, reason: "not-connected" };
+    const body = (await res.json().catch(() => null)) as
+      | { trips?: FlightTripCandidate[]; scanned?: number; detail?: string }
+      | null;
+    if (!res.ok) return { ok: false, reason: "failed", detail: body?.detail };
+    return { ok: true, trips: body?.trips ?? [], scanned: body?.scanned ?? 0 };
+  } catch {
+    return { ok: false, reason: "failed" };
+  }
+}
+
+// ── Google Maps Routes: thời gian di chuyển (PRD §5.4.1) ───────────────
+
+export interface RouteResult {
+  mode: "transit" | "drive";
+  totalMin: number;
+  driveMin?: number;
+  walkToMin?: number;
+  transitMin?: number;
+  walkFromMin?: number;
+}
+
+export async function fetchRoute(params: {
+  origin: string;
+  destination: string;
+  mode: "transit" | "drive";
+  arriveByMs: number;
+}): Promise<{ ok: true; route: RouteResult } | { ok: false; detail: string }> {
+  try {
+    const res = await fetch("/api/maps/route", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    const body = (await res.json().catch(() => null)) as (RouteResult & { detail?: string }) | null;
+    if (res.status === 501) return { ok: false, detail: "Server chưa có GOOGLE_MAPS_API_KEY" };
+    if (!res.ok || !body) return { ok: false, detail: body?.detail ?? `mã ${res.status}` };
+    return { ok: true, route: body };
+  } catch {
+    return { ok: false, detail: "mạng chập chờn" };
   }
 }
