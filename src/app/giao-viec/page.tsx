@@ -4,9 +4,13 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Blossom } from "@/components/Blossom";
 import { Bubble } from "@/components/Bubble";
+import { DueEditor } from "@/components/DueEditor";
+import { SearchSelect, type PickOption } from "@/components/SearchSelect";
 import { classify, findDuplicate, learnableTerms, CONFIDENCE_THRESHOLD } from "@/core/classify";
+import { clientProjectHint, clientsFor, matchClient, sanitizeClientId } from "@/core/clients";
 import { detectProject, parseCommand, parseWhen } from "@/core/parse";
 import {
+  PROJECT_COLORS,
   activeProjects,
   categoriesFor,
   categoryName,
@@ -15,6 +19,8 @@ import {
 } from "@/core/projects";
 import type {
   Category,
+  Client,
+  DueType,
   ImageParseResult,
   ParseResult,
   ParsedAction,
@@ -26,9 +32,23 @@ import { compressImage } from "@/lib/image";
 import { useSpeech } from "@/lib/speech";
 import { useStore, type TaskDraft } from "@/lib/store";
 
+function taxonomyPayload(t: { projects: Project[]; categories: Category[]; clients: Client[] }) {
+  return {
+    projects: t.projects.map((p) => ({ id: p.id, name: p.name })),
+    categories: t.categories.map((c) => ({ id: c.id, projectId: c.projectId, name: c.name })),
+    // Danh bạ khách để Claude điền khách hàng theo tên/tên gọi tắt (§5.3.2).
+    clients: t.clients.map((c) => ({
+      id: c.id,
+      name: c.name,
+      aliases: c.aliases,
+      projectIds: c.projectIds,
+    })),
+  };
+}
+
 async function parseViaApi(
   text: string,
-  taxonomy: { projects: Project[]; categories: Category[] },
+  taxonomy: { projects: Project[]; categories: Category[]; clients: Client[] },
 ): Promise<ParseResult> {
   try {
     const res = await fetch("/api/parse", {
@@ -40,14 +60,7 @@ async function parseViaApi(
         tzOffsetMin: new Date().getTimezoneOffset(),
         tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
         // Taxonomy thật của Mai — dự án/category tự thêm cũng phân loại được.
-        taxonomy: {
-          projects: taxonomy.projects.map((p) => ({ id: p.id, name: p.name })),
-          categories: taxonomy.categories.map((c) => ({
-            id: c.id,
-            projectId: c.projectId,
-            name: c.name,
-          })),
-        },
+        taxonomy: taxonomyPayload(taxonomy),
       }),
     });
     if (!res.ok) throw new Error(String(res.status));
@@ -62,11 +75,12 @@ async function parseViaApi(
 interface Resolved {
   projectId: ProjectId;
   categoryId?: string;
+  clientId?: string;
   confidence: number;
   alternatives: { projectId: ProjectId; categoryId?: string }[];
 }
 
-type Override = { projectId: ProjectId; categoryId?: string };
+type Override = { projectId: ProjectId; categoryId?: string; clientId?: string };
 
 export default function CapturePage() {
   const router = useRouter();
@@ -86,6 +100,9 @@ export default function CapturePage() {
     tasks,
     projects,
     categories,
+    clients,
+    trips,
+    events,
     feedback,
     addTask,
     addEvent,
@@ -93,7 +110,11 @@ export default function CapturePage() {
     setPendingBlock,
     addTriageGroup,
     recordFeedback,
+    addProject,
+    addCategory,
+    addClient,
   } = useStore();
+  const [dueEdits, setDueEdits] = useState<Record<number, { dueAt?: string; dueType?: DueType }>>({});
 
   const runParse = useCallback(
     async (t: string) => {
@@ -102,11 +123,12 @@ export default function CapturePage() {
       setSavedLines(null);
       setOverrides({});
       setMerge({});
-      const r = await parseViaApi(t.trim(), { projects, categories });
+      setDueEdits({});
+      const r = await parseViaApi(t.trim(), { projects, categories, clients });
       setResult(r);
       setBusy(false);
     },
-    [projects, categories],
+    [projects, categories, clients],
   );
 
   const onSpeech = useCallback(
@@ -124,30 +146,51 @@ export default function CapturePage() {
     (a: Extract<ParsedAction, { kind: "task" }>, index: number): Resolved => {
       const clean = (projectId: ProjectId | undefined, categoryId?: string) =>
         sanitizeTaxonomy(projects, categories, projectId, categoryId);
+      // Khách hàng: id từ Claude (đã kiểm) hoặc khớp tên trong tiêu đề với
+      // danh bạ — tên lạ không đoán (§5.3.2).
+      const matched = matchClient(a.title, clients);
+      const baseClient = sanitizeClientId(clients, a.clientId) ?? matched?.id;
       const o = overrides[index];
-      if (o) return { ...clean(o.projectId, o.categoryId), confidence: 1, alternatives: [] };
+      if (o) {
+        return {
+          ...clean(o.projectId, o.categoryId),
+          clientId: "clientId" in o ? o.clientId : baseClient,
+          confidence: 1,
+          alternatives: [],
+        };
+      }
       const cls = classify(a.title, feedback);
       // Điều Mai đã dạy (feedback) thắng cả đề xuất của parser.
       if (cls.confidence >= 0.9) {
-        return { ...clean(cls.projectId, cls.categoryId), confidence: cls.confidence, alternatives: [] };
+        return {
+          ...clean(cls.projectId, cls.categoryId),
+          clientId: baseClient,
+          confidence: cls.confidence,
+          alternatives: [],
+        };
       }
       const categoryId =
         a.categoryId ?? (cls.projectId === a.projectId ? cls.categoryId : undefined);
-      const alternatives = (
-        cls.projectId !== a.projectId
-          ? [{ projectId: cls.projectId, categoryId: cls.categoryId }, ...cls.alternatives].slice(0, 2)
-          : cls.alternatives
-      )
+      // Tín hiệu khách hàng (§5.2.1): dự án của khách được đề lên đầu.
+      const hint = clientProjectHint(matched, projects);
+      const rawAlts = [
+        ...(hint ? [{ projectId: hint, categoryId: undefined }] : []),
+        ...(cls.projectId !== a.projectId
+          ? [{ projectId: cls.projectId, categoryId: cls.categoryId }, ...cls.alternatives]
+          : cls.alternatives),
+      ].slice(0, 3);
+      const alternatives = rawAlts
         .map((alt) => clean(alt.projectId, alt.categoryId))
         .filter((alt, i, arr) => arr.findIndex((x) => x.projectId === alt.projectId) === i);
       const main = clean(a.projectId, categoryId);
       return {
         ...main,
+        clientId: baseClient,
         confidence: a.confidence,
-        alternatives: alternatives.filter((alt) => alt.projectId !== main.projectId),
+        alternatives: alternatives.filter((alt) => alt.projectId !== main.projectId).slice(0, 2),
       };
     },
-    [overrides, feedback, projects, categories],
+    [overrides, feedback, projects, categories, clients],
   );
 
   const taskActions = useMemo(
@@ -189,9 +232,10 @@ export default function CapturePage() {
     return parts.join(" · ");
   }, [result, taskActions, duplicates, resolveTask, projects]);
 
-  function applyOverride(index: number, title: string, next: Override) {
+  function applyOverride(index: number, title: string, next: Override, learn = true) {
     setOverrides((s) => ({ ...s, [index]: next }));
-    // Học từ sửa đổi: tên riêng trong tiêu đề → dự án/category này (PRD §5.2.1).
+    // Học từ sửa đổi: tên riêng trong tiêu đề → dự án/category này.
+    if (!learn) return;
     const terms = learnableTerms(title);
     if (terms.length) {
       recordFeedback(
@@ -212,18 +256,22 @@ export default function CapturePage() {
           return;
         }
         const r = resolveTask(a, i);
+        // Hạn: nguồn tự điền, Mai sửa trên thẻ thắng nguồn (3c).
+        const due = i in dueEdits ? dueEdits[i] : { dueAt: a.dueAt, dueType: a.dueType };
         addTask({
           title: a.title,
           projectId: r.projectId,
           categoryId: r.categoryId,
+          clientId: r.clientId,
           assignee: a.assignee ?? "mai",
-          dueAt: a.dueAt,
-          dueType: a.dueType,
+          dueAt: due.dueAt,
+          dueType: due.dueAt ? (due.dueType ?? "soft") : undefined,
+          dueSource: due.dueAt ? (i in dueEdits ? "mai" : "nguon") : undefined,
           estMinutes: undefined,
           source: { channel: "app-chat", quote: text.trim() },
           confidence: a.confidence,
         });
-        lines.push(`Đã tạo “${a.title}”${a.dueAt ? ` — hạn ${fmtRelativeDay(a.dueAt)}` : ""}.`);
+        lines.push(`Đã tạo “${a.title}”${due.dueAt ? ` — hạn ${fmtRelativeDay(due.dueAt)}` : ""}.`);
       } else if (a.kind === "event") {
         if (a.startAt) {
           const start = new Date(a.startAt);
@@ -290,14 +338,7 @@ export default function CapturePage() {
           caption: text.trim(),
           epochMs: Date.now(),
           tzOffsetMin: new Date().getTimezoneOffset(),
-          taxonomy: {
-            projects: projects.map((p) => ({ id: p.id, name: p.name })),
-            categories: categories.map((c) => ({
-              id: c.id,
-              projectId: c.projectId,
-              name: c.name,
-            })),
-          },
+          taxonomy: taxonomyPayload({ projects, categories, clients }),
         }),
       });
       if (res.status === 501) {
@@ -336,13 +377,19 @@ export default function CapturePage() {
           rawProject,
           rawCategory,
         );
+        const dueAt = it.dueAt ?? capWhen.at?.toISOString();
         return {
           title: it.title,
           projectId,
           categoryId,
+          // Khách hàng: id Claude trả (đã kiểm) hoặc khớp tên với danh bạ.
+          clientId:
+            sanitizeClientId(clients, it.clientId) ??
+            matchClient(`${it.title} ${caption}`, clients)?.id,
           assignee: it.assignee ?? "mai",
-          dueAt: it.dueAt ?? capWhen.at?.toISOString(),
-          dueType: it.dueAt || capWhen.at ? "soft" : undefined,
+          dueAt,
+          dueType: dueAt ? "soft" : undefined,
+          dueSource: dueAt ? "nguon" : undefined,
           estMinutes: undefined,
           source: {
             channel: "app-chat",
@@ -385,7 +432,7 @@ export default function CapturePage() {
       <textarea
         ref={inputRef}
         className="transcript"
-        placeholder='Ví dụ: "Thứ Ba tuần sau nhắc chị gọi anh Tuấn bên OKR về hợp đồng Circle, rồi dời spa sang thứ Năm nha." — hoặc chọn ảnh rồi ghi chú "việc của Favstay, hạn thứ Sáu".'
+        placeholder='Ví dụ: "Thứ Ba tuần sau nhắc chị gọi anh Tuấn bên OKR về hợp đồng Circle, rồi dời spa sang thứ Năm nha." — hoặc chọn ảnh rồi ghi chú "việc của Circle, hạn thứ Sáu".'
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={3}
@@ -457,9 +504,6 @@ export default function CapturePage() {
               </span>
             ))}
           </div>
-          <div className="muted small">
-            Lời nhắn ở ô trên (nếu có) áp cho cả danh sách — ví dụ “việc của Favstay, hạn thứ Sáu”.
-          </div>
           <button className="btn primary" disabled={imgBusy} onClick={() => void runImageParse()}>
             {imgBusy ? "Đang đọc ảnh…" : `Trích việc từ ${images.length} ảnh → Hộp duyệt`}
           </button>
@@ -496,23 +540,14 @@ export default function CapturePage() {
 
             const r = resolveTask(a, i);
             const p = projectById(projects, r.projectId);
-            const cat = categoryName(categories, r.categoryId);
-            const pastDue = a.dueAt && new Date(a.dueAt).getTime() < Date.now();
+            const client = clients.find((c) => c.id === r.clientId);
+            const due = i in dueEdits ? dueEdits[i] : { dueAt: a.dueAt, dueType: a.dueType };
             return (
               <div className="parsed" style={{ borderLeftColor: p.color }} key={i}>
                 <div className="k">Việc mới</div>
                 <b>{a.title}</b>
-                <div className="small muted">
-                  {a.dueAt ? `${fmtRelativeDay(a.dueAt)}` : "chưa có hạn"}
-                  {a.dueType === "hard" ? " · hạn cứng" : ""}
-                  {a.note ? ` · ${a.note}` : ""}
-                  {pastDue ? " · ⚠ hạn đã qua, kiểm tra lại?" : ""}
-                </div>
+                {a.note && <div className="small muted">{a.note}</div>}
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
-                  <span className="chip" style={{ background: p.color }}>
-                    {p.name}
-                  </span>
-                  {cat && <span className="small muted">{cat}</span>}
                   {r.confidence < CONFIDENCE_THRESHOLD && (
                     <span className="small" style={{ color: "var(--note-ink)", background: "var(--note)", borderRadius: 999, padding: "1px 8px" }}>
                       chưa chắc
@@ -525,7 +560,7 @@ export default function CapturePage() {
                         key={alt.projectId + (alt.categoryId ?? "")}
                         className="btn small"
                         style={{ padding: "3px 10px" }}
-                        onClick={() => applyOverride(i, a.title, alt)}
+                        onClick={() => applyOverride(i, a.title, { ...alt, clientId: r.clientId })}
                       >
                         → {ap.name}
                         {categoryName(categories, alt.categoryId)
@@ -534,37 +569,67 @@ export default function CapturePage() {
                       </button>
                     );
                   })}
-                  <select
-                    className="btn small"
-                    style={{ padding: "3px 8px", maxWidth: 140 }}
-                    aria-label="Chọn dự án / category"
-                    value={`${r.projectId}|${r.categoryId ?? ""}`}
-                    onChange={(e) => {
-                      const [projectId, categoryId] = e.target.value.split("|");
-                      applyOverride(i, a.title, {
-                        projectId: projectId as ProjectId,
-                        categoryId: categoryId || undefined,
-                      });
+                </div>
+                {/* 3 trường riêng + Deadline, sửa và tạo mới tại chỗ (3b, 3c). */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 6 }}>
+                  <SearchSelect
+                    label="Dự án"
+                    value={r.projectId}
+                    options={activeProjects(projects).map((pr) => ({ id: pr.id, label: pr.name, color: pr.color }))}
+                    onPick={(id) => {
+                      if (!id) return;
+                      applyOverride(i, a.title, { projectId: id, categoryId: undefined, clientId: r.clientId });
                     }}
-                  >
-                    {activeProjects(projects).map((pr) => {
-                      const cats = categoriesFor(categories, pr.id);
-                      return cats.length ? (
-                        <optgroup key={pr.id} label={pr.name}>
-                          <option value={`${pr.id}|`}>{pr.name}</option>
-                          {cats.map((c) => (
-                            <option key={c.id} value={`${pr.id}|${c.id}`}>
-                              {pr.name} · {c.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ) : (
-                        <option key={pr.id} value={`${pr.id}|`}>
-                          {pr.name}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    onCreate={(name) => {
+                      const pr = addProject(name, PROJECT_COLORS[projects.length % PROJECT_COLORS.length]);
+                      if (pr) applyOverride(i, a.title, { projectId: pr.id, categoryId: undefined, clientId: r.clientId });
+                    }}
+                  />
+                  <SearchSelect
+                    label="Category"
+                    value={r.categoryId}
+                    options={categoriesFor(categories, r.projectId).map((c) => ({ id: c.id, label: c.name }))}
+                    emptyLabel="Không có"
+                    onPick={(id) =>
+                      applyOverride(i, a.title, { projectId: r.projectId, categoryId: id, clientId: r.clientId })
+                    }
+                    onCreate={(name) => {
+                      const c = addCategory(r.projectId, name);
+                      if (c) applyOverride(i, a.title, { projectId: r.projectId, categoryId: c.id, clientId: r.clientId });
+                    }}
+                  />
+                  <SearchSelect
+                    label="Khách hàng / đối tác"
+                    value={client?.id}
+                    options={clientsFor(clients, r.projectId).map((c) => ({ id: c.id, label: c.name }))}
+                    emptyLabel="Không có"
+                    onPick={(id) =>
+                      applyOverride(
+                        i,
+                        a.title,
+                        { projectId: r.projectId, categoryId: r.categoryId, clientId: id },
+                        false,
+                      )
+                    }
+                    onCreate={(name) => {
+                      const c = addClient(name, r.projectId);
+                      if (c)
+                        applyOverride(
+                          i,
+                          a.title,
+                          { projectId: r.projectId, categoryId: r.categoryId, clientId: c.id },
+                          false,
+                        );
+                    }}
+                  />
+                  <DueEditor
+                    value={due.dueAt}
+                    dueType={due.dueType}
+                    quote={!(i in dueEdits) && a.dueAt ? text.trim() : undefined}
+                    onChange={(dueAt, dueType) => setDueEdits((s) => ({ ...s, [i]: { dueAt, dueType } }))}
+                    trips={trips}
+                    events={events}
+                  />
                 </div>
                 {duplicates[i] && (
                   <label className="small" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, color: "var(--note-ink)", background: "var(--note)", borderRadius: 10, padding: "6px 10px" }}>
@@ -617,10 +682,6 @@ export default function CapturePage() {
       {!supported && (
         <p className="muted small">Trình duyệt này chưa hỗ trợ voice — Mai gõ hoặc gửi ảnh nhé.</p>
       )}
-      <p className="muted small" style={{ marginTop: "auto" }}>
-        Sửa dự án/category một chạm là mình nhớ cho lần sau (PRD §5.2.1). Việc từ ảnh và chat nhóm
-        luôn nằm chờ ở Hộp duyệt kèm nguồn gốc.
-      </p>
     </main>
   );
 }

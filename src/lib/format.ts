@@ -16,6 +16,12 @@ export function fmtDayTime(iso: string): string {
   return `${fmtDay(iso)}, ${fmtTime(iso)}`;
 }
 
+/** "Thứ Sáu 25/9/2026" — dạng đầy đủ để Mai kiểm tra hạn (PRD 3c). */
+export function fmtDayFull(iso: string): string {
+  const d = new Date(iso);
+  return `${DAY_NAMES[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+}
+
 export function fmtRange(startIso: string, endIso: string): string {
   return `${fmtTime(startIso)}–${fmtTime(endIso)}`;
 }

@@ -44,6 +44,11 @@ const TOOL_SCHEMA = {
               type: "string",
               description: "Id category — CHỈ dùng id có trong danh sách ở system prompt",
             },
+            clientId: {
+              type: "string",
+              description:
+                "Id khách hàng/đối tác — CHỈ khi tên trong ảnh khớp danh bạ; tên lạ thì BỎ TRỐNG, không đoán",
+            },
             confidence: {
               type: "number",
               description: "0–1; thấp khi chữ tay khó đọc, ảnh mờ/lóa",
@@ -61,8 +66,9 @@ const TOOL_SCHEMA = {
 function systemPrompt(localNow: string, taxonomy: TaxonomyPayload): string {
   return `Bạn đọc ảnh cho Mai Lowtechie: checklist viết tay, bảng trắng, sticky note, ảnh chụp màn hình — tiếng Việt/Thái/Anh, kể cả viết trộn.
 Bây giờ ở chỗ Mai là ${localNow}. Mỗi dòng trong ảnh thành một việc bắt đầu bằng động từ; giữ tên nhóm/mục con nếu ảnh có cấu trúc; dòng đã tick hoặc gạch ngang → done=true; đọc ngày, tên người, dấu ưu tiên (*, !, khoanh tròn) nếu có.
-Lời nhắn kèm ảnh (nếu có) cho biết dự án và hạn áp cho CẢ danh sách. Dự án và category CỦA MAI (chỉ dùng đúng các id này):
+Lời nhắn kèm ảnh (nếu có) cho biết dự án và hạn áp cho CẢ danh sách. Dự án, category và danh bạ khách CỦA MAI (chỉ dùng đúng các id này):
 ${taxonomyText(taxonomy)}
+Tên khách trong ảnh khớp danh bạ (kể cả tên gọi tắt) → điền clientId; tên lạ bỏ trống, không đoán. Ảnh không ghi hạn → bỏ trống dueAt, không tự đề xuất.
 Chữ khó đọc → vẫn trả dòng đó với confidence thấp, đừng bỏ. Không bịa dòng không có trong ảnh.`;
 }
 

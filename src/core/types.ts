@@ -29,6 +29,23 @@ export interface Category {
   name: string;
 }
 
+/**
+ * Khách hàng / đối tác — TRƯỜNG RIÊNG, không phải category (PRD §5.3.2):
+ * category trả lời "loại việc gì", khách hàng trả lời "việc này cho ai".
+ */
+export interface Client {
+  id: string;
+  name: string;
+  type: "khachhang" | "doitac" | "nhacungcap";
+  /** Tên gọi tắt / cách gọi khác để nhận diện trong nội dung ("Đô thị"). */
+  aliases: string[];
+  /** Một khách có thể thuộc nhiều dự án. */
+  projectIds: ProjectId[];
+  status: "danglam" | "tiemnang" | "ketthuc";
+  contact?: string;
+  notes?: string;
+}
+
 /** Học từ sửa đổi phân loại: gặp lại term này → dự án/category này. */
 export interface FeedbackEntry {
   /** Từ khóa đã chuẩn hóa lowercase, ví dụ "rạng đông". */
@@ -56,10 +73,14 @@ export interface Task {
   projectId: ProjectId;
   /** Category cấp 2 (PRD §5.2.1), ví dụ "circle:hopdong". */
   categoryId?: string;
+  /** Khách hàng / đối tác của việc (PRD §5.3.2) — id trong danh bạ. */
+  clientId?: string;
   /** Người phụ trách; mặc định "mai". */
   assignee: string;
   dueAt?: string;
   dueType?: DueType;
+  /** Hạn lấy từ nguồn hay Mai tự điền (PRD §5.2.1 3c). */
+  dueSource?: "nguon" | "mai";
   status: TaskStatus;
   estMinutes?: number;
   energy?: Energy;
@@ -144,6 +165,8 @@ export type ParsedAction =
       title: string;
       projectId: ProjectId;
       categoryId?: string;
+      /** Khách hàng khớp danh bạ (id); tên lạ KHÔNG đoán (PRD §5.3.2). */
+      clientId?: string;
       assignee?: string;
       dueAt?: string;
       dueType?: DueType;
@@ -190,6 +213,7 @@ export interface ImageItem {
   dueAt?: string;
   projectId?: ProjectId;
   categoryId?: string;
+  clientId?: string;
   confidence: number;
 }
 

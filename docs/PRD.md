@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 1.2 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé.*
+*Phiên bản 1.6 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -70,6 +70,8 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 | Review | "Tuần này chị dồn thời gian vào đâu?" / "Bỏ việc viết lại trang About" |
 | Học tập | "Hôm nay chị học tiếng Thái rồi" / "Tuần này học 4 buổi" |
 | Dự án & category | "Tạo dự án Podcast" / "Thêm category Tuyển dụng vào Circle" |
+| Deadline | "Hạn thứ Sáu" / "Dời hợp đồng Đô thị sang thứ Hai" / "Việc này không có hạn" |
+| Khách hàng / đối tác | "Việc này của khách Đô thị" / "Thêm đối tác OKR vào Circle" / "Cho chị xem hết việc của Đô thị" |
 | Cá nhân | "Đặt lịch spa thứ Năm 4 giờ" |
 
 ### 5.1 Capture (thu thập)
@@ -133,7 +135,7 @@ flowchart LR
 | Admin chung | Thuế & hạn pháp lý · Hóa đơn · Công cụ & tài khoản |
 
   Mai thêm, đổi tên, gộp category bằng chat/voice ("tạo category Tuyển dụng cho Circle").
-- **Tín hiệu dùng để phân loại:** từ khóa và tên riêng (khách hàng, khách sạn, đối tác gắn với dự án); nguồn (group chat, email, cuộc họp đã gắn dự án); người liên quan (cộng sự thuộc dự án nào); lịch sử (việc tương tự trước đây Mai xếp vào đâu); lời Mai nói kèm ("việc của Circle").
+- **Tín hiệu dùng để phân loại:** tên khách hàng/đối tác khớp với danh bạ khách hàng của dự án (kể cả tên gọi tắt, mục 5.3.2); từ khóa và tên riêng khác; nguồn (group chat, email, cuộc họp đã gắn dự án); người liên quan (cộng sự thuộc dự án nào); lịch sử (việc tương tự trước đây Mai xếp vào đâu); lời Mai nói kèm ("việc của Circle").
 - **Mỗi việc có độ chắc chắn phân loại.** Dưới ngưỡng → hiện 2 lựa chọn dự án/category có khả năng nhất để Mai chọn một chạm, không đoán bừa.
 - **Việc liên quan nhiều dự án:** một dự án chính + gắn tag dự án phụ.
 - **Học từ sửa đổi:** mỗi lần Mai đổi dự án/category, hệ thống ghi lại và áp dụng cho lần sau (ví dụ: tên "OKR" luôn là Circle / Khách hàng & bán hàng).
@@ -142,12 +144,38 @@ flowchart LR
 | Kiểm tra | Xử lý |
 |---|---|
 | Trùng với việc đã có | Đề xuất gộp, hoặc cập nhật việc cũ thay vì tạo mới |
-| Thiếu hạn / thiếu người làm với việc cần có | Đề xuất hạn hợp lý hoặc hỏi một câu |
+| Thiếu hạn | Để trống và làm nổi ô Deadline trên thẻ duyệt để Mai tự điền khi nhận; **không tự đoán hạn** (xem 3c) |
+| Thiếu người làm với việc cần có | Hỏi một câu |
 | Hạn đã qua, rơi vào ngày Mai đang bay, hoặc trùng lịch dày | Cảnh báo và đề xuất ngày khác |
 | Mâu thuẫn với việc/quyết định trước | Nêu rõ mâu thuẫn, để Mai chọn |
 | Việc đã xong (ô đã tick trong ảnh, đã báo xong trong chat) | Đánh dấu xong, không tạo việc mới |
 | Việc phụ thuộc việc khác | Gắn liên kết phụ thuộc |
 | Ưu tiên | Gợi ý theo hạn + trọng số dự án; Mai chỉnh được |
+
+**3b. Sửa phân loại ngay trong thẻ duyệt** (lỗi phát hiện khi thử bản prototype 22/9: thẻ duyệt chỉ có một danh sách cố định "Dự án · Category", không sửa hay tạo mới được, và không có chỗ ghi khách hàng)
+- Thẻ duyệt có **3 trường riêng**, sửa độc lập:
+  1. **Dự án**
+  2. **Category** (lọc theo dự án đã chọn)
+  3. **Khách hàng / đối tác** (lọc theo dự án đã chọn, không bắt buộc)
+  4. **Deadline** (xem 3c)
+- Mỗi trường là ô chọn **có tìm kiếm**: gõ vài chữ để lọc; nếu không có kết quả thì hiện dòng **"Tạo mới: …"** để tạo ngay tại chỗ, không phải rời thẻ duyệt.
+- Không dùng một danh sách phẳng dài gộp tất cả "Dự án · Category": chọn dự án trước, category sau.
+- Đổi tên hoặc xóa category / khách hàng làm ở màn Dự án (mục 5.3.1, 5.3.2); thẻ duyệt chỉ chọn và tạo mới để giữ thao tác nhanh.
+- Sửa bằng chat/voice ngay trên thẻ: "việc này của khách Đô thị, category Hợp đồng".
+- Mỗi lần Mai sửa, hệ thống ghi nhận để lần sau tự điền đúng (ví dụ: "hợp đồng website" + "Đô thị" → Circle · Hợp đồng · Đô thị).
+- Nhóm việc từ ảnh: khi Mai bấm "Nhận cả nhóm", có thể đặt chung dự án / category / khách hàng / deadline cho cả nhóm trước khi nhận.
+
+**3c. Deadline cho từng việc**
+- **Mỗi việc có ô Deadline riêng** trên thẻ duyệt, cạnh Dự án / Category / Khách hàng.
+- **Có hạn trong nguồn → tự điền.** Ngày tương đối ("thứ Sáu", "tuần sau", "cuối tháng", "trước khi bay") được quy đổi thành ngày cụ thể dựa trên **ngày giờ thực hôm nay và múi giờ của Mai**, và luôn hiện dạng đầy đủ để kiểm tra, ví dụ nguồn ghi "thứ Sáu" → hiện *Thứ Sáu 25/9/2026*. Kèm trích dẫn đoạn gốc chứa hạn.
+- **Không có hạn trong nguồn → để trống**, ô Deadline được làm nổi. Lowtechie không tự đoán hạn; Mai tự điền khi nhận việc.
+- **Điền nhanh:** nút chọn sẵn *Hôm nay · Ngày mai · Thứ Sáu này · Tuần sau · Cuối tháng*, lịch chọn ngày, hoặc gõ/nói tự do ("thứ Năm 3 giờ chiều", "25/10").
+- **Tùy chọn giờ:** mặc định chỉ ngày; thêm giờ khi cần (ví dụ "trước 17:00").
+- **Loại hạn:** hạn cứng (khách hàng, pháp lý, chuyến bay) hoặc hạn mềm (tự đặt); hạn cứng hiện nổi bật và được ưu tiên khi xếp lịch.
+- **Không có hạn:** Mai có thể chọn rõ "Không có hạn". Nếu bấm "Lưu & nhận" mà ô Deadline vẫn trống, thẻ nhắc một lần "Chưa có deadline — thêm hay để không hạn?" rồi lưu theo lựa chọn.
+- **Kiểm tra khi điền:** hạn đã qua, rơi vào ngày Mai đang bay, hoặc ngày đã kín lịch → cảnh báo nhẹ, Mai vẫn giữ được.
+- **Sau khi lưu:** hạn đi vào cột Hạn của Google Sheets, xếp ưu tiên, brief sáng ("3 việc đến hạn hôm nay"), nhắc việc (mặc định 1 ngày trước và sáng ngày đến hạn, chỉnh được) và đề xuất khung giờ làm với việc lớn.
+- **Đổi hạn sau:** bằng chat/voice ("dời hợp đồng Đô thị sang thứ Hai") hoặc sửa trong danh sách; lịch sử đổi hạn được lưu để weekly review chỉ ra việc bị dời nhiều lần.
 
 **4. Thẻ xác nhận**
 - Tóm tắt theo nhóm, ví dụ: *"5 việc mới: 3 Sorene / Gọi vốn, 2 Cá nhân / Chuyến đi. 1 việc trùng (đề xuất gộp), 1 việc thiếu hạn."*
@@ -177,6 +205,16 @@ Danh sách dự án và category không cố định. Mai tự thêm, sửa, s�
 - Xóa hoặc gộp category → Lowtechie hỏi việc thuộc category đó chuyển về đâu trước khi thực hiện.
 - Đặt mặc định cho từng dự án (việc chưa rõ category rơi vào đâu).
 
+**Sắp xếp vị trí (dự án, category, khách hàng)**
+- Mai tự quyết thứ tự ở **cả hai tầng**: thứ tự các dự án, và thứ tự category bên trong từng dự án. Danh bạ khách hàng của mỗi dự án cũng sắp xếp được.
+- **Trong app:** màn Dự án có chế độ "Sắp xếp"; kéo thả bằng tay nắm ở đầu mỗi dòng. Có thêm nút Lên đầu / Xuống cuối cho thao tác một chạm.
+- **Chuyển tầng / chuyển chỗ:** kéo một category sang dự án khác để chuyển nó (việc bên trong đi theo, Lowtechie xác nhận trước khi chuyển).
+- **Bằng chat/voice:** "đưa Học tập lên đầu", "cho Hợp đồng lên trên Khách hàng & bán hàng trong Circle", "Đào tạo xuống cuối".
+- **Thứ tự của Mai được dùng ở mọi nơi:** ô chọn trong thẻ duyệt, màn Hôm nay và Dự án, weekly review, thứ tự tab trong Google Sheets và thứ tự nhóm category trong mỗi tab.
+- Ô chọn trong thẻ duyệt có thể thêm một mục nhỏ "Dùng gần đây" ở trên cùng, nhưng phần danh sách chính luôn giữ đúng thứ tự Mai đặt; Lowtechie không tự đảo thứ tự.
+- Việc mới tạo (dự án, category, khách hàng) được thêm vào cuối danh sách; Mai kéo lên nếu muốn.
+- Thay đổi thứ tự hoàn tác được.
+
 **Lowtechie gợi ý nhưng không tự đổi cấu trúc**
 - Khi có nhiều việc không khớp category nào, hoặc Mai hay sửa một kiểu → đề xuất tạo category mới ("Có 6 việc về tuyển dụng ở Circle, tạo category Tuyển dụng không?").
 - Dự án không có hoạt động 30 ngày → hỏi có muốn lưu trữ không.
@@ -190,6 +228,27 @@ Danh sách dự án và category không cố định. Mai tự thêm, sửa, s�
 | "Đổi tên Admin chung thành Hành chính" | Đổi tên dự án, cập nhật file |
 | "Gộp Khóa học với Đọc & nghiên cứu" | Hỏi tên category sau khi gộp, chuyển việc |
 | "Tạm ngưng dự án Podcast" | Lưu trữ dự án |
+| "Đưa Hợp đồng lên đầu trong Circle" | Đổi vị trí category, cập nhật thứ tự ở mọi màn và trong file |
+
+### 5.3.2 Khách hàng & đối tác
+Circle (và các dự án khác) có nhiều khách hàng và đối tác. **Khách hàng/đối tác là một trường riêng, không phải category.** Category trả lời "đây là loại việc gì" (Hợp đồng, Delivery, Đào tạo…); khách hàng trả lời "việc này cho ai". Nếu biến mỗi khách hàng thành một category, số category sẽ nhân lên theo số khách hàng và không còn lọc được theo loại việc.
+
+Ví dụ: *"Ký lại hợp đồng website"* → **Circle · Hợp đồng · Khách hàng: Đô thị**.
+
+**Danh bạ khách hàng/đối tác theo dự án**
+- Mỗi mục gồm: tên, loại (khách hàng / đối tác / nhà cung cấp), tên gọi tắt và cách gọi khác (ví dụ "Đô thị", tên công ty đầy đủ, tên người liên hệ), người liên hệ, trạng thái (đang làm / tiềm năng / đã kết thúc), group chat và email liên kết, ghi chú.
+- Một khách hàng có thể thuộc nhiều dự án (ví dụ vừa là khách của Circle vừa là đối tác của Sorene).
+- Mai thêm, sửa, gộp (khi trùng tên), lưu trữ bằng chat, voice, màn Dự án, hoặc tạo nhanh ngay trong thẻ duyệt.
+
+**Nhận diện tự động**
+- Khi trích việc, Lowtechie so tên trong nội dung với danh bạ (kể cả tên gọi tắt) để điền khách hàng.
+- Gặp tên chưa có trong danh bạ → đề xuất "Tạo khách hàng mới 'Đô thị' cho Circle?" thay vì bỏ trống hoặc đoán.
+- Việc đến từ group chat/email đã gắn với một khách hàng → tự điền khách hàng đó.
+
+**Xem theo khách hàng**
+- Màn chi tiết khách hàng: tất cả việc (mở và đã xong) theo category, việc đang chờ phía khách, lần liên hệ gần nhất, recap các cuộc họp với khách, hợp đồng và file liên quan.
+- Hỏi bằng chat/voice: "Đô thị đang còn việc gì?", "Tuần này có khách nào chưa được follow-up?".
+- Weekly review có thể xem thời gian theo khách hàng của Circle, không chỉ theo dự án.
 
 ### 5.4 Calendar agent
 - Đọc/ghi Google Calendar.
@@ -277,7 +336,7 @@ Giờ hẹn
 
 ### 5.7 Xuất ra file
 - Chỉ ghi vào file sau bước xác nhận ở mục 5.2.1.
-- Cấu trúc file checklist (Google Sheets): một tab mỗi dự án + một tab "Tất cả". Cột: Dự án · Category · Việc · Người làm · Hạn · Ưu tiên · Trạng thái · Nguồn · Ngày tạo · Ghi chú. Lọc và nhóm theo category có sẵn.
+- Cấu trúc file checklist (Google Sheets): một tab mỗi dự án + một tab "Tất cả". Cột: Dự án · Category · Khách hàng/Đối tác · Việc · Người làm · Hạn · Ưu tiên · Trạng thái · Nguồn · Ngày tạo · Ghi chú. Lọc và nhóm theo category hoặc theo khách hàng có sẵn.
 - Đồng bộ task sang Google Sheets (một tab / dự án) và/hoặc Notion — để cộng sự không dùng app vẫn xem được.
 - Ghi chú & biên bản họp lưu vào Google Drive theo thư mục dự án.
 
@@ -451,6 +510,7 @@ flowchart LR
 ```
 
 ### 6.5 Nguyên tắc UX
+0. Màn hình không có câu giải thích cách hoạt động hay tham chiếu nội bộ (ví dụ "PRD §5.2"). Hộp duyệt chỉ có tiêu đề, bộ đếm và thẻ việc; hướng dẫn chỉ hiện một lần ở lần dùng đầu tiên.
 1. Giao một việc không bao giờ quá 10 giây, bằng chat hoặc voice, từ bất kỳ kênh nào.
 2. Duyệt trước, tự động sau: mở tự động dần cho từng loại hành động khi độ chính xác đủ cao.
 3. Mọi việc tự trích đều có nguồn gốc (tin nhắn hoặc đoạn ghi âm).
@@ -482,6 +542,10 @@ Ghi chú lựa chọn:
 - `projects` (id, name, weight, goal, members, linked_channels)
 - `projects` bổ sung: color, icon, sort_order, keywords, status (active / archived)
 - `categories` (id, project_id, name, sort_order, is_default, status)
+- `clients` (id, sort_order, name, type: khách hàng/đối tác/nhà cung cấp, aliases, contacts, status, linked_channels, notes)
+- `client_projects` (client_id, project_id)
+- `tasks` bổ sung: client_id, due_date, due_time (tùy chọn), due_type (cứng / mềm / không hạn), due_source (từ nguồn / Mai điền), due_quote
+- `due_changes` (task_id, old_due, new_due, changed_at, reason)
 - `structure_changes` (type: add/rename/merge/move/archive/delete, before, after, confirmed_at) — để hoàn tác
 - `classification_feedback` (task_id, suggested_project, suggested_category, final_project, final_category, signals)
 - `tasks` (id, project_id, category_id, title, owner_id, assignee_id, due_at, due_type, priority, status, est_minutes, energy, source_channel, source_ref, source_quote, confidence, visibility)

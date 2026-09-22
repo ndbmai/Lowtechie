@@ -278,11 +278,11 @@ function ChainForm({
           </button>
         </div>
       )}
-      <p className="muted small">
-        {mapsAvailable
-          ? "Với tàu, Maps tính theo GIỜ ĐẾN nên số rất sát; với ô tô chỉ có giờ đi nên là ước lượng (PRD §5.4.1)."
-          : "Số phút di chuyển đang nhập tay — thêm GOOGLE_MAPS_API_KEY vào server là có nút tính tự động (PRD §5.4.1)."}
-      </p>
+      {!mapsAvailable && (
+        <p className="muted small">
+          Số phút di chuyển đang nhập tay — thêm GOOGLE_MAPS_API_KEY vào server là có nút tính tự động.
+        </p>
+      )}
     </div>
   );
 }

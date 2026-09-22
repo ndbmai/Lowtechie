@@ -63,6 +63,11 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Gmail vé máy bay (§5.9): nút "Quét vé máy bay trong Gmail" ở Chuyến đi — Claude trích chuyến sắp tới, Mai duyệt mới tạo chuyến + checklist (scope gmail.readonly, cần nối lại Google sau khi cập nhật)
 - [x] Vé bay **đúng ngày, đúng chuyến** (§5.9 v1.0): mốc "🕐 Hôm nay" theo giờ thiết bị Mai đi kèm mọi lần trích; chỉ lấy chặng tương lai (server chặn lần hai); chặng đã bay/hủy hiện ở mục "Bỏ qua"; trùng PNR → Cập nhật giờ, không tạo bản sao
 - [x] Trích vé **theo chặng** (§5.9 6b, sửa lỗi vé OADC5J): AI trả thô mọi chặng từ email + PDF đính kèm, `src/core/flights.ts` khử trùng (PNR+số hiệu+ngày) và phân loại bằng code có test hồi quy; chuỗi ngày bay đề "Cất cánh SGN (nhà ga 2) → BKK", đệm sân bay theo quy định trên vé; chuyến đã bay chuyển vào mục "Lịch sử", không vẽ chuỗi nữa
+- [x] Thẻ duyệt v1.6 (§5.2.1 3b, sửa lỗi thẻ chỉ có một danh sách phẳng): 3 ô chọn riêng Dự án · Category · Khách hàng, có tìm kiếm và "Tạo mới: …" ngay trên thẻ; nhóm ảnh đặt chung dự án/category/khách/hạn trước khi nhận cả nhóm
+- [x] Deadline từng việc (§5.2.1 3c): nguồn có hạn → tự điền kèm trích dẫn, không có → để trống + làm nổi (không đoán); nút nhanh Hôm nay/Ngày mai/Thứ Sáu này/Tuần sau/Cuối tháng, hạn cứng/mềm, "Không có hạn"; cảnh báo hạn đã qua · rơi ngày bay · ngày lịch dày; lịch sử đổi hạn lưu lại
+- [x] Khách hàng & đối tác (§5.3.2): trường riêng (không phải category), danh bạ theo dự án kèm tên gọi tắt; tự khớp tên khi trích việc, tên lạ không đoán; quản lý ở Quản lý dự án
+- [x] Sắp xếp thứ tự (§5.3.1): chế độ Sắp xếp cho dự án, category, khách (⤒↑↓⤓ + Hoàn tác); chuyển category (kèm việc) sang dự án khác; thứ tự Mai đặt dùng ở mọi màn và ô chọn
+- [x] Quy tắc UI 0 (v1.6): gỡ mọi câu giải thích cơ chế và tham chiếu "PRD §…" khỏi màn hình
 - [x] Tạm ngưng dự án + xóa phải chọn nơi chuyển việc (§5.3.1)
 - [ ] Speech-to-text server (voice note VI/TH/EN trộn) — đang dùng Web Speech của trình duyệt
 - [ ] Sync Google Sheets · ghi âm họp offline + recap

@@ -55,10 +55,6 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
       >
         Tạo chuyến + checklist
       </button>
-      <p className="muted small">
-        Sau này Lowtechie đọc email xác nhận vé (Gmail) là tự tạo chuyến — giờ bay lưu theo múi
-        giờ địa phương (PRD §5.9).
-      </p>
     </div>
   );
 }
@@ -120,8 +116,7 @@ function GmailScan() {
       </button>
       {today && (
         <div className="note-box small">
-          🕐 Hôm nay: <b>{today}</b> (giờ nơi Mai đang ở) — mình chỉ lấy chặng khởi hành SAU thời
-          điểm này.
+          🕐 Hôm nay: <b>{today}</b> (giờ nơi Mai đang ở)
         </div>
       )}
       {msg && <p className="muted small">{msg}</p>}
@@ -223,8 +218,7 @@ function FlightDayChain({ trip }: { trip: Trip }) {
       </div>
       <div className="muted small">
         Bắt đầu chuẩn bị <b>{fmtTime(chain.prepStartAt)}</b> · rời nhà{" "}
-        <b>{fmtTime(chain.leaveAt)}</b> · {chain.reminders[0]}. Ra sân bay mình hiện thêm phương
-        án ô tô để Mai chọn.
+        <b>{fmtTime(chain.leaveAt)}</b> · {chain.reminders[0]}
       </div>
       <label className="small" style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ flex: 1 }}>Di chuyển ra sân bay</span>

@@ -5,7 +5,9 @@ import { persist } from "zustand/middleware";
 import type {
   CalEvent,
   Category,
+  Client,
   Destination,
+  DueType,
   FeedbackEntry,
   Project,
   ProjectId,
@@ -13,6 +15,7 @@ import type {
   TriageItem,
   Trip,
 } from "@/core/types";
+import { makeClientId } from "@/core/clients";
 import {
   DEFAULT_CATEGORIES,
   DEFAULT_PROJECTS,
@@ -37,12 +40,19 @@ export interface PendingBlock {
   durationMinutes: number;
 }
 
+/** Hướng di chuyển khi Mai sắp xếp thứ tự (§5.3.1). */
+export type MoveDir = "up" | "down" | "top" | "bottom";
+
 interface LowtechieState {
   tasks: Task[];
   triage: TriageItem[];
   projects: Project[];
   /** Category 2 tầng — Mai tự thêm/sửa/xóa (PRD §5.2.1). */
   categories: Category[];
+  /** Danh bạ khách hàng / đối tác theo dự án (PRD §5.3.2). */
+  clients: Client[];
+  /** Lịch sử đổi hạn (due_changes §8) — weekly review soi việc bị dời nhiều. */
+  dueChanges: { taskId: string; oldDue?: string; newDue?: string; changedAt: string }[];
   events: CalEvent[];
   trips: Trip[];
   /** Món checklist Mai tự thêm, học cho các chuyến sau cùng điểm đến. */
@@ -65,6 +75,8 @@ interface LowtechieState {
   dropTask: (id: string) => void;
   deferTask: (id: string) => void;
   delegateTask: (id: string, person: string) => void;
+  /** Đổi hạn một việc, có ghi lịch sử đổi hạn (PRD 3c). */
+  setTaskDue: (id: string, dueAt: string | undefined, dueType?: DueType) => void;
 
   addTriage: (draft: TaskDraft) => void;
   /** Thêm cả nhóm dòng trích từ một ảnh, kèm ảnh nguồn (PRD §5.1.1). */
@@ -97,16 +109,51 @@ interface LowtechieState {
   setWalkToStation: (min: number) => void;
   setHomeAddress: (address: string) => void;
 
-  addProject: (name: string, color: string) => void;
+  addProject: (name: string, color: string) => Project | null;
   updateProject: (
     id: ProjectId,
     patch: Partial<Pick<Project, "name" | "color" | "targetHoursPerWeek" | "goal" | "status">>,
   ) => void;
   /** Xóa dự án: Mai CHỌN việc còn mở chuyển sang dự án nào (§5.3.1). */
   deleteProject: (id: ProjectId, moveTo: ProjectId) => void;
-  addCategory: (projectId: ProjectId, name: string) => void;
+  addCategory: (projectId: ProjectId, name: string) => Category | null;
   renameCategory: (id: string, name: string) => void;
   deleteCategory: (id: string) => void;
+  /** Chuyển category (và việc bên trong) sang dự án khác (§5.3.1). */
+  moveCategoryToProject: (id: string, toProjectId: ProjectId) => void;
+
+  addClient: (name: string, projectId: ProjectId, type?: Client["type"]) => Client | null;
+  updateClient: (
+    id: string,
+    patch: Partial<Pick<Client, "name" | "type" | "aliases" | "projectIds" | "status" | "contact" | "notes">>,
+  ) => void;
+  deleteClient: (id: string) => void;
+
+  /** Sắp xếp thứ tự theo ý Mai (§5.3.1) — dùng ở mọi màn và ô chọn. */
+  moveProject: (id: ProjectId, dir: MoveDir) => void;
+  moveCategory: (id: string, dir: MoveDir) => void;
+  moveClient: (id: string, projectId: ProjectId, dir: MoveDir) => void;
+  /** Khôi phục thứ tự trước đó (hoàn tác sắp xếp). */
+  setOrders: (o: { projects?: string[]; categories?: string[]; clients?: string[] }) => void;
+}
+
+/** Dời một phần tử trong danh sách theo hướng, giữ nguyên phần còn lại. */
+function moveItem<T>(list: T[], from: number, dir: MoveDir): T[] {
+  const to =
+    dir === "up" ? from - 1 : dir === "down" ? from + 1 : dir === "top" ? 0 : list.length - 1;
+  if (from < 0 || to < 0 || to >= list.length || to === from) return list;
+  const out = [...list];
+  const [x] = out.splice(from, 1);
+  out.splice(to, 0, x);
+  return out;
+}
+
+/** Xếp lại mảng theo dãy id cho trước; id thiếu giữ nguyên cuối mảng. */
+function orderBy<T extends { id: string }>(arr: T[], ids: string[]): T[] {
+  const byId = new Map(arr.map((x) => [x.id, x]));
+  const picked = ids.map((id) => byId.get(id)).filter((x): x is T => Boolean(x));
+  const rest = arr.filter((x) => !ids.includes(x.id));
+  return [...picked, ...rest];
 }
 
 function uid(): string {
@@ -136,6 +183,8 @@ export const useStore = create<LowtechieState>()(
       triage: [],
       projects: DEFAULT_PROJECTS,
       categories: DEFAULT_CATEGORIES,
+      clients: [],
+      dueChanges: [],
       events: [],
       trips: [],
       learnedItems: { tokyo: [], hcmc: [], bkk: [] },
@@ -189,6 +238,22 @@ export const useStore = create<LowtechieState>()(
             t.id === id ? { ...t, waitingOn: { person }, assignee: person } : t,
           ),
         })),
+      setTaskDue: (id, dueAt, dueType) =>
+        set((s) => {
+          const task = s.tasks.find((t) => t.id === id);
+          if (!task || task.dueAt === dueAt) return s;
+          return {
+            tasks: s.tasks.map((t) =>
+              t.id === id
+                ? { ...t, dueAt, dueType: dueAt ? (dueType ?? t.dueType ?? "soft") : undefined, dueSource: "mai" }
+                : t,
+            ),
+            dueChanges: [
+              ...s.dueChanges.slice(-199),
+              { taskId: id, oldDue: task.dueAt, newDue: dueAt, changedAt: new Date().toISOString() },
+            ],
+          };
+        }),
 
       addTriage: (draft) =>
         set((s) => ({
@@ -281,6 +346,11 @@ export const useStore = create<LowtechieState>()(
                 ? { ...t, dueAt: to.toISOString(), deferCount: t.deferCount + 1 }
                 : t,
             ),
+            // Lịch sử đổi hạn (due_changes §8) cho weekly review.
+            dueChanges: [
+              ...st.dueChanges.slice(-199),
+              { taskId: task.id, oldDue: task.dueAt, newDue: to.toISOString(), changedAt: new Date().toISOString() },
+            ],
           }));
           return "task";
         }
@@ -351,18 +421,20 @@ export const useStore = create<LowtechieState>()(
       setHomeAddress: (address) =>
         set((s) => ({ settings: { ...s.settings, homeAddress: address.slice(0, 300) } })),
 
-      addProject: (name, color) =>
-        set((s) => {
-          const trimmed = name.trim().slice(0, 40);
-          if (!trimmed) return s;
-          const id = makeProjectId(trimmed, s.projects);
-          return {
-            projects: [
-              ...s.projects,
-              { id, name: trimmed, color, weight: 0, targetHoursPerWeek: 0 },
-            ],
-          };
-        }),
+      addProject: (name, color) => {
+        const trimmed = name.trim().slice(0, 40);
+        if (!trimmed) return null;
+        const p: Project = {
+          id: makeProjectId(trimmed, get().projects),
+          name: trimmed,
+          color,
+          weight: 0,
+          targetHoursPerWeek: 0,
+        };
+        // Mục mới vào CUỐI danh sách — Mai kéo lên nếu muốn (§5.3.1).
+        set((s) => ({ projects: [...s.projects, p] }));
+        return p;
+      },
       updateProject: (id, patch) =>
         set((s) => ({
           projects: s.projects.map((p) =>
@@ -391,6 +463,10 @@ export const useStore = create<LowtechieState>()(
           return {
             projects,
             categories: s.categories.filter((c) => c.projectId !== id),
+            // Khách chỉ thuộc dự án bị xóa thì rời danh bạ; thuộc nhiều thì giữ.
+            clients: s.clients
+              .map((c) => ({ ...c, projectIds: c.projectIds.filter((p) => p !== id) }))
+              .filter((c) => c.projectIds.length > 0),
             tasks: s.tasks.map(move),
             triage: s.triage.map((t) => ({ ...t, draft: move(t.draft) })),
             feedback: s.feedback.filter((f) => f.projectId !== id),
@@ -403,17 +479,17 @@ export const useStore = create<LowtechieState>()(
                 : s.pendingBlock,
           };
         }),
-      addCategory: (projectId, name) =>
-        set((s) => {
-          const trimmed = name.trim().slice(0, 40);
-          if (!trimmed) return s;
-          return {
-            categories: [
-              ...s.categories,
-              { id: makeCategoryId(projectId, trimmed, s.categories), projectId, name: trimmed },
-            ],
-          };
-        }),
+      addCategory: (projectId, name) => {
+        const trimmed = name.trim().slice(0, 40);
+        if (!trimmed) return null;
+        const c: Category = {
+          id: makeCategoryId(projectId, trimmed, get().categories),
+          projectId,
+          name: trimmed,
+        };
+        set((s) => ({ categories: [...s.categories, c] }));
+        return c;
+      },
       renameCategory: (id, name) =>
         set((s) => ({
           categories: s.categories.map((c) =>
@@ -433,11 +509,101 @@ export const useStore = create<LowtechieState>()(
             ),
           };
         }),
+      moveCategoryToProject: (id, toProjectId) =>
+        set((s) => {
+          const cat = s.categories.find((c) => c.id === id);
+          if (!cat || cat.projectId === toProjectId || !s.projects.some((p) => p.id === toProjectId))
+            return s;
+          const newId = makeCategoryId(toProjectId, cat.name, s.categories);
+          // Việc bên trong đi theo category sang dự án mới (§5.3.1).
+          const move = <T extends { projectId: ProjectId; categoryId?: string }>(x: T): T =>
+            x.categoryId === id ? { ...x, projectId: toProjectId, categoryId: newId } : x;
+          return {
+            categories: s.categories.map((c) =>
+              c.id === id ? { ...c, id: newId, projectId: toProjectId } : c,
+            ),
+            tasks: s.tasks.map(move),
+            triage: s.triage.map((t) => ({ ...t, draft: move(t.draft) })),
+            feedback: s.feedback.map((f) =>
+              f.categoryId === id ? { ...f, projectId: toProjectId, categoryId: newId } : f,
+            ),
+          };
+        }),
+
+      addClient: (name, projectId, type) => {
+        const trimmed = name.trim().slice(0, 60);
+        if (!trimmed) return null;
+        const c: Client = {
+          id: makeClientId(trimmed, get().clients),
+          name: trimmed,
+          type: type ?? "khachhang",
+          aliases: [],
+          projectIds: [projectId],
+          status: "danglam",
+        };
+        set((s) => ({ clients: [...s.clients, c] }));
+        return c;
+      },
+      updateClient: (id, patch) =>
+        set((s) => ({
+          clients: s.clients.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  ...patch,
+                  name: (patch.name ?? c.name).trim().slice(0, 60) || c.name,
+                  aliases: (patch.aliases ?? c.aliases).map((a) => a.trim()).filter(Boolean).slice(0, 12),
+                  projectIds: patch.projectIds?.length ? patch.projectIds : c.projectIds,
+                }
+              : c,
+          ),
+        })),
+      deleteClient: (id) =>
+        set((s) => {
+          const clear = <T extends { clientId?: string }>(x: T): T =>
+            x.clientId === id ? { ...x, clientId: undefined } : x;
+          return {
+            clients: s.clients.filter((c) => c.id !== id),
+            tasks: s.tasks.map(clear),
+            triage: s.triage.map((t) => ({ ...t, draft: clear(t.draft) })),
+          };
+        }),
+
+      moveProject: (id, dir) =>
+        set((s) => ({
+          projects: moveItem(s.projects, s.projects.findIndex((p) => p.id === id), dir),
+        })),
+      moveCategory: (id, dir) =>
+        set((s) => {
+          const cat = s.categories.find((c) => c.id === id);
+          if (!cat) return s;
+          const sibs = s.categories.filter((c) => c.projectId === cat.projectId);
+          const next = moveItem(sibs, sibs.findIndex((c) => c.id === id), dir);
+          let i = 0;
+          return {
+            categories: s.categories.map((c) => (c.projectId === cat.projectId ? next[i++] : c)),
+          };
+        }),
+      moveClient: (id, projectId, dir) =>
+        set((s) => {
+          const sibs = s.clients.filter((c) => c.projectIds.includes(projectId));
+          const next = moveItem(sibs, sibs.findIndex((c) => c.id === id), dir);
+          let i = 0;
+          return {
+            clients: s.clients.map((c) => (c.projectIds.includes(projectId) ? next[i++] : c)),
+          };
+        }),
+      setOrders: (o) =>
+        set((s) => ({
+          projects: o.projects ? orderBy(s.projects, o.projects) : s.projects,
+          categories: o.categories ? orderBy(s.categories, o.categories) : s.categories,
+          clients: o.clients ? orderBy(s.clients, o.clients) : s.clients,
+        })),
     }),
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 6,
+      version: 7,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -510,6 +676,11 @@ export const useStore = create<LowtechieState>()(
               (c) => c.projectId === "hoctap" && !have.has(c.id),
             ),
           ];
+        }
+        if (version < 7) {
+          // v7 (PRD v1.6): danh bạ khách hàng/đối tác + lịch sử đổi hạn.
+          s.clients = s.clients ?? [];
+          s.dueChanges = s.dueChanges ?? [];
         }
         return s as LowtechieState;
       },

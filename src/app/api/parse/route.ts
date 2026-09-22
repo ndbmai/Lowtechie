@@ -35,6 +35,11 @@ const TOOL_SCHEMA = {
               type: "string",
               description: "Id category — CHỈ dùng id có trong danh sách ở system prompt",
             },
+            clientId: {
+              type: "string",
+              description:
+                "Id khách hàng/đối tác — CHỈ khi tên trong câu khớp danh bạ (kể cả tên gọi tắt); tên lạ thì BỎ TRỐNG, không đoán",
+            },
             dueAt: { type: "string", description: "ISO 8601, có offset múi giờ" },
             dueType: { type: "string", enum: ["hard", "soft"] },
             startAt: { type: "string", description: "ISO 8601 cho event" },
@@ -62,9 +67,11 @@ function systemPrompt(localNow: string, tzName: string, taxonomy: TaxonomyPayloa
 Bây giờ ở chỗ Mai là ${localNow} (múi giờ ${tzName}). Dùng mốc này cho "ngày mai", "thứ Ba tuần sau"…; mọi ISO trả về phải kèm đúng offset múi giờ này.
 Tách câu của Mai thành các hành động: task (việc, có projectId + categoryId + dueAt nếu nói), event (hẹn/họp/bay/block deep work; kèm startAt hoặc durationMinutes, location, mode nếu Mai nói "đi tàu"/"ô tô"), reschedule (dời lịch; keepTime=true khi chỉ nói ngày mới).
 Tiêu đề việc bắt đầu bằng động từ rõ ràng ("Gửi báo giá cho OKR", không phải "báo giá OKR").
-Dự án và category CỦA MAI (chỉ dùng đúng các id này, Mai tự quản danh sách):
+Dự án, category và danh bạ khách CỦA MAI (chỉ dùng đúng các id này, Mai tự quản danh sách):
 ${taxonomyText(taxonomy)}
 Không chắc category thì bỏ trống, đừng đoán bừa; confidence phản ánh độ chắc của phân loại.
+Khách hàng/đối tác: tên trong câu khớp danh bạ (kể cả tên gọi tắt) → điền clientId; tên chưa có trong danh bạ → BỎ TRỐNG, không tự tạo, không đoán.
+Deadline: câu có hạn (kể cả ngày tương đối "thứ Sáu", "cuối tháng") → quy ra dueAt theo mốc thời gian trên; câu KHÔNG có hạn → BỎ TRỐNG dueAt, tuyệt đối không tự đề xuất hạn.
 Giờ không nói rõ: nhắc việc = 9:00. "tối"=19:00, "chiều"=15:00, "sáng"=9:00.
 Hỏi lại TỐI ĐA MỘT câu, chỉ khi thiếu thông tin thật sự quan trọng. Không bịa hành động Mai không nói.`;
 }
