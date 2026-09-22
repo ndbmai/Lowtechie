@@ -128,12 +128,25 @@ export interface CalEvent {
 
 export type Destination = "tokyo" | "hcmc" | "bkk";
 
+/** Vé/file đã lưu vào chuyến (PRD §5.9 v2.0 — tự lưu khi trích). */
+export interface TripAttachment {
+  /** Cũng là khóa blob trong IndexedDB (src/lib/fileStore). */
+  id: string;
+  filename: string;
+  addedAt: string;
+  /** Email đổi vé sau đó → bản mới nhất; bản cũ giữ trong lịch sử. */
+  isLatest: boolean;
+  version: number;
+}
+
 export interface Trip {
   id: string;
   destination: Destination;
-  /** Nhãn hiển thị, ví dụ "Tokyo 4 ngày". */
+  /** Nhãn hiển thị theo tuyến (v2.0), ví dụ "SGN → BKK · 2/10". */
   label: string;
   departAt: string;
+  /** Giờ hạ cánh chặng đi — để vẽ chuỗi ngày bay hai đầu (v2.0). */
+  arriveAt?: string;
   returnAt?: string;
   /** Mã đặt chỗ — chống tạo trùng chuyến khi quét lại vé (§5.9). */
   pnr?: string;
@@ -148,6 +161,8 @@ export interface Trip {
   customItems: { id: string; groupId: string; text: string }[];
   /** Món mẫu Mai đã xóa cho chuyến này. */
   removed: Record<string, boolean>;
+  /** Vé PDF/ảnh đã lưu vào chuyến (metadata; blob nằm ở IndexedDB). */
+  attachments?: TripAttachment[];
 }
 
 /** Hồ sơ chuẩn bị dùng lại (PRD §5.4.1). */

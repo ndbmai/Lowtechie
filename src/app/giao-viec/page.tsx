@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Blossom } from "@/components/Blossom";
 import { Bubble } from "@/components/Bubble";
 import { DueEditor } from "@/components/DueEditor";
@@ -27,10 +27,11 @@ import type {
   Project,
   ProjectId,
 } from "@/core/types";
-import { fmtDayTime, fmtRelativeDay, fmtTime } from "@/lib/format";
+import { fmtDayTime, fmtRelativeDay, fmtTime, isSameDay } from "@/lib/format";
 import { compressImage } from "@/lib/image";
 import { useSpeech } from "@/lib/speech";
 import { useStore, type TaskDraft } from "@/lib/store";
+import { createGcalEvent, deleteGcalEvent, useGoogleStatus } from "@/lib/useGoogle";
 
 function taxonomyPayload(t: { projects: Project[]; categories: Category[]; clients: Client[] }) {
   return {
@@ -113,8 +114,13 @@ export default function CapturePage() {
     addProject,
     addCategory,
     addClient,
+    removeEvent,
   } = useStore();
   const [dueEdits, setDueEdits] = useState<Record<number, { dueAt?: string; dueType?: DueType }>>({});
+  const gs = useGoogleStatus();
+  /** Book sự kiện lên Google Calendar sau khi xem trước (§5.4 v2.0). */
+  const [book, setBook] = useState<Record<number, boolean>>({});
+  const [lastBooked, setLastBooked] = useState<{ localId: string; gcalId: string }[] | null>(null);
 
   const runParse = useCallback(
     async (t: string) => {
@@ -124,6 +130,8 @@ export default function CapturePage() {
       setOverrides({});
       setMerge({});
       setDueEdits({});
+      setBook({});
+      setLastBooked(null);
       const r = await parseViaApi(t.trim(), { projects, categories, clients });
       setResult(r);
       setBusy(false);
@@ -138,7 +146,24 @@ export default function CapturePage() {
     },
     [runParse],
   );
-  const { supported, listening, start, stop } = useSpeech(onSpeech);
+  const { supported, listening, processing, error: speechError, start, stop } = useSpeech(onSpeech);
+  const [micHint, setMicHint] = useState(false);
+  useEffect(() => {
+    try {
+      setMicHint(supported && !localStorage.getItem("lt-mic-ok"));
+    } catch {
+      /* private mode */
+    }
+  }, [supported]);
+  useEffect(() => {
+    if (!listening) return;
+    try {
+      localStorage.setItem("lt-mic-ok", "1");
+    } catch {
+      /* private mode */
+    }
+    setMicHint(false);
+  }, [listening]);
 
   /** Hợp nhất đề xuất của parser/Claude + học từ sửa + override của Mai,
    *  rồi đối chiếu với taxonomy thật (dự án đã xóa → rơi về Cá nhân). */
@@ -244,16 +269,17 @@ export default function CapturePage() {
     }
   }
 
-  function saveAll() {
+  async function saveAll() {
     if (!result) return;
     const lines: string[] = [];
+    const booked: { localId: string; gcalId: string }[] = [];
     let goCalendar = false;
 
-    result.actions.forEach((a, i) => {
+    for (const [i, a] of result.actions.entries()) {
       if (a.kind === "task") {
         if (duplicates[i] && (merge[i] ?? true)) {
           lines.push(`“${a.title}” trùng với việc đang có — mình gộp, không tạo mới.`);
-          return;
+          continue;
         }
         const r = resolveTask(a, i);
         // Hạn: nguồn tự điền, Mai sửa trên thẻ thắng nguồn (3c).
@@ -276,15 +302,33 @@ export default function CapturePage() {
         if (a.startAt) {
           const start = new Date(a.startAt);
           const end = new Date(start.getTime() + (a.durationMinutes ?? 60) * 60_000);
-          addEvent({
+          // Book lên Google chỉ sau khi Mai tick ở thẻ xem trước (§5.4).
+          let gcalId: string | null = null;
+          if (book[i] && gs.connected) {
+            gcalId = await createGcalEvent({
+              title: a.title,
+              startAt: start.toISOString(),
+              endAt: end.toISOString(),
+              description: a.location ? `Ở ${a.location}` : undefined,
+            });
+          }
+          const ev = addEvent({
             title: a.title,
             startAt: start.toISOString(),
             endAt: end.toISOString(),
             location: a.location,
             kind: "event",
+            gcalId: gcalId ?? undefined,
           });
+          if (gcalId) booked.push({ localId: ev.id, gcalId });
           lines.push(
-            `Đã thêm “${a.title}” lúc ${fmtTime(a.startAt)} ${fmtRelativeDay(a.startAt)}. Vào Lịch để khóa block chuẩn bị + di chuyển${a.mode === "car" ? " (ô tô)" : " (BTS)"}.`,
+            `Đã thêm “${a.title}” lúc ${fmtTime(a.startAt)} ${fmtRelativeDay(a.startAt)}${
+              gcalId
+                ? " · đã book lên Google Calendar ✓"
+                : book[i] && gs.connected
+                  ? " · book Google lỗi, mới lưu trong app"
+                  : ""
+            }. Vào Lịch để khóa block chuẩn bị + di chuyển${a.mode === "car" ? " (ô tô)" : " (BTS)"}.`,
           );
         } else if (a.durationMinutes) {
           setPendingBlock({
@@ -303,12 +347,24 @@ export default function CapturePage() {
             : `Mình chưa tìm thấy “${a.what}” trong lịch hay danh sách việc — Mai kiểm tra giúp mình nhé.`,
         );
       }
-    });
+    }
 
+    setLastBooked(booked.length ? booked : null);
     setSavedLines(lines);
     setResult(null);
+    setBook({});
     setText("");
     if (goCalendar) router.push("/lich");
+  }
+
+  /** Hoàn tác book: xóa trên Google Calendar và gỡ sự kiện trong app. */
+  function undoBook() {
+    for (const b of lastBooked ?? []) {
+      void deleteGcalEvent(b.gcalId);
+      removeEvent(b.localId);
+    }
+    setLastBooked(null);
+    setSavedLines((s) => [...(s ?? []), "Đã gỡ sự kiện vừa book khỏi Google Calendar và lịch trong app."]);
   }
 
   async function pickImages(files: FileList | null) {
@@ -480,7 +536,12 @@ export default function CapturePage() {
           </button>
         ) : null}
       </div>
+      {micHint && !listening && (
+        <p className="muted small">Lần đầu bấm nói, trình duyệt sẽ xin quyền micro.</p>
+      )}
       {listening && <div className="muted small">🌼 Đang nghe… thả tay để mình tách việc.</div>}
+      {processing && <div className="muted small">🌼 Đang chuyển giọng nói thành chữ…</div>}
+      {speechError && <div className="note-box">{speechError}</div>}
 
       {images.length > 0 && (
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -516,15 +577,48 @@ export default function CapturePage() {
           {summary && <div className="muted small">{summary}:</div>}
           {result.actions.map((a, i) => {
             if (a.kind !== "task") {
+              // Cảnh báo trên thẻ xem trước (§5.4): trùng giờ, ngày bay.
+              const evStart = a.kind === "event" && a.startAt ? Date.parse(a.startAt) : NaN;
+              const evEnd = evStart + ((a.kind === "event" ? a.durationMinutes : 60) ?? 60) * 60_000;
+              const evWarn: string[] = [];
+              if (Number.isFinite(evStart)) {
+                if (events.some((e) => Date.parse(e.startAt) < evEnd && Date.parse(e.endAt) > evStart))
+                  evWarn.push("trùng giờ với lịch đang có");
+                if (
+                  trips.some(
+                    (t) =>
+                      isSameDay(t.departAt, new Date(evStart)) ||
+                      (t.returnAt && isSameDay(t.returnAt, new Date(evStart))),
+                  )
+                )
+                  evWarn.push("rơi vào ngày bay");
+              }
               return a.kind === "event" ? (
                 <div className="parsed cal" key={i}>
                   <div className="k">{a.durationMinutes && !a.startAt ? "Block cần tìm giờ" : "Lịch mới"}</div>
                   <b>{a.title}</b>
                   <div className="small muted">
                     {a.startAt ? fmtDayTime(a.startAt) : `${a.durationMinutes ?? "?"} phút, chưa chốt giờ`}
+                    {a.startAt ? ` · ${a.durationMinutes ?? 60} phút` : ""}
                     {a.location ? ` · ở ${a.location}` : ""}
                     {a.mode ? (a.mode === "car" ? " · đi ô tô" : " · đi tàu") : ""}
                   </div>
+                  {evWarn.length > 0 && (
+                    <div className="small" style={{ marginTop: 4, color: "var(--note-ink)", background: "var(--note)", borderRadius: 10, padding: "4px 10px" }}>
+                      ⚠ {evWarn.join(" · ")}
+                    </div>
+                  )}
+                  {a.startAt && gs.connected && (
+                    <label className="small" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+                      <input
+                        type="checkbox"
+                        className="check"
+                        checked={book[i] ?? false}
+                        onChange={(e) => setBook((s) => ({ ...s, [i]: e.target.checked }))}
+                      />
+                      Book lên Google Calendar{gs.email ? ` (${gs.email})` : ""}
+                    </label>
+                  )}
                 </div>
               ) : (
                 <div className="parsed cal" key={i}>
@@ -654,7 +748,7 @@ export default function CapturePage() {
             </Bubble>
           )}
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn primary" style={{ flex: 1 }} onClick={saveAll}>
+            <button className="btn primary" style={{ flex: 1 }} onClick={() => void saveAll()}>
               {result.actions.length > 1 ? `Lưu cả ${result.actions.length}` : "Lưu"}
             </button>
             <button
@@ -676,6 +770,11 @@ export default function CapturePage() {
           {savedLines.map((l, i) => (
             <p key={i}>{l}</p>
           ))}
+          {lastBooked && (
+            <button className="btn small" style={{ marginTop: 4 }} onClick={undoBook}>
+              Hoàn tác book Google
+            </button>
+          )}
         </Bubble>
       )}
 

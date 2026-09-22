@@ -14,6 +14,7 @@ import type {
   Task,
   TriageItem,
   Trip,
+  TripAttachment,
 } from "@/core/types";
 import { makeClientId } from "@/core/clients";
 import {
@@ -53,6 +54,8 @@ interface LowtechieState {
   clients: Client[];
   /** Lịch sử đổi hạn (due_changes §8) — weekly review soi việc bị dời nhiều. */
   dueChanges: { taskId: string; oldDue?: string; newDue?: string; changedAt: string }[];
+  /** Chuyến vừa xóa, giữ vài phút để Hoàn tác (§5.9 6a — xóa mềm). */
+  tripTrash: { trip: Trip; events: CalEvent[]; deletedAt: string }[];
   events: CalEvent[];
   trips: Trip[];
   /** Món checklist Mai tự thêm, học cho các chuyến sau cùng điểm đến. */
@@ -90,6 +93,7 @@ interface LowtechieState {
 
   addEvent: (ev: Omit<CalEvent, "id">) => CalEvent;
   addEvents: (evs: Omit<CalEvent, "id">[]) => void;
+  removeEvent: (id: string) => void;
   removeChain: (eventId: string) => void;
   reschedule: (what: string, toWhenIso: string, keepTime: boolean) => "event" | "task" | null;
 
@@ -99,8 +103,15 @@ interface LowtechieState {
   /** Cập nhật chuyến đã có (cùng PNR quét lại → sửa giờ, không tạo bản sao §5.9). */
   updateTrip: (
     tripId: string,
-    patch: Partial<Pick<Trip, "departAt" | "returnAt" | "label" | "pnr" | "route" | "airportBufferMin">>,
+    patch: Partial<
+      Pick<Trip, "departAt" | "arriveAt" | "returnAt" | "label" | "pnr" | "route" | "airportBufferMin">
+    >,
   ) => void;
+  /** Xóa chuyến (6a): vào thùng rác vài phút để Hoàn tác, gỡ block chuỗi. */
+  deleteTrip: (tripId: string) => void;
+  undoDeleteTrip: (tripId: string) => void;
+  /** Lưu vé vào chuyến; trùng tên file → bản mới nhất, bản cũ giữ lịch sử. */
+  addTripAttachment: (tripId: string, filename: string) => TripAttachment | null;
   toggleTripItem: (tripId: string, itemId: string) => void;
   addCustomItem: (tripId: string, groupId: string, text: string) => void;
   removeTripItem: (tripId: string, itemId: string, custom: boolean) => void;
@@ -185,6 +196,7 @@ export const useStore = create<LowtechieState>()(
       categories: DEFAULT_CATEGORIES,
       clients: [],
       dueChanges: [],
+      tripTrash: [],
       events: [],
       trips: [],
       learnedItems: { tokyo: [], hcmc: [], bkk: [] },
@@ -303,6 +315,8 @@ export const useStore = create<LowtechieState>()(
       },
       addEvents: (evs) =>
         set((s) => ({ events: [...s.events, ...evs.map((e) => ({ ...e, id: uid() }))] })),
+      removeEvent: (id) =>
+        set((s) => ({ events: s.events.filter((e) => e.id !== id) })),
       removeChain: (eventId) =>
         set((s) => ({ events: s.events.filter((e) => e.chainOf !== eventId) })),
 
@@ -375,6 +389,63 @@ export const useStore = create<LowtechieState>()(
         set((s) => ({
           trips: s.trips.map((t) => (t.id === tripId ? { ...t, ...patch } : t)),
         })),
+      deleteTrip: (tripId) =>
+        set((s) => {
+          const trip = s.trips.find((t) => t.id === tripId);
+          if (!trip) return s;
+          const now = Date.now();
+          return {
+            trips: s.trips.filter((t) => t.id !== tripId),
+            events: s.events.filter((e) => e.chainOf !== tripId),
+            tripTrash: [
+              // Thùng rác chỉ giữ 10 phút / tối đa 5 chuyến.
+              ...s.tripTrash.filter((x) => now - Date.parse(x.deletedAt) < 10 * 60_000).slice(-4),
+              {
+                trip,
+                events: s.events.filter((e) => e.chainOf === tripId),
+                deletedAt: new Date(now).toISOString(),
+              },
+            ],
+          };
+        }),
+      undoDeleteTrip: (tripId) =>
+        set((s) => {
+          const entry = s.tripTrash.find((x) => x.trip.id === tripId);
+          if (!entry) return s;
+          return {
+            trips: [entry.trip, ...s.trips],
+            events: [...s.events, ...entry.events],
+            tripTrash: s.tripTrash.filter((x) => x.trip.id !== tripId),
+          };
+        }),
+      addTripAttachment: (tripId, filename) => {
+        const trip = get().trips.find((t) => t.id === tripId);
+        if (!trip) return null;
+        const olds = (trip.attachments ?? []).filter((a) => a.filename === filename);
+        const att: TripAttachment = {
+          id: uid(),
+          filename,
+          addedAt: new Date().toISOString(),
+          isLatest: true,
+          version: olds.length ? Math.max(...olds.map((a) => a.version)) + 1 : 1,
+        };
+        set((s) => ({
+          trips: s.trips.map((t) =>
+            t.id === tripId
+              ? {
+                  ...t,
+                  attachments: [
+                    att,
+                    ...(t.attachments ?? []).map((a) =>
+                      a.filename === filename ? { ...a, isLatest: false } : a,
+                    ),
+                  ],
+                }
+              : t,
+          ),
+        }));
+        return att;
+      },
       toggleTripItem: (tripId, itemId) =>
         set((s) => ({
           trips: s.trips.map((t) =>
@@ -603,7 +674,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 7,
+      version: 8,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -681,6 +752,10 @@ export const useStore = create<LowtechieState>()(
           // v7 (PRD v1.6): danh bạ khách hàng/đối tác + lịch sử đổi hạn.
           s.clients = s.clients ?? [];
           s.dueChanges = s.dueChanges ?? [];
+        }
+        if (version < 8) {
+          // v8 (PRD v2.0): thùng rác chuyến để hoàn tác xóa (6a).
+          s.tripTrash = s.tripTrash ?? [];
         }
         return s as LowtechieState;
       },

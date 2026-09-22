@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 1.6 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng.*
+*Phiên bản 2.0 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng; tạo lịch trong app → xem trước → book Google Calendar; kết nối Lark Mail, Lark Calendar và bot trong group chat Lark; chuỗi ngày bay đầy đủ hai đầu, chỉnh sửa được; sửa lỗi voice; xóa chuyến bay cũ; tự lưu vé PDF vào chuyến mới.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -51,9 +51,15 @@ Vấn đề cốt lõi không phải là thiếu công cụ to-do, mà là:
 ### 5.0 Nguyên tắc xuyên suốt: mọi thứ làm được bằng chat hoặc voice
 Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), bằng tiếng Việt, tiếng Thái, tiếng Anh hoặc trộn lẫn. Không có tính năng nào bắt buộc phải bấm qua nhiều màn hình; giao diện chỉ để xem, duyệt nhanh và chỉnh sửa.
 
-- **Kênh nhận lệnh:** ô chat và nút bông mai (giữ để nói) trong app; bot 1:1 trên Zalo, WhatsApp, Telegram (gõ hoặc gửi voice note); widget màn hình khóa / phím tắt điện thoại để nói ngay không cần mở app.
+- **Kênh nhận lệnh:** ô chat và nút bông mai (giữ để nói) trong app; bot 1:1 trên Lark, Zalo, WhatsApp, Telegram (gõ hoặc gửi voice note); widget màn hình khóa / phím tắt điện thoại để nói ngay không cần mở app.
 - **Lệnh nhiều ý trong một câu:** Lowtechie tách thành từng hành động và trình bày lại trong một thẻ tóm tắt.
 - **Xác nhận bằng chính kênh đó:** trả lời "ok", "lưu đi", "đổi sang thứ Năm" bằng chat hoặc voice đều được; không bắt mở app để bấm.
+- **Voice phải hoạt động ổn định trên điện thoại** (lỗi 22/9: voice trong prototype không hoạt động). Yêu cầu kỹ thuật:
+  - Không dựa vào nhận dạng giọng nói có sẵn của trình duyệt (hỗ trợ không đều, đặc biệt trên iPhone và với tiếng Việt/Thái). Ghi âm trên máy rồi gửi lên dịch vụ speech-to-text có hỗ trợ tiếng Việt, tiếng Thái, tiếng Anh.
+  - Xin quyền micro khi Mai bấm nút bông mai lần đầu, giải thích ngắn vì sao; nếu bị từ chối thì hiện hướng dẫn bật lại trong cài đặt.
+  - Web app phải chạy trên HTTPS; nếu app chạy bên trong một khung nhúng (iframe) thì khung đó phải được cấp quyền micro.
+  - Trạng thái rõ ràng: đang nghe / đang xử lý / lỗi (kèm lý do: không có quyền micro, mất mạng, không nghe rõ) và luôn có ô gõ chữ dự phòng.
+  - Voice note gửi qua bot Lark/Zalo/WhatsApp là đường dự phòng khi voice trong app lỗi.
 - **Phản hồi bằng giọng nói (tùy chọn):** khi Mai dùng voice lúc đang di chuyển, Lowtechie có thể đọc tóm tắt ngắn thay vì chỉ hiển thị chữ.
 - **Hỏi lại tối đa một câu** khi thiếu thông tin quan trọng.
 
@@ -63,6 +69,7 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 | Giao việc | "Thứ Ba nhắc chị gửi báo giá cho OKR, dự án Circle, gấp" |
 | Ảnh | *(gửi ảnh checklist)* + "việc của Circle, hạn thứ Sáu" |
 | Lịch & di chuyển | "Tối nay 7 giờ hẹn ở Thonglor, đi tàu" / "Mai đi ô tô ra sân bay nhé" |
+| Tạo & book lịch | "Thứ Năm 2 giờ họp với Đô thị, tạo link Meet" → xem trước → "ok book đi" |
 | Hồ sơ chuẩn bị | "Lần này chỉ cần 30 phút chuẩn bị thôi" |
 | Chuyến đi | "Thứ Tư tuần sau chị bay Tokyo 4 ngày" / "Thêm máy uốn tóc vào checklist Tokyo" |
 | Group chat | "Hôm nay group Circle Core có gì cần chị xử lý?" |
@@ -83,7 +90,7 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 Mai gửi ảnh, Lowtechie tự trích danh sách việc.
 
 - **Nguồn ảnh:** checklist viết tay trên giấy, bảng trắng sau buổi họp, sticky note, ảnh chụp màn hình (ghi chú điện thoại, tin nhắn, email, file Excel), tài liệu in.
-- **Kênh gửi:** chụp trong app, chia sẻ từ thư viện ảnh (share sheet), gửi vào bot Zalo/WhatsApp/Telegram 1:1. Gửi nhiều ảnh một lần được.
+- **Kênh gửi:** chụp trong app, chia sẻ từ thư viện ảnh (share sheet), gửi vào bot Lark/Zalo/WhatsApp/Telegram 1:1. Gửi nhiều ảnh một lần được.
 - **Ảnh + lời nhắn đi kèm:** gửi ảnh kèm chat hoặc voice, ví dụ "đây là việc của Circle, hạn thứ Sáu", để gắn dự án và hạn cho cả danh sách.
 - **Trích xuất:**
   - Từng dòng thành một việc; giữ cấu trúc nhóm/mục con nếu có.
@@ -251,11 +258,40 @@ Ví dụ: *"Ký lại hợp đồng website"* → **Circle · Hợp đồng · K
 - Weekly review có thể xem thời gian theo khách hàng của Circle, không chỉ theo dự án.
 
 ### 5.4 Calendar agent
-- Đọc/ghi Google Calendar.
+- Đọc/ghi **Google Calendar và Lark Calendar**.
+- **Hai hệ lịch, một góc nhìn:** app gộp lịch từ cả Google và Lark để hiển thị và để kiểm tra trùng giờ; khi tìm giờ trống, bận ở bất kỳ lịch nào cũng tính là bận.
+- **Lịch đích theo quy tắc:** Mai đặt mặc định theo dự án (ví dụ Circle → Lark Calendar, Cá nhân / Học tập → Google Calendar); thẻ xem trước luôn hiện lịch đích và cho đổi một chạm.
+- **Không tạo trùng:** một sự kiện chỉ được book vào một lịch đích. Nếu Mai đã tự đồng bộ hai lịch với nhau (đăng ký lịch chéo), app nhận ra bản sao và không tính trùng hai lần.
+- Link họp online: Google Meet khi book vào Google Calendar, Lark Meeting (Lark VC) khi book vào Lark Calendar.
 - Tìm slot trống có tính múi giờ, thời gian di chuyển, và "vùng bảo vệ" (deep work, nghỉ).
 - **Time-blocking**: tự đặt block cho task lớn trước deadline.
 - **Mọi hành động ghi lịch đều cần Mai bấm duyệt** ở v1; cho phép tự động hóa dần theo từng loại (ví dụ: routine cá nhân được tự đặt).
 - Đặt lịch với người khác: soạn tin đề xuất giờ, Mai duyệt trước khi gửi.
+
+**Tạo lịch trong app → xem trước → book lên Google Calendar**
+Mai tạo lịch bằng chat, voice hoặc form trong app (ví dụ *"Thứ Năm 2 giờ chiều họp với Đô thị ở Thonglor, mời anh Tuấn"*). Lowtechie **không ghi gì lên Google Calendar** cho đến khi Mai xem **thẻ xem trước** và bấm Book.
+
+*Thẻ xem trước gồm:*
+- Tiêu đề sự kiện
+- Ngày, giờ bắt đầu – kết thúc, thời lượng, múi giờ (nếu khác thành phố Mai đang ở thì hiện cả hai giờ)
+- Lặp lại (nếu có): hằng tuần, hằng tháng…
+- Địa điểm (khớp Google Maps) hoặc **link họp online** (tự tạo Google Meet nếu Mai chọn)
+- Người được mời, và ghi rõ **"Sẽ gửi email mời cho N người"**
+- Nhắc nhở (mặc định theo loại sự kiện, chỉnh được)
+- Dự án · category · khách hàng, màu lịch theo dự án
+- Lịch đích: Google Calendar hoặc Lark Calendar (và lịch con cụ thể), theo quy tắc mặc định của dự án
+- Ghi chú mô tả và file đính kèm (nếu có)
+- **Chuỗi block đi kèm** (5.4.1): Chuẩn bị → Di chuyển → sự kiện, hiện riêng từng block, mỗi block bật/tắt được
+- **Cảnh báo:** trùng lịch, nằm trong vùng bảo vệ (deep work), rơi vào ngày bay, hoặc không kịp di chuyển từ cuộc hẹn trước
+
+*Nút:* **Book** · **Sửa** · **Hủy**. Xác nhận hoặc sửa bằng chat/voice cũng được ("ok book đi", "đổi sang 3 giờ", "bỏ block di chuyển", "đừng mời anh Tuấn").
+
+*Quy tắc:*
+- **Gửi lời mời cho người khác luôn cần xác nhận riêng**, kể cả sau này khi Mai bật chế độ tự động cho các loại lịch khác, vì hành động này gửi email ra ngoài.
+- Sau khi book: hiện "Đã book" kèm link mở trong Google Calendar, và nút **Hoàn tác** trong vài phút (xóa sự kiện và các block đi kèm; nếu đã gửi lời mời thì hủy kèm thông báo).
+- **Đồng bộ hai chiều:** Mai sửa hay xóa sự kiện trực tiếp trên Google Calendar → app cập nhật theo, và chuỗi block chuẩn bị/di chuyển tự dời hoặc hỏi lại.
+- Sửa sự kiện đã book cũng đi qua thẻ xem trước, chỉ hiện phần thay đổi (trước → sau).
+- **Tự động dần:** Mai có thể bật "book thẳng, báo sau" cho từng loại lịch không mời ai (ví dụ block học tiếng Thái, spa định kỳ). Mặc định luôn hỏi.
 
 ### 5.4.1 Điều phối thời gian: chuẩn bị + di chuyển
 Mục tiêu: Mai chỉ cần nói "hẹn 19:00 ở Thonglor" hoặc "bay 10:30 từ Suvarnabhumi", Lowtechie tự tính ngược và khóa lịch để biết **khi nào bắt đầu chuẩn bị** và **khi nào phải đi**.
@@ -281,7 +317,7 @@ Kết quả trên lịch: 3 block liên tiếp, **Chuẩn bị** → **Di chuy�
 Lowtechie gợi ý hồ sơ theo loại sự kiện; Mai đổi bằng một chạm.
 
 **Sân bay**
-- Chuyến bay có block riêng: chuẩn bị + di chuyển + **đệm sân bay** (mặc định 2 tiếng 30 cho bay quốc tế, 1 tiếng 30 nội địa; Mai chỉnh được theo sân bay, có hành lý ký gửi hay không, có fast track hay không).
+- Chuyến bay dùng **chuỗi ngày bay đầy đủ hai đầu** (xem mục 5.9, "Chuỗi ngày bay").
 - Đọc email xác nhận vé (Gmail) để lấy giờ bay, sân bay, nhà ga; giờ bay luôn lưu theo múi giờ địa phương của sân bay đi/đến.
 - Đổi giờ bay → cả chuỗi block tự dời theo.
 
@@ -328,6 +364,35 @@ Giờ hẹn
 - Lưu kèm trích dẫn gốc để kiểm chứng.
 - Xem mục 8 về giới hạn kỹ thuật — **đây là phần rủi ro nhất của sản phẩm.**
 
+### 5.5.1 Lark: group chat, email và lịch
+Lark là kênh **chính thức và dễ tích hợp nhất** trong các kênh chat của Mai: bot được thêm vào group công khai, có API đọc tin nhắn, gửi tin, đọc/ghi lịch. Nên ưu tiên đưa các group làm việc cốt lõi (Circle, Sorene, cộng sự) lên Lark.
+
+**Bot Lowtechie trong group chat Lark**
+- Mai (hoặc admin group) thêm bot "Mai Lowtechie" vào group; bot hiện diện công khai, thông báo một lần khi vào group rằng nó ghi nhận việc và quyết định.
+- **Hai chế độ theo từng group** (Mai chọn):
+  - **Chỉ khi được gọi:** bot chỉ đọc tin nhắn có @Lowtechie ("@Lowtechie ghi việc này: Linh gửi proposal cho Đô thị thứ Sáu"). Quyền tối thiểu, phù hợp group có khách hàng.
+  - **Đọc toàn bộ group:** bot đọc mọi tin nhắn để tự trích việc, quyết định, câu hỏi bỏ ngỏ. Cần quyền đọc toàn bộ tin nhắn group của Lark và admin tổ chức duyệt; chỉ bật cho group nội bộ đã được mọi người đồng ý.
+- **Gắn group với dự án và khách hàng** (ví dụ group "Circle × Đô thị" → Circle · khách hàng Đô thị) để việc trích ra được tự điền đúng.
+- Việc trích ra đi qua **Hộp duyệt** như mọi nguồn khác (5.2.1): kèm link về tin nhắn gốc trong Lark, deadline, dự án / category / khách hàng.
+- Đọc cả file và ảnh gửi trong group (hợp đồng, ảnh bảng trắng) để trích việc (5.1.1).
+- **Lưu lại:** tóm tắt cuối ngày của mỗi group, danh sách việc và decision log lưu vào app theo dự án, đồng bộ sang Google Sheets; tùy chọn lưu recap vào Lark Docs của group.
+- **Bot có thể trả lời trong group** khi được gọi: "@Lowtechie việc của Linh tuần này là gì?". Chỉ trả lời bằng dữ liệu cấp Dự án, không bao giờ lộ việc Riêng tư của Mai.
+- Gửi tin vào group (nhắc hạn, gửi recap) luôn cần Mai xác nhận trước.
+
+**Lark Mail**
+- Đọc email trong hộp thư Lark giống Gmail: trích việc từ email, quét vé máy bay và xác nhận đặt chỗ (5.9), nhận lời mời họp.
+- Email gắn với khách hàng (theo tên miền hoặc người gửi trong danh bạ, 5.3.2) được tự điền khách hàng.
+- Soạn email trả lời hoặc follow-up: Lowtechie soạn nháp, Mai duyệt trước khi gửi.
+
+**Lark Calendar**
+- Đọc/ghi như Google Calendar (5.4): thẻ xem trước trước khi book, chuỗi chuẩn bị + di chuyển, đồng bộ hai chiều, hoàn tác.
+- Lời mời họp nhận qua Lark Calendar được đưa vào lịch tổng và kiểm tra trùng giờ.
+
+**Thiết lập**
+- Tạo một app tùy chỉnh trên Lark Open Platform (bản quốc tế larksuite.com) trong tổ chức Lark của Mai, bật khả năng bot, đăng ký sự kiện nhận tin nhắn, xin các quyền: nhắn tin, đọc tin @ trong group, (tùy chọn) đọc toàn bộ tin group, lịch, mail. Quyền nhạy cảm cần admin tổ chức duyệt.
+- Mai đăng nhập Lark một lần (OAuth) để app truy cập lịch và hộp thư cá nhân.
+- Cần kiểm tra khi build: phạm vi Mail API mà tổ chức Lark của Mai được phép dùng, và giới hạn tần suất gọi API.
+
 ### 5.6 Không gian chung & assistant của cộng sự
 - Mô hình quyền 3 lớp: **Riêng tư** (chỉ Mai) / **Dự án** (thành viên dự án) / **Công khai trong team**.
 - Mỗi cộng sự có assistant riêng, truy vấn được dữ liệu cấp Dự án họ tham gia.
@@ -353,7 +418,7 @@ Giờ hẹn
 Mục tiêu: mỗi chuyến bay tự có kế hoạch chuẩn bị, Mai không phải nhớ gì.
 
 **Tạo chuyến đi**
-- Tự động khi Lowtechie đọc được email xác nhận vé (Gmail), hoặc khi Mai nói/gõ ("Thứ Tư tuần sau chị bay Tokyo 4 ngày").
+- Tự động khi Lowtechie đọc được email xác nhận vé (Gmail hoặc Lark Mail), hoặc khi Mai nói/gõ ("Thứ Tư tuần sau chị bay Tokyo 4 ngày").
 - Một chuyến gồm: điểm đến, giờ bay đi/về (theo múi giờ địa phương), nơi ở, mục đích (gặp khách / cá nhân), ai đi cùng.
 
 **Trích xuất vé máy bay (bắt buộc đúng ngày, đúng chuyến)**
@@ -378,19 +443,36 @@ Mã đặt chỗ (PNR) · số vé điện tử · tên hành khách · hãng + 
 - Ngày bay ≥ hôm nay; giờ đến sau giờ đi sau khi quy đổi múi giờ; thời gian bay hợp lý với tuyến; mã sân bay hợp lệ.
 - Đối chiếu số hiệu chuyến với dữ liệu lịch bay của một dịch vụ dữ liệu chuyến bay; lệch giờ hoặc lệch sân bay → cảnh báo.
 - Trùng với chuyến đã lưu (cùng PNR) → cập nhật chuyến cũ, không tạo bản sao.
-- **Thẻ xác nhận luôn hiện dòng mốc thời gian**, ví dụ: *"Hôm nay: Thứ Ba 22/9/2026, giờ Bangkok. Đã chọn: [số hiệu], BKK → HND, Thứ Tư 30/9 22:35 → Thứ Năm 1/10 06:50 (+1). Bỏ qua: chặng 15/9 (đã bay)."* Mai thấy ngay nếu hệ thống chọn sai.
+- **Thẻ xác nhận kết quả quét (hiện một lần, sau khi quét, không nằm cố định trên màn Chuyến đi) luôn hiện dòng mốc thời gian**, ví dụ: *"Hôm nay: Thứ Ba 22/9/2026, giờ Bangkok. Đã chọn: [số hiệu], BKK → HND, Thứ Tư 30/9 22:35 → Thứ Năm 1/10 06:50 (+1). Bỏ qua: chặng 15/9 (đã bay)."* Mai thấy ngay nếu hệ thống chọn sai.
 - Mai sửa bằng chat/voice ("không phải chuyến này, lấy chuyến ngày 30").
 
 *5. Sau khi lưu*
-- Tạo sự kiện Google Calendar đúng múi giờ từng đầu (giờ đi theo giờ nơi đi, giờ đến theo giờ nơi đến).
+- Tạo sự kiện trên lịch đích (Google hoặc Lark Calendar) đúng múi giờ từng đầu (giờ đi theo giờ nơi đi, giờ đến theo giờ nơi đến).
 - Kích hoạt chuỗi chuẩn bị → di chuyển → đệm sân bay (5.4.1) và checklist theo điểm đến.
 - **Theo dõi chuyến bay thời gian thực** từ 24 giờ trước giờ bay: trễ, đổi cổng, đổi nhà ga, hủy → báo Mai và tự dời chuỗi lịch.
 
 *6. Đính kèm vé*
-- Lưu file gốc (PDF, ảnh, email) vào chuyến đi trong app và vào thư mục Drive theo chuyến; gắn link vào sự kiện lịch.
+- **Tự lưu vé PDF khi trích xuất chuyến mới:** khi Mai xác nhận chuyến trích từ email (Gmail / Lark Mail), file PDF vé đính kèm trong email được **tự động lưu vào đúng chuyến đó**, không cần thao tác thêm.
+  - Email có nhiều PDF (vé, hóa đơn, điều kiện vé) → lưu tất cả, gắn nhãn từng loại; file vé đặt lên đầu.
+  - Email không có PDF (vé nằm trong nội dung email) → lưu nội dung email thành một file PDF.
+  - Vé đến từ ảnh chụp / ảnh màn hình → lưu chính ảnh đó.
+  - Vé khứ hồi → cùng một file được gắn vào cả chặng đi và chặng về (không nhân bản file).
+  - Tên file chuẩn: `Ve_[tuyến]_[ngày]_[mã đặt chỗ].pdf`, ví dụ `Ve_SGN-BKK_2026-10-02_OADC5J.pdf`.
+  - Email đổi giờ / đổi vé sau đó → lưu thêm phiên bản mới, đánh dấu "mới nhất", giữ bản cũ trong lịch sử của chuyến.
+- Ngoài app, file cũng được lưu vào thư mục Drive theo chuyến và gắn link vào sự kiện lịch.
 - Màn chuyến đi có nút **Mở vé** một chạm, xem được **khi không có mạng**; boarding pass có mã QR hiện ở chế độ sáng tối đa.
 - Nhiều file cho một chuyến (vé, boarding pass, xác nhận khách sạn, bảo hiểm) được gom chung.
 - Vé chứa thông tin cá nhân → lưu mã hóa, chỉ Mai xem (không chia sẻ sang không gian dự án), tự xóa sau khi chuyến kết thúc một thời gian (ví dụ 90 ngày), trừ khi Mai chọn giữ.
+
+*6a. Xóa chuyến bay cũ*
+- Mai xóa được **bất kỳ chuyến nào**: chuyến đã bay trong mục Lịch sử, hoặc chuyến sắp tới bị hủy / nhập nhầm.
+- Cách xóa: vuốt trái trên chuyến trong danh sách, hoặc nút "Xóa chuyến" trong chi tiết chuyến, hoặc chat/voice ("xóa chuyến HCMC 7/9", "xóa hết chuyến đã bay trước tháng 9").
+- **Xóa nhiều chuyến một lần:** chế độ chọn nhiều trong Lịch sử.
+- **Thẻ xác nhận trước khi xóa** liệt kê những gì sẽ bị xóa theo: các block chuỗi ngày bay trên Google/Lark Calendar, nhắc việc, checklist của chuyến, file vé đã lưu. Mai chọn giữ lại file vé hay xóa luôn (mặc định: xóa chuyến, giữ file vé trong kho tài liệu).
+- Chuyến sắp tới có sự kiện đã book trên lịch → xóa luôn các sự kiện đó; nếu có lời mời đã gửi cho người khác thì hỏi riêng.
+- **Hoàn tác** trong vài phút sau khi xóa.
+- Xóa chuyến trong app không hủy vé với hãng bay; thẻ xác nhận ghi rõ điều này với chuyến sắp tới.
+- Tùy chọn: tự dọn chuyến đã bay sau một khoảng thời gian Mai chọn (ví dụ 90 ngày), mặc định tắt.
 
 *6b. Quy tắc kỹ thuật rút ra từ lỗi thật (vé OADC5J, 22/9)*
 Lỗi: vé khứ hồi có 2 chặng (VU-130 BKK → SGN 7/9 đã bay; VU-131 SGN → BKK 2/10 sắp tới). App bỏ qua đúng chặng 7/9 nhưng không trích chặng 2/10, và màn Chuyến đi vẫn hiện chuỗi ngày bay 7/9.
@@ -424,8 +506,57 @@ Vé khứ hồi đã bay chặng đi · email đổi vé (cũ + mới) · vé kh
 | Sáng ngày bay | Kiểm tra hộ chiếu, điện thoại, ví; kiểm tra chuyến bay có đổi giờ; tắt điện, bình nóng lạnh, điều hòa; đổ rác, tưới cây; khóa cửa |
 | Ở sân bay | Có mặt trước 2 tiếng 30 (quốc tế); nhắn giờ đến cho người đón/cộng sự |
 
+**Màn Chuyến đi: gọn, không ghi chú thừa**
+- Màn chỉ gồm: nút quét vé, tab các chuyến **sắp tới**, chuỗi ngày bay của chuyến đang chọn, checklist.
+- **Bỏ khỏi màn:** dòng "Hôm nay: …", câu "Tìm thấy … — Mai duyệt thì mình mới tạo", danh sách "Bỏ qua: …". Những thông tin này chỉ hiện **một lần** trong thẻ kết quả quét vé; chặng đã bay và lịch trình cũ nằm trong mục **Lịch sử**.
+- **Không bao giờ hiện tab của chuyến đã bay** (lỗi còn thấy 22/9: tab "HCMC · 7/9" vẫn hiện cạnh "Về Bangkok · 2/10").
+- Tên tab và tiêu đề chuyến dùng tuyến bay: "SGN → BKK · 2/10", không dùng "Cất cánh Về Bangkok".
+
+**Chuỗi ngày bay (hai đầu, chỉnh sửa được)**
+Chuỗi đầy đủ gồm các block theo đúng thứ tự thời gian:
+
+| # | Block | Mặc định | Cách tính |
+|---|---|---|---|
+| 1 | Chuẩn bị | Theo hồ sơ chuẩn bị (1 tiếng 30) | Tính ngược từ giờ rời nơi ở |
+| 2 | Di chuyển ra sân bay | Chọn **điểm xuất phát + phương tiện** | **Google Maps** tính theo phương tiện và giờ đi dự kiến |
+| 3 | Check-in, gửi hành lý, an ninh & xuất cảnh | Theo quy định trên vé nếu có (vé Vietravel: có mặt tại quầy ít nhất 2 tiếng), mặc định 2 tiếng 30 quốc tế / 1 tiếng 30 nội địa | Có mặt tại sân bay trước giờ bay đúng khoảng này |
+| 4 | Bay | Giờ đi → giờ đến trên vé | Theo giờ địa phương từng đầu |
+| 5 | Hạ cánh, nhập cảnh, lấy hành lý, ra khỏi sân bay | 60 phút quốc tế có hành lý ký gửi / 30 phút không ký gửi / 30 phút nội địa | Mai chỉnh theo sân bay (ví dụ Suvarnabhumi giờ cao điểm lâu hơn) |
+| 6 | Di chuyển sau khi đáp | Chọn **điểm đến + phương tiện** (về nhà, khách sạn, thẳng tới cuộc hẹn) | **Google Maps** tính theo giờ ra khỏi sân bay |
+| → | Giờ về đến nơi | | Hiện rõ, và dùng để xếp việc tiếp theo trong ngày |
+
+**Phương tiện (block 2 và 6)**
+- Chọn một chạm: Grab / taxi · ô tô riêng · tàu (Airport Rail Link, BTS/MRT, metro Tokyo) · xe máy · người đón.
+- Điểm xuất phát / điểm đến chọn từ địa điểm đã lưu (Nhà Bangkok, nơi ở HCMC, khách sạn Tokyo…) hoặc gõ địa chỉ; mặc định theo thành phố của chặng bay (chặng từ SGN tính từ nơi ở tại HCMC, không phải nhà Bangkok).
+- Hiện: thời gian dự kiến, quãng đường, giờ nên đi, và nút **Mở trong Google Maps**. Kiểm tra lại giao thông thực tế trước giờ đi như 5.4.1.
+
+**Chỉnh sửa theo tình hình thực tế**
+- **Mọi block sửa được:** giờ bắt đầu, thời lượng, tên block, phương tiện, điểm đi/đến.
+- **Thêm / xóa / tắt block** (ví dụ thêm "Ăn trưa ở sân bay", tắt "Chuẩn bị" khi đi thẳng từ cuộc họp).
+- **Tự tính lại dây chuyền:** sửa một block → các block trước (chuẩn bị, rời nhà) và sau (giờ về đến nơi) tự dời theo; các mốc cứng (giờ bay) không bị đổi.
+- **Khóa giờ:** Mai khóa một block ("rời nhà đúng 8:30") để hệ thống tính các block còn lại quanh mốc đó.
+- Sửa bằng chat/voice: "check-in chỉ cần 1 tiếng 30", "về thẳng quán ở Thonglor, đi Grab", "thêm 30 phút ăn trưa ở sân bay".
+- Sau khi khóa chuỗi vào lịch, sửa tiếp vẫn đi qua thẻ xem trước (5.4) và cập nhật lịch.
+
+**Kiểm tra bắt buộc trước khi hiện chuỗi** (lỗi thấy 22/9: chuyến bay 11:50 nhưng "Chuẩn bị 14:40–16:10", "Ra sân bay 16:10–9:20", ô di chuyển 1020 phút)
+- Các block phải **liên tục và tăng dần theo thời gian**; block nào kết thúc sau khi block kế tiếp bắt đầu → báo lỗi, không hiện chuỗi sai.
+- Block rơi sang **ngày khác** phải hiện kèm ngày (ví dụ "Thứ Năm 1/10, 22:00").
+- Thời gian di chuyển bất thường (ví dụ trên 3 tiếng trong cùng thành phố) → cảnh báo và hỏi lại; kiểm tra đơn vị (phút / giây) từ Google Maps.
+- Nếu giờ bắt đầu chuẩn bị rơi vào ban đêm (0:00–5:00) → hỏi Mai có muốn đổi phương tiện, rút ngắn chuẩn bị hoặc chấp nhận.
+
+**Ví dụ chuỗi đúng cho VU-131, 2/10** (số phút di chuyển chỉ minh họa, thực tế lấy từ Google Maps)
+| Giờ | Block |
+|---|---|
+| 07:10–08:40 | Chuẩn bị |
+| 08:40–09:20 | Di chuyển ra Tân Sơn Nhất (Grab, ~30 phút + 10 phút đệm) |
+| 09:20–11:50 | Check-in, gửi hành lý, an ninh & xuất cảnh (có mặt quầy trước 9:50 theo vé) |
+| 11:50–13:25 | Bay SGN → BKK |
+| 13:25–14:25 | Nhập cảnh (mã QR TDAC nếu áp dụng), lấy hành lý, ra sảnh |
+| 14:25–15:05 | Di chuyển về Nhà Bangkok (taxi/Grab, Google Maps) |
+| 15:05 | Về đến nhà |
+
 **Kết nối với các module khác**
-- Chuỗi lịch ngày bay dùng module 5.4.1: Chuẩn bị (hồ sơ 1 tiếng 30) → Di chuyển ra sân bay → Đệm sân bay → Chuyến bay. Riêng sân bay, Lowtechie hiện thêm phương án ô tô bên cạnh phương án tàu.
+- Chuỗi ngày bay dùng các quy tắc của 5.4.1 (hồ sơ chuẩn bị, Google Maps, cảnh báo giờ đi). Riêng ra sân bay, Lowtechie hiện thêm phương án ô tô bên cạnh phương án tàu.
 - Tối hôm trước, brief buổi tối chuyển thành "brief chuyến bay": giờ phải dậy, giờ phải đi, những món còn chưa tick.
 - Ngày về: tự tạo việc "gửi recap chuyến đi / follow-up khách đã gặp".
 - Yêu cầu nhập cảnh thay đổi theo quốc tịch và theo thời gian; Lowtechie luôn nhắc kiểm tra trang chính thức, không khẳng định thay.
@@ -528,7 +659,7 @@ flowchart LR
         │
 [Jobs]  Scheduler (cron / Trigger.dev / Inngest): brief, tóm tắt group, follow-up
         │
-[Tích hợp]  Google Calendar · Google Drive/Sheets · Gmail · Zalo · WhatsApp · Speech-to-text
+[Tích hợp]  Google Calendar · Lark Calendar · Gmail · Lark Mail · Google Drive/Sheets · Lark (bot group) · Zalo · WhatsApp · Google Maps · Speech-to-text
 ```
 
 Ghi chú lựa chọn:
@@ -551,7 +682,9 @@ Ghi chú lựa chọn:
 - `tasks` (id, project_id, category_id, title, owner_id, assignee_id, due_at, due_type, priority, status, est_minutes, energy, source_channel, source_ref, source_quote, confidence, visibility)
 - `waiting_on` (task_id, person_id, follow_up_at)
 - `routines` (title, rrule, project_id)
-- `events` (calendar_event_id, task_id)
+- `connected_accounts` (provider: google/lark, scopes, calendars, mailbox)
+- `chat_groups` (provider: lark/zalo/whatsapp, group_id, name, mode: mention_only/read_all, project_id, client_id, consent_noted_at)
+- `events` (calendar_event_id, provider, calendar_id, task_id, project_id, client_id, status: draft/booked/cancelled, invites_sent, chain_block_ids, booked_at)
 - `messages_ingested` (channel, group_id, sender, text, ts, processed)
 - `decisions` (project_id, text, decided_at, source_ref)
 - `people` (name, org, channels, last_contact_at)
@@ -561,7 +694,8 @@ Ghi chú lựa chọn:
 - `event_chains` (event_id, prep_block_id, travel_block_id, origin_place_id, mode, last_checked_at)
 - `trips` (destination, depart_at, return_at, stay_place_id, purpose, status)
 - `flight_segments` (trip_id, pnr, ticket_no, airline, flight_no, from_iata, from_terminal, to_iata, to_terminal, depart_local, depart_tz, arrive_local, arrive_tz, seat, baggage, status: upcoming/flown/cancelled/changed, verified_against_schedule, source_version)
-- `trip_attachments` (trip_id, type: ticket/boarding_pass/hotel/insurance, file_ref, offline_cached, expires_at)
+- `trip_attachments` (trip_id, segment_ids, type: ticket/boarding_pass/invoice/hotel/insurance, file_ref, source_email_id, file_name, version, is_latest, offline_cached, expires_at)
+- `trips` bổ sung: deleted_at (xóa mềm để hoàn tác)
 - `checklist_templates` (destination, group, item, hint, learned_from_user)
 - `trip_checklist_items` (trip_id, template_item_id / custom_text, done)
 - `voice_inputs` (audio_ref, transcript, language, parsed_actions, channel)
@@ -580,7 +714,8 @@ Ghi chú lựa chọn:
 | **Google Maps (Routes, Places)** | Thời gian di chuyển có dự báo giao thông (kể cả mô hình "ngày xấu"), tìm địa điểm, deep link chỉ đường | Chọn giờ đến chỉ hỗ trợ phương tiện công cộng; tính phí theo lượt gọi | Làm ở v1 cùng Calendar; cache tuyến quen để giảm chi phí |
 | **Họp online (Meet/Zoom/Teams)** | Dịch vụ meeting-bot (ví dụ Recall.ai) cho bot vào họp chỉ bằng link, trả về ghi âm và lời chép theo người nói; Zoom còn có luồng media không cần bot | Bot hiện tên trong danh sách người họp, có thể cần chủ trì cho vào, một số tổ chức chặn bot; tính phí theo phút | Dùng dịch vụ bên ngoài, không tự xây bot. Tự động hỏi trước mỗi cuộc họp |
 | **Họp offline** | Ghi âm trên điện thoại + speech-to-text có tách người nói | Chất lượng phụ thuộc micro, phòng ồn, và độ chính xác tiếng Việt/Thái | Test 3 nhà cung cấp STT với ghi âm thật trước khi chọn |
-| **Telegram / Lark / Slack** | API group đầy đủ, bot đọc được group khi được thêm vào | Phải thuyết phục team chuyển kênh | Cân nhắc nghiêm túc cho các group làm việc cốt lõi |
+| **Lark (group chat, Mail, Calendar)** | Bot chính thức được thêm vào group; mặc định chỉ nhận tin nhắn @bot, đọc toàn bộ tin group cần thêm quyền; API lịch và mail | Quyền đọc toàn bộ group và quyền mail cần admin tổ chức duyệt | **Kênh ưu tiên** cho group làm việc; làm ở giai đoạn 2, trước Zalo/WhatsApp |
+| **Telegram / Slack** | API group đầy đủ, bot đọc được group khi được thêm vào | Phải thuyết phục team chuyển kênh | Phương án dự phòng |
 
 **Ghi âm cuộc họp:** luôn thông báo cho người tham dự; bot online dùng tên rõ ràng "Mai Lowtechie (ghi chú)"; bản ghi âm gốc có thời hạn lưu (ví dụ 30 ngày), recap lưu lâu dài.
 
@@ -595,7 +730,7 @@ Dùng Claude (đã kết nối Google Calendar, Drive, Gmail) + một Project l�
 Capture **chat + voice + ảnh** cho mọi module (app và bot Telegram/Zalo 1:1) → task engine + **kiểm tra trước khi lưu + phân loại dự án/category** + triage inbox → dự án → Google Calendar (có duyệt) → sync Google Sheets → **tự khóa block chuẩn bị + di chuyển (Google Maps)** → brief sáng → **chuyến đi + checklist bay** → **ghi âm họp offline + recap** (rẻ, giá trị cao, không phụ thuộc bên thứ ba). Chỉ Mai dùng.
 
 **Giai đoạn 2 — Ingest chat (3–4 tuần)**
-Bot họp online qua dịch vụ meeting-bot; bot 1:1 WhatsApp/Zalo để forward; thử nghiệm ingest 1–2 group (Telegram hoặc tài khoản Zalo phụ) có sự đồng ý; tóm tắt cuối ngày; waiting-on & follow-up.
+**Bot Lark trong group chat** (bắt đầu với chế độ @Lowtechie, sau đó đọc toàn bộ cho group nội bộ) + **Lark Mail** + **Lark Calendar**; bot họp online qua dịch vụ meeting-bot; bot 1:1 WhatsApp/Zalo để forward; thử nghiệm ingest Zalo (tài khoản phụ) có sự đồng ý; tóm tắt cuối ngày; waiting-on & follow-up.
 
 **Giai đoạn 3 — Team (4–6 tuần)**
 Tài khoản cho cộng sự, phân quyền RLS, giao việc chéo, assistant riêng mỗi người, weekly review theo dự án.

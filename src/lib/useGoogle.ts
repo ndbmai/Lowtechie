@@ -118,6 +118,8 @@ export interface FlightTripCandidate {
   destination: "tokyo" | "hcmc" | "bkk" | "other";
   destinationName?: string;
   departAt: string;
+  /** Giờ hạ cánh chặng đi — cho chuỗi ngày bay hai đầu (v2.0). */
+  arriveAt?: string;
   returnAt?: string;
   pnr?: string;
   /** "SGN (nhà ga 2) → BKK" — hướng bay rõ ràng (PRD §5.9 6b). */
@@ -129,11 +131,21 @@ export interface FlightTripCandidate {
   confidence: number;
 }
 
+/** Ref file PDF trong email vé — tải về khi Mai xác nhận chuyến (v2.0). */
+export interface GmailAttachmentRef {
+  messageId: string;
+  attachmentId: string;
+  filename: string;
+  size: number;
+  subject: string;
+}
+
 export async function fetchFlightTrips(): Promise<
   | {
       ok: true;
       trips: FlightTripCandidate[];
       skipped: string[];
+      attachments: GmailAttachmentRef[];
       scanned: number;
       todayLocal: string;
     }
@@ -154,6 +166,7 @@ export async function fetchFlightTrips(): Promise<
       | {
           trips?: FlightTripCandidate[];
           skipped?: string[];
+          attachments?: GmailAttachmentRef[];
           scanned?: number;
           todayLocal?: string;
           detail?: string;
@@ -164,11 +177,30 @@ export async function fetchFlightTrips(): Promise<
       ok: true,
       trips: body?.trips ?? [],
       skipped: body?.skipped ?? [],
+      attachments: body?.attachments ?? [],
       scanned: body?.scanned ?? 0,
       todayLocal: body?.todayLocal ?? "",
     };
   } catch {
     return { ok: false, reason: "failed" };
+  }
+}
+
+/** Tải một file đính kèm Gmail thành Blob (PDF vé); null khi lỗi. */
+export async function fetchGmailAttachment(ref: GmailAttachmentRef): Promise<Blob | null> {
+  try {
+    const p = new URLSearchParams({ messageId: ref.messageId, attachmentId: ref.attachmentId });
+    const res = await fetch(`/api/gmail/attachment?${p}`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { data?: string };
+    if (!body.data) return null;
+    const bin = atob(body.data);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const type = /\.pdf$/i.test(ref.filename) ? "application/pdf" : "application/octet-stream";
+    return new Blob([bytes], { type });
+  } catch {
+    return null;
   }
 }
 

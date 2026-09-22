@@ -16,5 +16,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     maps: Boolean(process.env.GOOGLE_MAPS_API_KEY),
     /** Server có ANTHROPIC_API_KEY chưa (đọc ảnh, trích vé bay). */
     claude: Boolean(process.env.ANTHROPIC_API_KEY),
+    /** Server có OPENAI_API_KEY chưa (voice → chữ, §5.0 v2.0). */
+    stt: Boolean(process.env.OPENAI_API_KEY),
   });
 }

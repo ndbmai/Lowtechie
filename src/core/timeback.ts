@@ -147,6 +147,159 @@ export interface FlightOpts {
   buffers?: Partial<Buffers>;
 }
 
+// ── Chuỗi ngày bay ĐẦY ĐỦ HAI ĐẦU (PRD §5.9 v2.0) ──────────────────────
+//
+// 6 block theo thứ tự thời gian: Chuẩn bị → Ra sân bay → Check-in/an ninh
+// → Bay → Nhập cảnh/hành lý → Di chuyển sau khi đáp → "giờ về đến nơi".
+// Mọi block chỉnh được ở UI; các mốc cứng (giờ bay trên vé) không đổi.
+
+export interface FullFlightBlock {
+  key: "prep" | "toAirport" | "checkin" | "flight" | "arrival" | "fromAirport";
+  label: string;
+  startAt: string;
+  endAt: string;
+}
+
+export interface FullFlightOpts {
+  /** Giờ cất cánh (ISO kèm offset sân bay đi) — mốc cứng. */
+  departureAt: string;
+  /** Giờ hạ cánh (ISO kèm offset sân bay đến) — thiếu thì chuỗi dừng ở cất cánh. */
+  arrivalAt?: string;
+  international: boolean;
+  /** 0 = tắt block Chuẩn bị (đi thẳng từ nơi khác). */
+  prepMinutes: number;
+  travelToAirportMin: number;
+  /** Quy định trên vé ("có mặt trước X phút") — luôn lấy MAX với mặc định. */
+  ticketCheckinMin?: number;
+  /** Mai tự chỉnh block check-in → dùng ĐÚNG số này, bỏ qua max/mặc định. */
+  checkinOverrideMin?: number;
+  /** Nhập cảnh + lấy hành lý + ra sảnh; mặc định 60 quốc tế / 30 nội địa. */
+  arrivalProcessMin?: number;
+  /** 0/không có = tắt block Di chuyển sau khi đáp. */
+  travelAfterMin?: number;
+}
+
+export interface FullFlightChainResult {
+  blocks: FullFlightBlock[];
+  prepStartAt: string;
+  leaveAt: string;
+  airportArriveAt: string;
+  /** Giờ về đến nơi (sau block cuối bên đầu đến) — chỉ khi biết giờ hạ cánh. */
+  arriveAt?: string;
+  /** Đệm check-in đã dùng = max(quy định vé, mặc định). */
+  checkinMin: number;
+  /** Cảnh báo nhẹ: nửa đêm, di chuyển bất thường — Mai vẫn quyết. */
+  warnings: string[];
+}
+
+/** Giờ địa phương (0–23) của một mốc, theo offset ghi trong ISO gốc. */
+function localHourAt(ms: number, isoWithOffset: string): number {
+  const m = isoWithOffset.match(/([+-])(\d{2}):(\d{2})$/);
+  const offsetMin = m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
+  return new Date(ms + offsetMin * 60_000).getUTCHours();
+}
+
+export function fullFlightChain(o: FullFlightOpts): FullFlightChainResult {
+  const warnings: string[] = [];
+  const departMs = Date.parse(o.departureAt);
+  const checkinMin =
+    o.checkinOverrideMin ?? Math.max(o.ticketCheckinMin ?? 0, o.international ? 150 : 90);
+  const airportArrive = departMs - checkinMin * 60_000;
+  const leave = airportArrive - o.travelToAirportMin * 60_000;
+  const prepStart = leave - o.prepMinutes * 60_000;
+
+  const blocks: FullFlightBlock[] = [];
+  if (o.prepMinutes > 0) {
+    blocks.push({
+      key: "prep",
+      label: "Chuẩn bị",
+      startAt: new Date(prepStart).toISOString(),
+      endAt: new Date(leave).toISOString(),
+    });
+  }
+  blocks.push({
+    key: "toAirport",
+    label: "Di chuyển ra sân bay",
+    startAt: new Date(leave).toISOString(),
+    endAt: new Date(airportArrive).toISOString(),
+  });
+  blocks.push({
+    key: "checkin",
+    label: "Check-in, gửi hành lý, an ninh",
+    startAt: new Date(airportArrive).toISOString(),
+    endAt: new Date(departMs).toISOString(),
+  });
+
+  let arriveAt: string | undefined;
+  const arriveMs = o.arrivalAt ? Date.parse(o.arrivalAt) : NaN;
+  if (Number.isFinite(arriveMs) && arriveMs > departMs) {
+    blocks.push({
+      key: "flight",
+      label: "Bay",
+      startAt: new Date(departMs).toISOString(),
+      endAt: new Date(arriveMs).toISOString(),
+    });
+    const proc = o.arrivalProcessMin ?? (o.international ? 60 : 30);
+    let cursor = arriveMs;
+    if (proc > 0) {
+      blocks.push({
+        key: "arrival",
+        label: "Nhập cảnh, lấy hành lý, ra sảnh",
+        startAt: new Date(cursor).toISOString(),
+        endAt: new Date(cursor + proc * 60_000).toISOString(),
+      });
+      cursor += proc * 60_000;
+    }
+    if (o.travelAfterMin && o.travelAfterMin > 0) {
+      blocks.push({
+        key: "fromAirport",
+        label: "Di chuyển sau khi đáp",
+        startAt: new Date(cursor).toISOString(),
+        endAt: new Date(cursor + o.travelAfterMin * 60_000).toISOString(),
+      });
+      cursor += o.travelAfterMin * 60_000;
+    }
+    arriveAt = new Date(cursor).toISOString();
+  }
+
+  // Cảnh báo bắt buộc của v2.0 (lỗi thật 22/9: ô di chuyển 1020 phút).
+  if (o.travelToAirportMin > 180) warnings.push("di chuyển ra sân bay hơn 3 tiếng — kiểm tra lại số phút");
+  if ((o.travelAfterMin ?? 0) > 180) warnings.push("di chuyển sau khi đáp hơn 3 tiếng — kiểm tra lại số phút");
+  const prepHour = localHourAt(prepStart, o.departureAt);
+  if (o.prepMinutes > 0 && prepHour >= 0 && prepHour < 5) {
+    warnings.push("giờ bắt đầu chuẩn bị rơi vào nửa đêm (0:00–5:00) — đổi phương tiện hay rút ngắn chuẩn bị?");
+  }
+
+  return {
+    blocks,
+    prepStartAt: new Date(prepStart).toISOString(),
+    leaveAt: new Date(leave).toISOString(),
+    airportArriveAt: new Date(airportArrive).toISOString(),
+    arriveAt,
+    checkinMin,
+    warnings,
+  };
+}
+
+/**
+ * Kiểm tra BẮT BUỘC trước khi hiện chuỗi (v2.0): các block phải liên tục
+ * và tăng dần; sai thì trả thông báo lỗi — UI không được vẽ chuỗi sai.
+ */
+export function validateChainBlocks(
+  blocks: { label: string; startAt: string; endAt: string }[],
+): string | null {
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (Date.parse(b.endAt) < Date.parse(b.startAt)) {
+      return `Block "${b.label}" kết thúc trước khi bắt đầu — dữ liệu giờ đang sai.`;
+    }
+    if (i > 0 && Date.parse(blocks[i - 1].endAt) > Date.parse(b.startAt)) {
+      return `Block "${blocks[i - 1].label}" đè lên "${b.label}" — chuỗi không liên tục.`;
+    }
+  }
+  return null;
+}
+
 export function flightChain(o: FlightOpts): Chain {
   const b = { ...DEFAULT_BUFFERS, ...o.buffers };
   const airportBuffer = o.international ? b.airportIntl : b.airportDomestic;

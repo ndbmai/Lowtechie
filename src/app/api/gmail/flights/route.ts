@@ -290,9 +290,23 @@ Quy tắc:
         // 4. CODE phân loại + khử trùng + gộp (hàng rào thật của §5.9 —
         // giữ nguyên tên trường trả về để client cũ vẫn chạy).
         const { candidates, history } = classifyAndGroup(toolUse.input.segments, epochMs);
+        // Ref file PDF để client TỰ LƯU vé vào chuyến khi Mai xác nhận
+        // (v2.0) — chỉ ref, không nhét cả file vào response.
+        const attachments = usable
+          .flatMap((e) =>
+            e.pdfs.slice(0, 3).map((p) => ({
+              messageId: e.id,
+              attachmentId: p.attachmentId,
+              filename: p.filename,
+              size: p.size,
+              subject: e.subject,
+            })),
+          )
+          .slice(0, 8);
         return NextResponse.json({
           trips: candidates,
           skipped: history,
+          attachments,
           scanned: usable.length,
           todayLocal,
         });

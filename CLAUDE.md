@@ -1,6 +1,12 @@
 # CLAUDE.md — hướng dẫn làm việc trong repo này
 
-Mai Lowtechie là trợ lý AI chief-of-staff cá nhân của Mai. **Nguồn sự thật sản phẩm là `docs/PRD.md` (v1.6, 22/9/2026)** cùng hai prototype trong `docs/prototypes/`. Khi PRD và code lệch nhau, ưu tiên PRD hoặc hỏi Mai.
+Mai Lowtechie là trợ lý AI chief-of-staff cá nhân của Mai. **Nguồn sự thật sản phẩm là `docs/PRD.md` (v2.0, 22/9/2026)** cùng hai prototype trong `docs/prototypes/`. Khi PRD và code lệch nhau, ưu tiên PRD hoặc hỏi Mai.
+
+**Voice (PRD §5.0 v2.0 — sửa lỗi thật 22/9):** KHÔNG dựa vào Web Speech của trình duyệt. `src/lib/speech.ts` ghi âm bằng MediaRecorder rồi gửi `/api/stt` (OpenAI Whisper qua fetch thuần, env `OPENAI_API_KEY`, model `LOWTECHIE_STT_MODEL` mặc định whisper-1; thiếu key → 501 và client rơi về Web Speech nếu có). Trạng thái rõ: đang nghe / đang xử lý / lỗi kèm lý do (quyền micro, mạng); ô gõ chữ luôn là dự phòng; nhắc xin quyền micro chỉ hiện lần đầu. Cờ `stt` nằm trong `/api/google/status`.
+
+**Chuyến đi (PRD §5.9 v2.0):** màn GỌN — chỉ nút quét, tab chuyến SẮP TỚI (nhãn theo tuyến "SGN → BKK · 2/10", tuyệt đối không hiện tab chuyến đã bay), chuỗi ngày bay, checklist. Kết quả quét (mốc "🕐 Hôm nay", ứng viên, dòng Lịch sử) nằm trong MỘT thẻ đóng được, không nằm cố định trên màn. **Chuỗi ngày bay HAI ĐẦU**: `fullFlightChain` + `validateChainBlocks` trong `src/core/timeback.ts` (test hồi quy bảng VU-131 ở `__tests__/fullchain.test.ts`): Chuẩn bị → Ra sân bay (điểm đi + phương tiện, Maps) → Check-in (max(quy định vé, 150/90), Mai override được) → Bay → Nhập cảnh (60/30) → Di chuyển sau khi đáp → "Về đến nơi". Block chỉnh/tắt được; block sai thứ tự → hiện lỗi, KHÔNG vẽ chuỗi; block khác ngày kèm ngày; cảnh báo di chuyển >3h + chuẩn bị rơi 0:00–5:00. **Giờ bay lưu NGUYÊN ISO kèm offset sân bay** (đừng `toISOString()` trần — mất múi giờ là cảnh báo đêm sai; chuyến tạo tay dùng `deviceOffsetIso`). **Xóa chuyến (6a)**: `deleteTrip` vào `tripTrash` (10 phút, Hoàn tác `undoDeleteTrip`), thẻ xác nhận liệt kê block/GCal/checklist/file vé (mặc định giữ file), chọn nhiều trong Lịch sử, ghi rõ "không hủy vé với hãng". **Tự lưu vé PDF**: quét trả `attachments` refs; khi Mai xác nhận chuyến, client tải qua `/api/gmail/attachment`, blob vào IndexedDB (`src/lib/fileStore.ts`), metadata vào `trip.attachments` (tên chuẩn `Ve_SGN-BKK_2026-10-02_OADC5J.pdf`, trùng tên → bản mới isLatest, bản cũ giữ lịch sử).
+
+**Book lịch có xem trước (§5.4, bản đầu):** thẻ sự kiện ở Giao việc hiện cảnh báo (trùng giờ, ngày bay) + ô tick "Book lên Google Calendar" (mặc định KHÔNG book); book xong có "Hoàn tác book Google" (xóa GCal + gỡ event local). Chưa làm: recurrence, mời người (LUÔN cần xác nhận riêng khi làm), link Meet/Lark VC, sửa-qua-thẻ-xem-trước, đồng bộ hai chiều, "book thẳng báo sau" theo loại lịch, lịch đích theo dự án.
 
 **Trích vé máy bay (PRD §5.9 quy tắc 6b — rút từ lỗi thật vé OADC5J):** trích **theo chặng, không theo vé**. AI (tool `emit_segments` trong `/api/gmail/flights`) chỉ trả THÔ mọi chặng tìm thấy trong email **và PDF đính kèm** (tối đa 3 tệp ≤1,5MB — hành trình đầy đủ, nhất là chặng về, hay chỉ nằm trong PDF), chỉ đánh dấu `cancelled`/`superseded` theo sự kiện trong email, KHÔNG tự lọc theo thời gian. Việc lọc là của CODE: `classifyAndGroup` trong `src/core/flights.ts` (test hồi quy OADC5J bắt buộc ở `__tests__/flights.test.ts` — đừng xóa) khử trùng theo **PNR + số hiệu + ngày bay** (không bao giờ chỉ PNR), so `departLocal` với epochMs + tzOffsetMin thật của thiết bị Mai (server chạy UTC, cấm `new Date()` trần làm "hôm nay"), gán đã bay/đã hủy/lịch cũ vào Lịch sử, gộp chặng sắp tới cùng PNR thành ứng viên kèm `route` ("SGN (nhà ga 2) → BKK") + `airportBufferMin` (quy định "có mặt trước X phút" trên vé). UI: dòng mốc "🕐 Hôm nay: …"; trùng PNR → nút "Cập nhật giờ" (updateTrip), không tạo bản sao; chuỗi ngày bay đề "Cất cánh {route}"; chuyến qua (giờ về ?? giờ đi +24h) chỉ còn ở mục **Lịch sử**, không bao giờ vẽ chuỗi ngày bay nữa. Chưa làm từ §5.9: đối chiếu dịch vụ dữ liệu lịch bay + realtime 24h trước, điểm xuất phát theo thành phố của chặng về, lưu vé (PDF/QR offline).
 
@@ -17,6 +23,8 @@ Taxonomy theo v1.6: seed 5 dự án Sorene, Circle, Cá nhân, Học tập (3 ca
 **Quy tắc UI số 0 (v1.6):** màn hình KHÔNG chứa câu giải thích cách hoạt động hay tham chiếu nội bộ ("PRD §…") — hướng dẫn chỉ nằm ở empty state (lần dùng đầu). Đừng thêm lại các đoạn "mẹo"/giải thích đã gỡ.
 
 Chưa làm từ v1.6: kéo-thả cảm ứng khi sắp xếp (đang dùng nút), gộp dự án, icon/keywords, quản lý dự án·category·khách bằng chat/voice, gợi ý cấu trúc + hoàn tác structure_changes, màn chi tiết khách hàng + weekly review theo khách + gộp khách trùng tên, nhắc việc trước hạn (cần push), sửa hạn ngay trong danh sách việc, mục "Dùng gần đây" trong ô chọn, cột Khách hàng trong Google Sheets (sync Sheets chưa làm).
+
+Chưa làm từ v2.0: **toàn bộ Lark (§5.5.1 — bot group, Lark Mail, Lark Calendar; kênh ưu tiên của Giai đoạn 2, cần tạo app trên larksuite.com + admin tổ chức duyệt quyền)**; sửa block chuỗi bay bằng chat/voice + thêm block tùy ý + khóa một block; địa điểm đã lưu theo thành phố (đang nhập tay, mặc định homeAddress khi đi/đến Bangkok); email không có PDF → in email thành PDF; vé từ ảnh chụp; lưu file vào Drive + gắn link vào sự kiện; tự dọn chuyến sau 90 ngày; đối chiếu dịch vụ dữ liệu lịch bay + realtime.
 
 ## Ngôn ngữ & giọng điệu
 
@@ -56,6 +64,6 @@ npm run build    # bắt buộc xanh trước khi push
 3. **Hỏi lại tối đa một câu** khi thiếu thông tin.
 4. Mọi tính năng đều dùng được bằng **chat hoặc voice**, màn hình chỉ để xem/duyệt nhanh (PRD §5.0).
 
-## Việc lớn tiếp theo (theo README, PRD §10)
+## Việc lớn tiếp theo (theo README, PRD §10 v2.0)
 
-Google Calendar OAuth (đọc/ghi có duyệt) → Google Maps Routes cho §5.4.1 (nhớ: chọn *giờ đến* chỉ có ở phương tiện công cộng) → STT server cho voice note → sync Google Sheets → ghi âm họp + recap → Giai đoạn 2 (bot Telegram/Zalo 1:1) → Giai đoạn 3 (Supabase + RLS).
+Hoàn thiện §5.4 book lịch (recurrence, mời người — luôn xác nhận riêng, Meet link, đồng bộ hai chiều) → sync Google Sheets (cột Khách hàng) → ghi âm họp + recap → **Giai đoạn 2: Lark trước (bot group @Lowtechie → đọc-toàn-bộ cho group nội bộ, Lark Mail quét vé, Lark Calendar hai-lịch-một-góc-nhìn; cần app Lark Open Platform + admin duyệt), sau đó bot 1:1 WhatsApp/Zalo** → Giai đoạn 3 (Supabase + RLS).

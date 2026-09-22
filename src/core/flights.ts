@@ -35,6 +35,8 @@ export interface TripCandidate {
   destination: Destination | "other";
   destinationName?: string;
   departAt: string;
+  /** Giờ hạ cánh chặng đi — cho chuỗi ngày bay hai đầu (v2.0). */
+  arriveAt?: string;
   returnAt?: string;
   pnr?: string;
   /** "SGN → BKK" — nhãn hướng bay rõ ràng (6b). */
@@ -126,6 +128,7 @@ export function classifyAndGroup(segments: FlightSegment[], nowMs: number): Clas
       destination: dest ?? "other",
       destinationName: dest ? undefined : (first.toIata ?? undefined),
       departAt: first.departLocal,
+      arriveAt: first.arriveLocal,
       returnAt: segs.length > 1 ? last.departLocal : undefined,
       pnr: first.pnr,
       route:

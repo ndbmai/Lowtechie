@@ -68,6 +68,12 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Khách hàng & đối tác (§5.3.2): trường riêng (không phải category), danh bạ theo dự án kèm tên gọi tắt; tự khớp tên khi trích việc, tên lạ không đoán; quản lý ở Quản lý dự án
 - [x] Sắp xếp thứ tự (§5.3.1): chế độ Sắp xếp cho dự án, category, khách (⤒↑↓⤓ + Hoàn tác); chuyển category (kèm việc) sang dự án khác; thứ tự Mai đặt dùng ở mọi màn và ô chọn
 - [x] Quy tắc UI 0 (v1.6): gỡ mọi câu giải thích cơ chế và tham chiếu "PRD §…" khỏi màn hình
+- [x] Voice ổn định (§5.0 v2.0, sửa lỗi 22/9): ghi âm trên máy → `/api/stt` Whisper (VI/TH/EN, cần `OPENAI_API_KEY`); trạng thái nghe/xử lý/lỗi kèm lý do; Web Speech chỉ còn là dự phòng; ô gõ chữ luôn có
+- [x] Chuỗi ngày bay **hai đầu, chỉnh sửa được** (§5.9 v2.0): 6 block Chuẩn bị → Ra sân bay → Check-in → Bay → Nhập cảnh → Về nơi ở, phương tiện + điểm đi/đến từng đầu, "Mở Maps"; kiểm tra bắt buộc (block đè nhau → báo lỗi không vẽ, khác ngày kèm ngày, cảnh báo >3h & nửa đêm) — test theo đúng bảng VU-131
+- [x] Màn Chuyến đi gọn (v2.0): kết quả quét là thẻ hiện một lần (mốc Hôm nay + Lịch sử nằm trong đó), tab chỉ chuyến sắp tới, nhãn theo tuyến "SGN → BKK · 2/10"
+- [x] Xóa chuyến (§5.9 6a): thẻ xác nhận liệt kê block/lịch/file vé, chọn nhiều trong Lịch sử, Hoàn tác 10 phút, không hủy vé với hãng
+- [x] Tự lưu vé PDF vào chuyến (v2.0): xác nhận chuyến là vé trong email tự tải về máy (IndexedDB), tên chuẩn `Ve_SGN-BKK_2026-10-02_OADC5J.pdf`, đổi vé → bản mới nhất + lịch sử
+- [x] Book lịch có xem trước (§5.4, bản đầu): thẻ sự kiện cảnh báo trùng giờ/ngày bay, tick mới book lên Google Calendar, có Hoàn tác
 - [x] Tạm ngưng dự án + xóa phải chọn nơi chuyển việc (§5.3.1)
 - [ ] Speech-to-text server (voice note VI/TH/EN trộn) — đang dùng Web Speech của trình duyệt
 - [ ] Sync Google Sheets · ghi âm họp offline + recap
