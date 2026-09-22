@@ -84,6 +84,11 @@ interface LowtechieState {
   setPendingBlock: (b?: PendingBlock) => void;
 
   addTrip: (t: Omit<Trip, "id" | "done" | "customItems" | "removed">) => Trip;
+  /** Cập nhật chuyến đã có (cùng PNR quét lại → sửa giờ, không tạo bản sao §5.9). */
+  updateTrip: (
+    tripId: string,
+    patch: Partial<Pick<Trip, "departAt" | "returnAt" | "label" | "pnr">>,
+  ) => void;
   toggleTripItem: (tripId: string, itemId: string) => void;
   addCustomItem: (tripId: string, groupId: string, text: string) => void;
   removeTripItem: (tripId: string, itemId: string, custom: boolean) => void;
@@ -95,10 +100,10 @@ interface LowtechieState {
   addProject: (name: string, color: string) => void;
   updateProject: (
     id: ProjectId,
-    patch: Partial<Pick<Project, "name" | "color" | "targetHoursPerWeek" | "goal">>,
+    patch: Partial<Pick<Project, "name" | "color" | "targetHoursPerWeek" | "goal" | "status">>,
   ) => void;
-  /** Xóa dự án: việc/thẻ chờ/feedback gắn vào nó chuyển về dự án rơi. */
-  deleteProject: (id: ProjectId) => void;
+  /** Xóa dự án: Mai CHỌN việc còn mở chuyển sang dự án nào (§5.3.1). */
+  deleteProject: (id: ProjectId, moveTo: ProjectId) => void;
   addCategory: (projectId: ProjectId, name: string) => void;
   renameCategory: (id: string, name: string) => void;
   deleteCategory: (id: string) => void;
@@ -296,6 +301,10 @@ export const useStore = create<LowtechieState>()(
         set((s) => ({ trips: [trip, ...s.trips] }));
         return trip;
       },
+      updateTrip: (tripId, patch) =>
+        set((s) => ({
+          trips: s.trips.map((t) => (t.id === tripId ? { ...t, ...patch } : t)),
+        })),
       toggleTripItem: (tripId, itemId) =>
         set((s) => ({
           trips: s.trips.map((t) =>
@@ -370,11 +379,13 @@ export const useStore = create<LowtechieState>()(
               : p,
           ),
         })),
-      deleteProject: (id) =>
+      deleteProject: (id, moveTo) =>
         set((s) => {
           if (s.projects.length <= 1) return s;
           const projects = s.projects.filter((p) => p.id !== id);
-          const fb = fallbackProjectId(projects);
+          const fb = projects.some((p) => p.id === moveTo && moveTo !== id)
+            ? moveTo
+            : fallbackProjectId(projects);
           const move = <T extends { projectId: ProjectId; categoryId?: string }>(x: T): T =>
             x.projectId === id ? { ...x, projectId: fb, categoryId: undefined } : x;
           return {
@@ -426,7 +437,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 5,
+      version: 6,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -483,6 +494,22 @@ export const useStore = create<LowtechieState>()(
           s.events = (s.events ?? []).map((e) =>
             e.projectId && gone.has(e.projectId) ? { ...e, projectId: undefined } : e,
           );
+        }
+        if (version < 6) {
+          // v6 (PRD v1.0): màu chính thức cho Học tập/Admin (chỉ đổi nếu Mai
+          // chưa tự chọn màu khác) + 2 category Học tập mới.
+          s.projects = (s.projects ?? []).map((p) => {
+            if (p.id === "hoctap" && p.color === "#7C9A3E") return { ...p, color: "#9BC53D" };
+            if (p.id === "admin" && p.color === "#7D8AA5") return { ...p, color: "#8A8FB0" };
+            return p;
+          });
+          const have = new Set((s.categories ?? []).map((c) => c.id));
+          s.categories = [
+            ...(s.categories ?? []),
+            ...DEFAULT_CATEGORIES.filter(
+              (c) => c.projectId === "hoctap" && !have.has(c.id),
+            ),
+          ];
         }
         return s as LowtechieState;
       },

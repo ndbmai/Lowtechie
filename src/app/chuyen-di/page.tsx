@@ -63,13 +63,19 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-/** Quét Gmail tìm vé máy bay → chuyến ứng viên, Mai duyệt mới tạo (PRD §5.9). */
+/**
+ * Quét Gmail tìm vé máy bay → chuyến ứng viên, Mai duyệt mới tạo (PRD §5.9).
+ * Thẻ xác nhận luôn hiện dòng mốc "Hôm nay" + các chặng bị bỏ qua, và
+ * chuyến trùng PNR thành "Cập nhật" thay vì tạo bản sao.
+ */
 function GmailScan() {
   const gs = useGoogleStatus();
-  const addTrip = useStore((s) => s.addTrip);
+  const { trips, addTrip, updateTrip } = useStore();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<FlightTripCandidate[]>([]);
+  const [skipped, setSkipped] = useState<string[]>([]);
+  const [today, setToday] = useState("");
 
   if (gs.loading || !gs.configured) return null;
 
@@ -84,6 +90,7 @@ function GmailScan() {
   async function scan() {
     setBusy(true);
     setMsg(null);
+    setSkipped([]);
     const r = await fetchFlightTrips();
     setBusy(false);
     if (!r.ok) {
@@ -97,10 +104,12 @@ function GmailScan() {
       return;
     }
     setCandidates(r.trips);
+    setSkipped(r.skipped);
+    setToday(r.todayLocal);
     setMsg(
       r.trips.length === 0
-        ? `Mình đọc ${r.scanned} email gần đây mà không thấy vé máy bay sắp tới nào.`
-        : `Tìm thấy ${r.trips.length} chuyến trong ${r.scanned} email — Mai duyệt thì mình mới tạo:`,
+        ? `Mình đọc ${r.scanned} email gần đây mà không thấy chuyến bay SẮP TỚI nào.`
+        : `Tìm thấy ${r.trips.length} chuyến sắp tới trong ${r.scanned} email — Mai duyệt thì mình mới tạo:`,
     );
   }
 
@@ -109,41 +118,70 @@ function GmailScan() {
       <button className="btn" disabled={busy} onClick={() => void scan()}>
         {busy ? "Đang đọc email…" : "📧 Quét vé máy bay trong Gmail"}
       </button>
-      {msg && <p className="muted small">{msg}</p>}
-      {candidates.map((c, i) => (
-        <div className="card" key={i} style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <span className="t small">
-            <b>
-              ✈️ {c.destination === "other" ? (c.destinationName ?? "Nơi khác") : DESTINATION_LABELS[c.destination]}
-              {" · "}
-              {fmtDayTime(c.departAt)}
-            </b>
-            <span className="muted">
-              {c.flights}
-              {c.returnAt ? ` · về ${fmtDay(c.returnAt)}` : ""} · từ email “{c.subject.slice(0, 60)}”
-            </span>
-          </span>
-          {c.destination === "other" ? (
-            <span className="muted small">chưa có checklist cho điểm đến này</span>
-          ) : (
-            <button
-              className="btn primary small"
-              onClick={() => {
-                const d = new Date(c.departAt);
-                addTrip({
-                  destination: c.destination as Destination,
-                  label: `${DESTINATION_LABELS[c.destination as Destination]} · ${d.getDate()}/${d.getMonth() + 1}`,
-                  departAt: d.toISOString(),
-                  returnAt: c.returnAt,
-                });
-                setCandidates((s) => s.filter((_, j) => j !== i));
-              }}
-            >
-              Tạo chuyến
-            </button>
-          )}
+      {today && (
+        <div className="note-box small">
+          🕐 Hôm nay: <b>{today}</b> (giờ nơi Mai đang ở) — mình chỉ lấy chặng khởi hành SAU thời
+          điểm này.
         </div>
-      ))}
+      )}
+      {msg && <p className="muted small">{msg}</p>}
+      {candidates.map((c, i) => {
+        const existing = c.pnr ? trips.find((t) => t.pnr && t.pnr === c.pnr) : undefined;
+        return (
+          <div className="card" key={i} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span className="t small">
+              <b>
+                ✈️ {c.destination === "other" ? (c.destinationName ?? "Nơi khác") : DESTINATION_LABELS[c.destination]}
+                {" · "}
+                {fmtDayTime(c.departAt)}
+              </b>
+              <span className="muted">
+                {c.flights}
+                {c.pnr ? ` · PNR ${c.pnr}` : ""}
+                {c.returnAt ? ` · về ${fmtDay(c.returnAt)}` : ""} · từ email “{c.subject.slice(0, 60)}”
+              </span>
+            </span>
+            {c.destination === "other" ? (
+              <span className="muted small">chưa có checklist cho điểm đến này</span>
+            ) : existing ? (
+              <button
+                className="btn small"
+                onClick={() => {
+                  updateTrip(existing.id, {
+                    departAt: new Date(c.departAt).toISOString(),
+                    returnAt: c.returnAt,
+                    pnr: c.pnr,
+                  });
+                  setCandidates((s) => s.filter((_, j) => j !== i));
+                  setMsg(`Đã cập nhật giờ cho chuyến ${existing.label} (cùng PNR, không tạo bản sao).`);
+                }}
+              >
+                Cập nhật giờ
+              </button>
+            ) : (
+              <button
+                className="btn primary small"
+                onClick={() => {
+                  const d = new Date(c.departAt);
+                  addTrip({
+                    destination: c.destination as Destination,
+                    label: `${DESTINATION_LABELS[c.destination as Destination]} · ${d.getDate()}/${d.getMonth() + 1}`,
+                    departAt: d.toISOString(),
+                    returnAt: c.returnAt,
+                    pnr: c.pnr,
+                  });
+                  setCandidates((s) => s.filter((_, j) => j !== i));
+                }}
+              >
+                Tạo chuyến
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {skipped.length > 0 && (
+        <p className="muted small">Bỏ qua: {skipped.slice(0, 6).join(" · ")}</p>
+      )}
     </>
   );
 }

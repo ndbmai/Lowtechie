@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { mostStarved, weekStats } from "@/core/stats";
 import { rankTasks } from "@/core/priority";
+import { activeProjects } from "@/core/projects";
 import { TaskRow } from "@/components/TaskRow";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
@@ -34,7 +35,7 @@ export default function ProjectsPage() {
   const { tasks, projects } = useStore();
 
   const stats = useMemo(
-    () => (mounted ? weekStats(tasks, projects, new Date()) : []),
+    () => (mounted ? weekStats(tasks, activeProjects(projects), new Date()) : []),
     [mounted, tasks, projects],
   );
   const starved = mostStarved(stats);

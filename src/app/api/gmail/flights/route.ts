@@ -21,9 +21,27 @@ export interface FlightTripCandidate {
   destinationName?: string;
   departAt: string;
   returnAt?: string;
+  /** Mã đặt chỗ để chống tạo trùng (§5.9). */
+  pnr?: string;
   flights: string;
   subject: string;
   confidence: number;
+}
+
+/** "Thứ Ba 22/9/2026, 14:30" theo giờ địa phương của Mai. */
+function localLabel(epochMs: number, tzOffsetMin: number): string {
+  const d = new Date(epochMs - tzOffsetMin * 60_000);
+  const days = ["Chủ nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+  return `${days[d.getUTCDay()]} ${d.getUTCDate()}/${d.getUTCMonth() + 1}/${d.getUTCFullYear()}, ${d.getUTCHours()}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+function localIso(epochMs: number, tzOffsetMin: number): string {
+  const shifted = new Date(epochMs - tzOffsetMin * 60_000);
+  const sign = tzOffsetMin <= 0 ? "+" : "-";
+  const abs = Math.abs(tzOffsetMin);
+  return shifted
+    .toISOString()
+    .replace(/\.\d{3}Z$/, `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`);
 }
 
 interface GmailPart {
@@ -79,6 +97,7 @@ const TOOL_SCHEMA = {
               description: "Giờ cất cánh chặng đi, ISO 8601 theo múi giờ sân bay đi",
             },
             returnAt: { type: "string", description: "Giờ cất cánh chặng về nếu có" },
+            pnr: { type: "string", description: "Mã đặt chỗ (PNR) nếu có" },
             flights: {
               type: "string",
               description: 'Tóm tắt chuyến, ví dụ "VJ903 BKK→SGN 08:30 · VJ904 về 20:15"',
@@ -89,6 +108,12 @@ const TOOL_SCHEMA = {
           required: ["destination", "departAt", "flights", "subject", "confidence"],
         },
       },
+      skipped: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          'Các chặng BỎ QUA kèm lý do, ví dụ "VJ901 15/9 — đã bay", "TG123 — chuyến đã hủy", "lịch trình cũ trước khi đổi vé"',
+      },
     },
     required: ["trips"],
   },
@@ -97,10 +122,16 @@ const TOOL_SCHEMA = {
 interface ClaudeContent {
   type: string;
   name?: string;
-  input?: { trips?: FlightTripCandidate[] };
+  input?: { trips?: FlightTripCandidate[]; skipped?: string[] };
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  // Mốc thời gian THẬT của Mai (PRD §5.9: không bao giờ để AI tự đoán ngày).
+  const epochMs = Number(req.nextUrl.searchParams.get("epochMs")) || Date.now();
+  const tzOffsetMin = Number(req.nextUrl.searchParams.get("tzOffsetMin")) || 0;
+  const tzName = req.nextUrl.searchParams.get("tz")?.slice(0, 64) || "UTC";
+  const todayLocal = localLabel(epochMs, tzOffsetMin);
+
   const link = await unseal(req.cookies.get(GCAL_COOKIE)?.value);
   if (!link) return NextResponse.json({ error: "not-connected" }, { status: 401 });
   if (!link.gm) return NextResponse.json({ error: "no-gmail-scope" }, { status: 403 });
@@ -124,7 +155,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
   const list = (await listRes.json()) as { messages?: { id: string }[] };
   const ids = (list.messages ?? []).map((m) => m.id);
-  if (ids.length === 0) return NextResponse.json({ trips: [], scanned: 0 });
+  if (ids.length === 0) {
+    return NextResponse.json({ trips: [], skipped: [], scanned: 0, todayLocal });
+  }
 
   // 2. Lấy nội dung từng email (song song).
   const emails = await Promise.all(
@@ -161,8 +194,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         // để hẹp là danh sách bị cắt và mất luôn tool_use (lỗi "HTTP 200").
         max_tokens: 16000,
         output_config: { effort: "low" },
-        system: `Bạn đọc email hộ Mai Lowtechie. Hôm nay là ${new Date().toISOString()}.
-Chỉ trích CHUYẾN BAY THẬT từ email xác nhận vé (bỏ quảng cáo, khuyến mãi, check-in nhắc lại chuyến đã trích). Bỏ chuyến đã bay xong. Ghép chặng đi + chặng về cùng một chuyến khi thấy khớp. Giờ bay theo múi giờ địa phương của sân bay đi (Bangkok +07:00, Việt Nam +07:00, Nhật +09:00). Không bịa chuyến không có trong email.`,
+        system: `Bạn trích vé máy bay cho Mai Lowtechie theo PRD §5.9 — BẮT BUỘC đúng ngày, đúng chuyến.
+MỐC THỜI GIAN THẬT (không được tự đoán): bây giờ là ${localIso(epochMs, tzOffsetMin)} — ${todayLocal}, múi giờ ${tzName} nơi Mai đang ở.
+Quy tắc chọn chặng:
+- CHỈ đưa vào trips những chặng có giờ khởi hành SAU thời điểm trên, so theo giờ địa phương của SÂN BAY ĐI (Bangkok/VN +07:00, Nhật +09:00).
+- Chặng đã bay, chặng bị hủy, lịch trình cũ trước khi đổi vé, email check-in/nhắc lại → đưa vào "skipped" kèm lý do ngắn, KHÔNG đưa vào trips.
+- Vé khứ hồi mà chặng đi đã qua → trips chỉ chứa chặng về.
+- Nhiều phiên bản lịch trình trong hộp thư → lấy phiên bản MỚI NHẤT theo ngày xuất/đổi vé.
+- Vé chỉ ghi ngày không ghi năm (kiểu "22SEP") → năm là lần xuất hiện gần nhất TỪ HÔM NAY TRỞ ĐI, đối chiếu với ngày gửi email.
+Chỉ trích chuyến THẬT từ email xác nhận vé (bỏ quảng cáo/khuyến mãi). Ghép chặng đi + về cùng PNR thành một chuyến. Ghi PNR nếu thấy. departAt/returnAt là ISO 8601 kèm đúng offset múi giờ sân bay đi. Không bịa chuyến không có trong email.`,
         tools: [TOOL_SCHEMA],
         tool_choice: { type: "tool", name: "emit_trips" },
         messages: [
@@ -186,7 +226,22 @@ Chỉ trích CHUYẾN BAY THẬT từ email xác nhận vé (bỏ quảng cáo, 
     if (res.ok && data) {
       const toolUse = data.content?.find((c) => c.type === "tool_use" && c.name === "emit_trips");
       if (Array.isArray(toolUse?.input?.trips)) {
-        return NextResponse.json({ trips: toolUse.input.trips, scanned: usable.length });
+        // Hàng rào thứ hai (§5.9): dù model có lỡ trả chặng quá khứ,
+        // server vẫn gạt sang "skipped" — không bao giờ thành chuyến.
+        const skipped = [...(toolUse.input.skipped ?? [])];
+        const trips = toolUse.input.trips.filter((t) => {
+          const departMs = Date.parse(t.departAt);
+          if (!Number.isFinite(departMs)) {
+            skipped.push(`${t.flights} — không đọc được ngày giờ`);
+            return false;
+          }
+          if (departMs <= epochMs) {
+            skipped.push(`${t.flights} — đã bay (server chặn)`);
+            return false;
+          }
+          return true;
+        });
+        return NextResponse.json({ trips, skipped, scanned: usable.length, todayLocal });
       }
     }
     const detail =

@@ -143,5 +143,12 @@ describe("dự án + category mặc định (Mai tự quản, đã bỏ Favstay 
     expect(
       sanitizeTaxonomy(DEFAULT_PROJECTS, DEFAULT_CATEGORIES, "sorene", "circle:hopdong").categoryId,
     ).toBeUndefined();
+    // Dự án tạm ngưng (§5.3.1) không nhận việc mới → rơi về Cá nhân.
+    const withArchived = DEFAULT_PROJECTS.map((p) =>
+      p.id === "circle" ? { ...p, status: "archived" as const } : p,
+    );
+    expect(
+      sanitizeTaxonomy(withArchived, DEFAULT_CATEGORIES, "circle", "circle:hopdong").projectId,
+    ).toBe("canhan");
   });
 });

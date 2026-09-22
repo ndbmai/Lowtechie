@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 0.7 — 18/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category.*
+*Phiên bản 1.0 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -8,7 +8,7 @@ Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) v
 
 ## 1. Bối cảnh & vấn đề
 
-Mai vận hành song song nhiều mảng: **Sorene AI** (sản phẩm + gọi vốn), **The Circle Technology** (tư vấn AI tại Bangkok, HCMC, Tokyo), **Favstay/Favultimate** (revenue management cho 150+ khách sạn), **The Intelligent Edge** (newsletter ~10.000 subscriber), cộng thêm việc cá nhân (học tiếng Thái, spa, sức khỏe, giấy tờ).
+Mai vận hành song song nhiều mảng: **Sorene AI** (sản phẩm + gọi vốn), **The Circle Technology** (tư vấn AI tại Bangkok, HCMC, Tokyo), cộng thêm **Học tập** (tiếng Thái và các khóa học) và việc cá nhân (spa, sức khỏe, giấy tờ).
 
 Vấn đề cốt lõi không phải là thiếu công cụ to-do, mà là:
 
@@ -39,7 +39,7 @@ Vấn đề cốt lõi không phải là thiếu công cụ to-do, mà là:
 
 1. *"Nhắc chị gọi cho anh A bên OKR thứ Ba tuần sau, liên quan hợp đồng Circle"* → task gắn dự án Circle, deadline, reminder.
 2. *(voice, đang đi taxi)* "Tuần này dời spa sang thứ Năm, và book 2 tiếng deep work cho Sorene pitch deck" → agent đề xuất slot, Mai bấm duyệt, lịch được tạo.
-3. Group Zalo "Favstay Ops" bàn 40 tin nhắn → cuối ngày agent tóm tắt: 3 quyết định, 4 đầu việc (ai làm, hạn khi nào), 2 câu hỏi chưa có ai trả lời.
+3. Group Zalo "Circle Core" bàn 40 tin nhắn → cuối ngày agent tóm tắt: 3 quyết định, 4 đầu việc (ai làm, hạn khi nào), 2 câu hỏi chưa có ai trả lời.
 4. Sáng thứ Hai: "Hôm nay có gì?" → brief: lịch, 3 việc ưu tiên nhất, việc đang chờ người khác, deadline trong 7 ngày.
 5. Cộng sự của Circle hỏi assistant của họ: "Mai đã duyệt proposal chưa?" → assistant trả lời từ không gian chung (không lộ việc riêng của Mai).
 6. Chủ nhật: weekly review — thời gian đã dùng theo dự án, việc trễ hạn, đề xuất việc nên **bỏ hoặc hoãn**.
@@ -61,14 +61,16 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 | Module | Chat / voice ví dụ |
 |---|---|
 | Giao việc | "Thứ Ba nhắc chị gửi báo giá cho OKR, dự án Circle, gấp" |
-| Ảnh | *(gửi ảnh checklist)* + "việc của Favstay, hạn thứ Sáu" |
+| Ảnh | *(gửi ảnh checklist)* + "việc của Circle, hạn thứ Sáu" |
 | Lịch & di chuyển | "Tối nay 7 giờ hẹn ở Thonglor, đi tàu" / "Mai đi ô tô ra sân bay nhé" |
 | Hồ sơ chuẩn bị | "Lần này chỉ cần 30 phút chuẩn bị thôi" |
 | Chuyến đi | "Thứ Tư tuần sau chị bay Tokyo 4 ngày" / "Thêm máy uốn tóc vào checklist Tokyo" |
-| Group chat | "Hôm nay group Favstay Ops có gì cần chị xử lý?" |
+| Group chat | "Hôm nay group Circle Core có gì cần chị xử lý?" |
 | Họp | "Ghi âm cuộc họp này" / "Gửi recap cho anh Tuấn" |
 | Review | "Tuần này chị dồn thời gian vào đâu?" / "Bỏ việc viết lại trang About" |
-| Cá nhân | "Đặt lịch spa thứ Năm 4 giờ" / "Hôm nay chị học tiếng Thái rồi" |
+| Học tập | "Hôm nay chị học tiếng Thái rồi" / "Tuần này học 4 buổi" |
+| Dự án & category | "Tạo dự án Podcast" / "Thêm category Tuyển dụng vào Circle" |
+| Cá nhân | "Đặt lịch spa thứ Năm 4 giờ" |
 
 ### 5.1 Capture (thu thập)
 - Nhập qua: chat trong app, voice note (VI/TH/EN, trộn ngôn ngữ), forward tin nhắn/email vào bot, chia sẻ ảnh chụp màn hình.
@@ -80,7 +82,7 @@ Mai gửi ảnh, Lowtechie tự trích danh sách việc.
 
 - **Nguồn ảnh:** checklist viết tay trên giấy, bảng trắng sau buổi họp, sticky note, ảnh chụp màn hình (ghi chú điện thoại, tin nhắn, email, file Excel), tài liệu in.
 - **Kênh gửi:** chụp trong app, chia sẻ từ thư viện ảnh (share sheet), gửi vào bot Zalo/WhatsApp/Telegram 1:1. Gửi nhiều ảnh một lần được.
-- **Ảnh + lời nhắn đi kèm:** gửi ảnh kèm chat hoặc voice, ví dụ "đây là việc của Favstay, hạn thứ Sáu", để gắn dự án và hạn cho cả danh sách.
+- **Ảnh + lời nhắn đi kèm:** gửi ảnh kèm chat hoặc voice, ví dụ "đây là việc của Circle, hạn thứ Sáu", để gắn dự án và hạn cho cả danh sách.
 - **Trích xuất:**
   - Từng dòng thành một việc; giữ cấu trúc nhóm/mục con nếu có.
   - Nhận biết ô đã tick / gạch ngang: mục đã xong được đánh dấu xong (hoặc bỏ qua), chỉ mục chưa xong thành việc mới.
@@ -117,7 +119,7 @@ flowchart LR
 
 **1. Tách & chuẩn hóa**
 - Một câu nhiều ý thành nhiều việc; mỗi việc bắt đầu bằng động từ rõ ràng ("Gửi báo giá cho OKR", không phải "báo giá OKR").
-- Việc quá to hoặc mơ hồ ("làm marketing Favstay") → đề xuất tách thành 2–4 việc cụ thể hoặc hỏi lại.
+- Việc quá to hoặc mơ hồ ("làm marketing Circle") → đề xuất tách thành 2–4 việc cụ thể hoặc hỏi lại.
 
 **2. Phân loại vào đúng dự án và category**
 - Hai tầng: **Dự án** → **Category**.
@@ -126,15 +128,15 @@ flowchart LR
 |---|---|
 | Sorene | Sản phẩm · Gọi vốn · Tăng trưởng & cohort · Pháp lý & công ty |
 | The Circle Technology | Khách hàng & bán hàng · Delivery dự án · Đào tạo · Marketing & nội dung · Hợp đồng |
+| Học tập | Tiếng Thái · Khóa học & chứng chỉ · Đọc & nghiên cứu |
 | Cá nhân | Sức khỏe & làm đẹp · Chuyến đi · Nhà cửa · Giấy tờ & tài chính cá nhân |
-| Học tập | Tiếng Thái |
 | Admin chung | Thuế & hạn pháp lý · Hóa đơn · Công cụ & tài khoản |
 
   Mai thêm, đổi tên, gộp category bằng chat/voice ("tạo category Tuyển dụng cho Circle").
-- **Tín hiệu dùng để phân loại:** từ khóa và tên riêng (khách hàng, khách sạn, đối tác gắn với dự án); nguồn (group chat, email, cuộc họp đã gắn dự án); người liên quan (cộng sự thuộc dự án nào); lịch sử (việc tương tự trước đây Mai xếp vào đâu); lời Mai nói kèm ("việc của Favstay").
+- **Tín hiệu dùng để phân loại:** từ khóa và tên riêng (khách hàng, khách sạn, đối tác gắn với dự án); nguồn (group chat, email, cuộc họp đã gắn dự án); người liên quan (cộng sự thuộc dự án nào); lịch sử (việc tương tự trước đây Mai xếp vào đâu); lời Mai nói kèm ("việc của Circle").
 - **Mỗi việc có độ chắc chắn phân loại.** Dưới ngưỡng → hiện 2 lựa chọn dự án/category có khả năng nhất để Mai chọn một chạm, không đoán bừa.
 - **Việc liên quan nhiều dự án:** một dự án chính + gắn tag dự án phụ.
-- **Học từ sửa đổi:** mỗi lần Mai đổi dự án/category, hệ thống ghi lại và áp dụng cho lần sau (ví dụ: tên "Rạng Đông" luôn là Favstay / Khách sạn & vận hành).
+- **Học từ sửa đổi:** mỗi lần Mai đổi dự án/category, hệ thống ghi lại và áp dụng cho lần sau (ví dụ: tên "OKR" luôn là Circle / Khách hàng & bán hàng).
 
 **3. Kiểm tra trước khi lưu**
 | Kiểm tra | Xử lý |
@@ -156,8 +158,38 @@ flowchart LR
 
 ### 5.3 Dự án
 - Mỗi dự án có: mục tiêu quý, trọng số thời gian, thành viên, kênh chat liên kết, file liên kết, decision log.
-- Dự án khởi tạo: Sorene, Circle, Cá nhân, Học tập, Admin chung. *(Quyết định 22/9/2026: bỏ Favstay và Intelligent Edge khỏi danh sách.)*
-- **Mai tự thêm / đổi tên / xóa dự án và category** trong app (Dự án → Quản lý) hoặc bằng chat/voice; xóa dự án thì việc đang mở chuyển về Cá nhân.
+- Dự án mặc định (khớp bảng category ở mục 5.2.1): Sorene, The Circle Technology, **Học tập**, Cá nhân, Admin chung. Đây chỉ là bộ khởi tạo; Mai toàn quyền thay đổi (mục 5.3.1).
+- **Học tập** là dự án riêng, có trọng số thời gian và mục tiêu riêng (ví dụ số buổi tiếng Thái mỗi tuần, chuỗi ngày học), hiện riêng trong màn Dự án và Weekly review.
+
+### 5.3.1 Mai tự quản lý dự án & sub category
+Danh sách dự án và category không cố định. Mai tự thêm, sửa, sắp xếp bằng **chat, voice** hoặc trong màn **Dự án**.
+
+**Với dự án**
+- Thêm mới: tên, màu, biểu tượng, trọng số thời gian/tuần, mục tiêu, thành viên, kênh chat/email liên kết, từ khóa nhận diện (tên khách hàng, đối tác).
+- Sửa bất kỳ thuộc tính nào ở trên; đổi tên thì mọi việc, tab Google Sheets và bộ lọc tự cập nhật theo.
+- **Lưu trữ** (tạm ngưng): ẩn khỏi Hôm nay và review, giữ nguyên dữ liệu, mở lại được bất cứ lúc nào.
+- **Xóa:** bắt buộc chọn việc còn mở sẽ chuyển sang dự án nào hoặc lưu trữ cùng; không bao giờ xóa việc âm thầm.
+- **Gộp hai dự án:** việc và category của dự án bị gộp chuyển sang dự án còn lại, category trùng tên được hợp nhất.
+- Sắp xếp thứ tự hiển thị (kéo thả hoặc "đưa Học tập lên đầu").
+
+**Với sub category**
+- Thêm, đổi tên, xóa, gộp, di chuyển category sang dự án khác.
+- Xóa hoặc gộp category → Lowtechie hỏi việc thuộc category đó chuyển về đâu trước khi thực hiện.
+- Đặt mặc định cho từng dự án (việc chưa rõ category rơi vào đâu).
+
+**Lowtechie gợi ý nhưng không tự đổi cấu trúc**
+- Khi có nhiều việc không khớp category nào, hoặc Mai hay sửa một kiểu → đề xuất tạo category mới ("Có 6 việc về tuyển dụng ở Circle, tạo category Tuyển dụng không?").
+- Dự án không có hoạt động 30 ngày → hỏi có muốn lưu trữ không.
+- Mọi thay đổi cấu trúc đều cần Mai xác nhận, và có thể hoàn tác.
+
+**Ví dụ lệnh**
+| Mai nói / gõ | Lowtechie làm |
+|---|---|
+| "Tạo dự án mới tên Podcast, màu cam, 3 tiếng mỗi tuần" | Tạo dự án, hỏi có muốn thêm category không |
+| "Thêm category Tuyển dụng vào Circle" | Thêm category |
+| "Đổi tên Admin chung thành Hành chính" | Đổi tên dự án, cập nhật file |
+| "Gộp Khóa học với Đọc & nghiên cứu" | Hỏi tên category sau khi gộp, chuyển việc |
+| "Tạm ngưng dự án Podcast" | Lưu trữ dự án |
 
 ### 5.4 Calendar agent
 - Đọc/ghi Google Calendar.
@@ -265,6 +297,45 @@ Mục tiêu: mỗi chuyến bay tự có kế hoạch chuẩn bị, Mai không p
 - Tự động khi Lowtechie đọc được email xác nhận vé (Gmail), hoặc khi Mai nói/gõ ("Thứ Tư tuần sau chị bay Tokyo 4 ngày").
 - Một chuyến gồm: điểm đến, giờ bay đi/về (theo múi giờ địa phương), nơi ở, mục đích (gặp khách / cá nhân), ai đi cùng.
 
+**Trích xuất vé máy bay (bắt buộc đúng ngày, đúng chuyến)**
+
+*Lỗi đã gặp khi thử:* hôm nay là 22/9 nhưng hệ thống lấy một chuyến có ngày bay trước 22/9. Nguyên nhân gốc: mô hình AI không tự biết "hôm nay" là ngày nào. Nếu không được cung cấp ngày giờ thực, nó sẽ đoán, hoặc chọn nhầm chuyến cũ trong email/PDF có nhiều chặng hay lịch sử đổi vé. Các yêu cầu dưới đây sửa lỗi này.
+
+*1. Mốc thời gian thực*
+- Mọi lần trích xuất đều được cấp: ngày giờ hiện tại từ máy chủ, múi giờ và thành phố Mai đang ở (Bangkok / HCMC / Tokyo). Không bao giờ để AI tự đoán ngày.
+- Vé chỉ ghi ngày không ghi năm (ví dụ "22SEP") → năm được suy ra là lần gần nhất **từ hôm nay trở đi**, và kiểm tra chéo với ngày xuất vé.
+- So sánh "đã bay chưa" theo **giờ địa phương của sân bay đi**, không theo giờ điện thoại.
+
+*2. Chọn đúng chuyến*
+- Một vé/email có thể chứa: chặng đi và chặng về, chuyến cũ đã bay, lịch trình trước khi đổi, chặng đã hủy.
+- Quy tắc: chỉ lấy chặng có giờ khởi hành **sau thời điểm hiện tại**; chặng đã bay được ghi là "đã bay" và không tạo nhắc việc; nếu có nhiều phiên bản lịch trình, lấy phiên bản mới nhất (theo ngày cập nhật/xuất vé); bỏ chặng có trạng thái hủy.
+- Khứ hồi mà chặng đi đã qua → chỉ tạo lịch và checklist cho chặng về.
+- Nếu không có chặng nào trong tương lai → báo rõ "Vé này là chuyến đã bay (15/9)", không tạo gì.
+
+*3. Thông tin phải trích*
+Mã đặt chỗ (PNR) · số vé điện tử · tên hành khách · hãng + số hiệu chuyến · sân bay đi/đến (mã IATA, tên, nhà ga) · giờ đi và giờ đến theo **giờ địa phương** kèm múi giờ (có dấu "+1 ngày" nếu đến hôm sau) · hạng vé · số ghế · hành lý xách tay/ký gửi · giờ mở check-in online · giờ đóng quầy / giờ lên máy bay nếu có.
+
+*4. Kiểm tra trước khi lưu* (theo nguyên tắc 5.2.1)
+- Ngày bay ≥ hôm nay; giờ đến sau giờ đi sau khi quy đổi múi giờ; thời gian bay hợp lý với tuyến; mã sân bay hợp lệ.
+- Đối chiếu số hiệu chuyến với dữ liệu lịch bay của một dịch vụ dữ liệu chuyến bay; lệch giờ hoặc lệch sân bay → cảnh báo.
+- Trùng với chuyến đã lưu (cùng PNR) → cập nhật chuyến cũ, không tạo bản sao.
+- **Thẻ xác nhận luôn hiện dòng mốc thời gian**, ví dụ: *"Hôm nay: Thứ Ba 22/9/2026, giờ Bangkok. Đã chọn: [số hiệu], BKK → HND, Thứ Tư 30/9 22:35 → Thứ Năm 1/10 06:50 (+1). Bỏ qua: chặng 15/9 (đã bay)."* Mai thấy ngay nếu hệ thống chọn sai.
+- Mai sửa bằng chat/voice ("không phải chuyến này, lấy chuyến ngày 30").
+
+*5. Sau khi lưu*
+- Tạo sự kiện Google Calendar đúng múi giờ từng đầu (giờ đi theo giờ nơi đi, giờ đến theo giờ nơi đến).
+- Kích hoạt chuỗi chuẩn bị → di chuyển → đệm sân bay (5.4.1) và checklist theo điểm đến.
+- **Theo dõi chuyến bay thời gian thực** từ 24 giờ trước giờ bay: trễ, đổi cổng, đổi nhà ga, hủy → báo Mai và tự dời chuỗi lịch.
+
+*6. Đính kèm vé*
+- Lưu file gốc (PDF, ảnh, email) vào chuyến đi trong app và vào thư mục Drive theo chuyến; gắn link vào sự kiện lịch.
+- Màn chuyến đi có nút **Mở vé** một chạm, xem được **khi không có mạng**; boarding pass có mã QR hiện ở chế độ sáng tối đa.
+- Nhiều file cho một chuyến (vé, boarding pass, xác nhận khách sạn, bảo hiểm) được gom chung.
+- Vé chứa thông tin cá nhân → lưu mã hóa, chỉ Mai xem (không chia sẻ sang không gian dự án), tự xóa sau khi chuyến kết thúc một thời gian (ví dụ 90 ngày), trừ khi Mai chọn giữ.
+
+*7. Bộ test bắt buộc trước khi phát hành*
+Vé khứ hồi đã bay chặng đi · email đổi vé (cũ + mới) · vé không ghi năm · chuyến qua nửa đêm (+1) · bay qua múi giờ (BKK → Tokyo) · chuyến đã hủy · PDF nhiều hành khách · ảnh chụp màn hình vé trong app hãng · vé tiếng Thái / tiếng Việt / tiếng Anh. Mỗi test chạy với nhiều ngày "hôm nay" khác nhau.
+
 **Checklist đồ mang theo** (mẫu gốc: trang "Checklist bay của Mai")
 - Nhóm: Giấy tờ · Công nghệ & làm việc · Tiền & thẻ · Làm đẹp & cá nhân · Quần áo · Sức khỏe & trên máy bay.
 - **Mẫu theo điểm đến:** Tokyo (Visit Japan Web, tiền mặt yên, thẻ Suica/Pasmo, giày đi bộ), HCMC (tiền đồng), về Bangkok (TDAC nếu áp dụng, baht đi taxi). Mẫu mở rộng được cho điểm đến mới.
@@ -298,7 +369,7 @@ Mục tiêu: mỗi chuyến bay tự có kế hoạch chuẩn bị, Mai không p
 - **Tên:** Mai Lowtechie. Ý tưởng: công nghệ cao nhưng dùng như không cần biết công nghệ.
 - **Linh vật:** bông hoa mai năm cánh có mặt cười. Bông mai đồng thời là nút giao việc ở giữa thanh điều hướng, và "nở" khi đang nghe.
 - **Tính cách:** smart, dễ thương nhưng không trẻ con; vui vẻ nhưng nói thẳng khi Mai ôm quá nhiều việc.
-- **Màu:** vàng mai `#FFC93C` cho hành động chính, mực chàm `#1E2150` cho chữ và dữ liệu, nền sương `#EEF1F8`, má hồng `#FF8FA3` điểm xuyết, xanh lá `#2FA97C` chỉ dành cho "đã xong". Mỗi dự án một màu cố định: Sorene tím, Circle xanh ngọc, Favstay cam san hô, Edge xanh dương, Cá nhân hồng.
+- **Màu:** vàng mai `#FFC93C` cho hành động chính, mực chàm `#1E2150` cho chữ và dữ liệu, nền sương `#EEF1F8`, má hồng `#FF8FA3` điểm xuyết, xanh lá `#2FA97C` chỉ dành cho "đã xong". Mỗi dự án một màu cố định: Sorene tím, Circle xanh ngọc, Học tập xanh cốm `#9BC53D`, Cá nhân hồng, Admin chung xám `#8A8FB0`. Dự án Mai tự thêm được chọn màu từ bảng màu có sẵn.
 - **Chữ:** Baloo 2 (tiêu đề, con số, lời của Lowtechie), Be Vietnam Pro (nội dung, hiển thị dấu tiếng Việt tốt). Cần kiểm tra thêm hiển thị tiếng Thái; dự phòng Noto Sans Thai.
 - **Giọng:** xưng "mình", gọi "Mai"; mỗi lần hỏi một câu; đề xuất kèm lý do, không ra lệnh.
 - Hỗ trợ chế độ tối ngay từ đầu.
@@ -388,6 +459,7 @@ flowchart LR
 ```
 
 Ghi chú lựa chọn:
+- **Ngữ cảnh thời gian thực cho mọi lời gọi AI:** ngày giờ hiện tại, múi giờ và thành phố Mai đang ở được đưa vào mọi yêu cầu (trích xuất vé, đặt lịch, phân loại hạn). Đây là yêu cầu bắt buộc, không phải tùy chọn.
 - **Row-Level Security** của Postgres giải quyết phần phân quyền Riêng tư / Dự án / Team ngay từ tầng dữ liệu — đừng để LLM tự quyết ai được xem gì.
 - **Speech-to-text** cần test thật với tiếng Việt, tiếng Thái và câu trộn tiếng Anh trước khi chọn nhà cung cấp.
 - Mọi hành động có tác động ra ngoài (ghi lịch, gửi tin) đi qua một lớp **"đề xuất → duyệt → thực thi"** có log.
@@ -395,7 +467,9 @@ Ghi chú lựa chọn:
 ## 8. Mô hình dữ liệu (rút gọn)
 
 - `projects` (id, name, weight, goal, members, linked_channels)
-- `categories` (id, project_id, name)
+- `projects` bổ sung: color, icon, sort_order, keywords, status (active / archived)
+- `categories` (id, project_id, name, sort_order, is_default, status)
+- `structure_changes` (type: add/rename/merge/move/archive/delete, before, after, confirmed_at) — để hoàn tác
 - `classification_feedback` (task_id, suggested_project, suggested_category, final_project, final_category, signals)
 - `tasks` (id, project_id, category_id, title, owner_id, assignee_id, due_at, due_type, priority, status, est_minutes, energy, source_channel, source_ref, source_quote, confidence, visibility)
 - `waiting_on` (task_id, person_id, follow_up_at)
@@ -408,7 +482,9 @@ Ghi chú lựa chọn:
 - `city_defaults` (city, default_mode, rain_walk_buffer_min)
 - `prep_profiles` (name, minutes, applies_to)
 - `event_chains` (event_id, prep_block_id, travel_block_id, origin_place_id, mode, last_checked_at)
-- `trips` (destination, depart_at, return_at, flight_refs, stay_place_id, purpose)
+- `trips` (destination, depart_at, return_at, stay_place_id, purpose, status)
+- `flight_segments` (trip_id, pnr, ticket_no, airline, flight_no, from_iata, from_terminal, to_iata, to_terminal, depart_local, depart_tz, arrive_local, arrive_tz, seat, baggage, status: upcoming/flown/cancelled/changed, verified_against_schedule, source_version)
+- `trip_attachments` (trip_id, type: ticket/boarding_pass/hotel/insurance, file_ref, offline_cached, expires_at)
 - `checklist_templates` (destination, group, item, hint, learned_from_user)
 - `trip_checklist_items` (trip_id, template_item_id / custom_text, done)
 - `voice_inputs` (audio_ref, transcript, language, parsed_actions, channel)
@@ -423,6 +499,7 @@ Ghi chú lựa chọn:
 | **Google Calendar / Drive / Gmail** | Đọc/ghi đầy đủ qua API | Không đáng kể | Làm ngay ở v1 |
 | **WhatsApp** | Bot 1:1 qua Cloud API; Groups API (2026) chỉ cho group **do doanh nghiệp tạo**, tối đa 8 thành viên, yêu cầu Official Business Account | **Không đọc được các group WhatsApp hiện có của Mai** | v1: bot 1:1 để capture + forward. Group mới nhỏ có thể tạo qua Groups API nếu đạt điều kiện |
 | **Zalo** | Zalo Bot / OA chính thức chủ yếu cho hội thoại 1:1 | Đọc group cá nhân chỉ khả thi qua thư viện **không chính thức** (dựa trên zca-js) chạy trên tài khoản cá nhân | Có rủi ro khóa tài khoản & vi phạm điều khoản. Nếu dùng: tài khoản Zalo phụ riêng cho bot, không dùng tài khoản chính |
+| **Dữ liệu chuyến bay** | Lịch bay theo số hiệu, trạng thái thời gian thực (trễ, cổng, hủy) qua các dịch vụ dữ liệu chuyến bay thương mại | Tính phí theo lượt tra cứu; độ phủ hãng khu vực cần kiểm tra | Dùng để đối chiếu vé khi lưu và theo dõi từ 24 giờ trước giờ bay |
 | **Google Maps (Routes, Places)** | Thời gian di chuyển có dự báo giao thông (kể cả mô hình "ngày xấu"), tìm địa điểm, deep link chỉ đường | Chọn giờ đến chỉ hỗ trợ phương tiện công cộng; tính phí theo lượt gọi | Làm ở v1 cùng Calendar; cache tuyến quen để giảm chi phí |
 | **Họp online (Meet/Zoom/Teams)** | Dịch vụ meeting-bot (ví dụ Recall.ai) cho bot vào họp chỉ bằng link, trả về ghi âm và lời chép theo người nói; Zoom còn có luồng media không cần bot | Bot hiện tên trong danh sách người họp, có thể cần chủ trì cho vào, một số tổ chức chặn bot; tính phí theo phút | Dùng dịch vụ bên ngoài, không tự xây bot. Tự động hỏi trước mỗi cuộc họp |
 | **Họp offline** | Ghi âm trên điện thoại + speech-to-text có tách người nói | Chất lượng phụ thuộc micro, phòng ồn, và độ chính xác tiếng Việt/Thái | Test 3 nhà cung cấp STT với ghi âm thật trước khi chọn |
@@ -458,6 +535,7 @@ Tài khoản cho cộng sự, phân quyền RLS, giao việc chéo, assistant ri
 | Trích xuất nhiễu → mất niềm tin → bỏ app | Triage inbox, ngưỡng tin cậy, trích dẫn nguồn |
 | Khóa tài khoản Zalo khi dùng thư viện không chính thức | Tài khoản phụ; phương án dự phòng là forward thủ công |
 | Rò rỉ việc riêng tư sang cộng sự | Phân quyền ở tầng database, mặc định Riêng tư |
+| Trích sai ngày/chuyến từ vé (đã xảy ra khi thử) | Cấp ngày giờ thực cho mọi lời gọi AI; quy tắc chọn chặng tương lai; đối chiếu lịch bay; thẻ xác nhận hiện mốc "hôm nay"; bộ test nhiều kịch bản |
 | Agent tự hành động sai (book nhầm, gửi nhầm) | Duyệt trước mọi hành động ra ngoài; log & hoàn tác |
 | Người tham dự khó chịu khi bị ghi âm / bot vào họp | Hỏi trước, tên bot rõ ràng, cho phép tắt theo cuộc họp hoặc theo khách hàng |
 | STT tiếng Việt/Thái sai tên riêng, thuật ngữ | Từ điển riêng (tên người, dự án, khách sạn) đưa vào bước chép lời và soạn recap |

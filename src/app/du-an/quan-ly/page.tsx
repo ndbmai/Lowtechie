@@ -52,22 +52,26 @@ function ProjectCard({ project }: { project: Project }) {
   const [newCat, setNewCat] = useState("");
   const [editingCat, setEditingCat] = useState<string | null>(null);
   const [catName, setCatName] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const others = projects.filter((p) => p.id !== project.id);
+  const [moveTo, setMoveTo] = useState<string>("");
 
   const cats = categoriesFor(categories, project.id);
   const openCount = tasks.filter(
     (t) => t.projectId === project.id && (t.status === "todo" || t.status === "doing"),
   ).length;
-
-  function removeProject() {
-    const msg =
-      openCount > 0
-        ? `Xóa "${project.name}"? ${openCount} việc đang mở sẽ chuyển sang Cá nhân.`
-        : `Xóa dự án "${project.name}"?`;
-    if (window.confirm(msg)) deleteProject(project.id);
-  }
+  const archived = project.status === "archived";
 
   return (
-    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div
+      className="card"
+      style={{ display: "flex", flexDirection: "column", gap: 8, opacity: archived ? 0.65 : 1 }}
+    >
+      {archived && (
+        <span className="small" style={{ color: "var(--note-ink)", background: "var(--note)", borderRadius: 999, padding: "1px 10px", alignSelf: "flex-start" }}>
+          Đang tạm ngưng — ẩn khỏi Hôm nay, Dự án và review
+        </span>
+      )}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <input
           className="transcript"
@@ -92,12 +96,53 @@ function ProjectCard({ project }: { project: Project }) {
           />
           h/tuần
         </label>
-        {projects.length > 1 && (
-          <button className="btn ghost small" onClick={removeProject}>
+        <button
+          className="btn ghost small"
+          onClick={() =>
+            updateProject(project.id, { status: archived ? "active" : "archived" })
+          }
+        >
+          {archived ? "Mở lại" : "Tạm ngưng"}
+        </button>
+        {projects.length > 1 && !deleting && (
+          <button className="btn ghost small" onClick={() => setDeleting(true)}>
             Xóa
           </button>
         )}
       </div>
+
+      {deleting && (
+        <div className="note-box" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="small">
+            {openCount > 0
+              ? `${openCount} việc đang mở của "${project.name}" chuyển sang:`
+              : `Xóa "${project.name}"? Việc cũ (nếu có) chuyển sang:`}
+          </span>
+          <select
+            className="btn small"
+            value={moveTo}
+            aria-label="Chuyển việc sang dự án"
+            onChange={(e) => setMoveTo(e.target.value)}
+          >
+            <option value="">— chọn dự án —</option>
+            {others.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="btn primary small"
+            disabled={!moveTo}
+            onClick={() => deleteProject(project.id, moveTo)}
+          >
+            Xác nhận xóa
+          </button>
+          <button className="btn ghost small" onClick={() => setDeleting(false)}>
+            Thôi
+          </button>
+        </div>
+      )}
       <ColorPicker
         value={project.color}
         onChange={(c) => updateProject(project.id, { color: c })}

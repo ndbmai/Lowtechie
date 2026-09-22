@@ -7,6 +7,7 @@ import { Bubble } from "@/components/Bubble";
 import { classify, findDuplicate, learnableTerms, CONFIDENCE_THRESHOLD } from "@/core/classify";
 import { detectProject, parseCommand, parseWhen } from "@/core/parse";
 import {
+  activeProjects,
   categoriesFor,
   categoryName,
   projectById,
@@ -546,7 +547,7 @@ export default function CapturePage() {
                       });
                     }}
                   >
-                    {projects.map((pr) => {
+                    {activeProjects(projects).map((pr) => {
                       const cats = categoriesFor(categories, pr.id);
                       return cats.length ? (
                         <optgroup key={pr.id} label={pr.name}>

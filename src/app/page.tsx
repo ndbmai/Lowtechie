@@ -6,7 +6,7 @@ import { Bubble } from "@/components/Bubble";
 import { TaskRow } from "@/components/TaskRow";
 import { Blossom } from "@/components/Blossom";
 import { composeBrief } from "@/core/brief";
-import { projectById } from "@/core/projects";
+import { activeProjects, projectById } from "@/core/projects";
 import { fmtRange, fmtRelativeDay, todayLabel } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
@@ -49,7 +49,7 @@ export default function TodayPage() {
   }, [events, gcal.events]);
 
   const brief = useMemo(
-    () => (mounted ? composeBrief(tasks, projects, allEvents, new Date()) : null),
+    () => (mounted ? composeBrief(tasks, activeProjects(projects), allEvents, new Date()) : null),
     [mounted, tasks, projects, allEvents],
   );
 

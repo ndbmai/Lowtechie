@@ -119,25 +119,50 @@ export interface FlightTripCandidate {
   destinationName?: string;
   departAt: string;
   returnAt?: string;
+  pnr?: string;
   flights: string;
   subject: string;
   confidence: number;
 }
 
 export async function fetchFlightTrips(): Promise<
-  | { ok: true; trips: FlightTripCandidate[]; scanned: number }
+  | {
+      ok: true;
+      trips: FlightTripCandidate[];
+      skipped: string[];
+      scanned: number;
+      todayLocal: string;
+    }
   | { ok: false; reason: "no-gmail-scope" | "no-key" | "not-connected" | "failed"; detail?: string }
 > {
   try {
-    const res = await fetch("/api/gmail/flights");
+    // Mốc thời gian thật của thiết bị Mai đi kèm mọi lần trích (PRD §5.9/§7).
+    const p = new URLSearchParams({
+      epochMs: String(Date.now()),
+      tzOffsetMin: String(new Date().getTimezoneOffset()),
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+    const res = await fetch(`/api/gmail/flights?${p}`);
     if (res.status === 403) return { ok: false, reason: "no-gmail-scope" };
     if (res.status === 501) return { ok: false, reason: "no-key" };
     if (res.status === 401) return { ok: false, reason: "not-connected" };
     const body = (await res.json().catch(() => null)) as
-      | { trips?: FlightTripCandidate[]; scanned?: number; detail?: string }
+      | {
+          trips?: FlightTripCandidate[];
+          skipped?: string[];
+          scanned?: number;
+          todayLocal?: string;
+          detail?: string;
+        }
       | null;
     if (!res.ok) return { ok: false, reason: "failed", detail: body?.detail };
-    return { ok: true, trips: body?.trips ?? [], scanned: body?.scanned ?? 0 };
+    return {
+      ok: true,
+      trips: body?.trips ?? [],
+      skipped: body?.skipped ?? [],
+      scanned: body?.scanned ?? 0,
+      todayLocal: body?.todayLocal ?? "",
+    };
   } catch {
     return { ok: false, reason: "failed" };
   }

@@ -18,6 +18,8 @@ export interface Project {
   /** Mục tiêu giờ mỗi tuần, suy từ weight × quỹ giờ tuần. */
   targetHoursPerWeek: number;
   goal?: string;
+  /** Lưu trữ = ẩn khỏi Hôm nay/Dự án/review, giữ nguyên dữ liệu (§5.3.1). */
+  status?: "active" | "archived";
 }
 
 /** Category cấp 2 dưới dự án (PRD §5.2.1). */
@@ -112,6 +114,8 @@ export interface Trip {
   label: string;
   departAt: string;
   returnAt?: string;
+  /** Mã đặt chỗ — chống tạo trùng chuyến khi quét lại vé (§5.9). */
+  pnr?: string;
   purpose?: string;
   /** Tick checklist: itemId → đã xong. */
   done: Record<string, boolean>;

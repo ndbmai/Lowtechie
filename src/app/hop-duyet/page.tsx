@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Blossom } from "@/components/Blossom";
 import { CONFIDENCE_THRESHOLD, learnableTerms } from "@/core/classify";
-import { categoriesFor, categoryName, projectById } from "@/core/projects";
+import { activeProjects, categoriesFor, categoryName, projectById } from "@/core/projects";
 import type { ProjectId, SourceChannel } from "@/core/types";
 import { fmtDayTime } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
@@ -168,7 +168,7 @@ export default function TriagePage() {
                   onChange={(e) => setCombo(e.target.value)}
                   aria-label="Chọn dự án / category"
                 >
-                  {projects.map((pr) => {
+                  {activeProjects(projects).map((pr) => {
                     const cats = categoriesFor(categories, pr.id);
                     return cats.length ? (
                       <optgroup key={pr.id} label={pr.name}>

@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Bubble } from "@/components/Bubble";
 import { chronicallyDeferred, weekStats, weekSummary } from "@/core/stats";
-import { projectById } from "@/core/projects";
+import { activeProjects, projectById } from "@/core/projects";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
 
@@ -21,7 +21,7 @@ export default function ReviewPage() {
 
   const now = mounted ? new Date() : null;
   const stats = useMemo(
-    () => (now ? weekStats(tasks, projects, now).filter((s) => s.targetHours > 0) : []),
+    () => (now ? weekStats(tasks, activeProjects(projects), now).filter((s) => s.targetHours > 0) : []),
     [now, tasks, projects],
   );
   const summary = now ? weekSummary(tasks, now) : { done: 0, deferred: 0 };
