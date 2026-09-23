@@ -17,6 +17,7 @@ import { carChain, transitChain, type Chain } from "@/core/timeback";
 import type { CalEvent, Destination, Task, Trip } from "@/core/types";
 import { PlaceSelect } from "@/components/PlaceSelect";
 import { fmtDay, fmtDayFull, fmtRange, fmtTime, isSameDay } from "@/lib/format";
+import { getFile } from "@/lib/fileStore";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
 import {
@@ -1176,7 +1177,20 @@ export default function CalendarPage() {
             {e.bookingStatus === "booked" && (
               <span className="small" style={{ color: "#2FA97C" }}> · ✓ đã đặt chỗ</span>
             )}
+            {e.notes && <span className="muted small"> · {e.notes}</span>}
           </span>
+          {e.linkUrl && (
+            <a
+              className="btn ghost small"
+              style={{ textDecoration: "none" }}
+              href={e.linkUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              🔗
+            </a>
+          )}
+          {e.bannerImage && <BannerFileLink fileId={e.bannerImage} />}
           {e.bookingStatus === "pending" && (
             <button
               className="btn small"
@@ -1607,5 +1621,39 @@ export default function CalendarPage() {
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * Nút mở ảnh banner đính vào sự kiện (v3.0) — thẻ <a> nạp SẴN object
+ * URL qua useEffect: window.open sau await bị Safari/PWA chặn (bài học
+ * popup của nút "Mở" vé máy bay).
+ */
+function BannerFileLink({ fileId }: { fileId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let obj: string | null = null;
+    void getFile(fileId).then((blob) => {
+      if (blob) {
+        obj = URL.createObjectURL(blob);
+        setUrl(obj);
+      }
+    });
+    return () => {
+      if (obj) URL.revokeObjectURL(obj);
+    };
+  }, [fileId]);
+  if (!url) return null;
+  return (
+    <a
+      className="btn ghost small"
+      style={{ textDecoration: "none" }}
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Mở ảnh banner của sự kiện"
+    >
+      🖼
+    </a>
   );
 }

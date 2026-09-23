@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { readTaxonomy, taxonomyText, type TaxonomyPayload } from "@/lib/taxonomy";
-import type { ImageItem, ImageParseResult } from "@/core/types";
+import type { BannerEvent, ImageItem, ImageParseResult } from "@/core/types";
 
 /**
- * Đọc ảnh thành danh sách việc (PRD §5.1.1) bằng Claude vision.
- * Không có ANTHROPIC_API_KEY → 501: đọc chữ trong ảnh không có bản
- * chạy máy, client sẽ báo Mai bật key.
+ * Đọc ảnh bằng Claude vision (PRD §5.1.1): checklist/ghi chú → danh
+ * sách việc; **banner/poster/thiệp mời sự kiện (v3.0) → MỘT sự kiện
+ * soạn sẵn** cho thẻ xem trước — AI trích thô + suy năm theo mốc thời
+ * gian thực, còn "đã diễn ra chưa / thiếu giờ phải hỏi" là của CODE
+ * (src/core/banner.ts). Không có ANTHROPIC_API_KEY → 501.
  */
 
 export const runtime = "nodejs";
@@ -58,6 +60,46 @@ const TOOL_SCHEMA = {
         },
       },
       question: { type: "string", description: "TỐI ĐA MỘT câu hỏi lại, tiếng Việt" },
+      kind: {
+        type: "string",
+        enum: ["checklist", "banner", "khac"],
+        description:
+          'Loại ảnh: "banner" khi ảnh là banner/poster/thiệp mời/bài đăng SỰ KIỆN (khi đó điền `event` và để items rỗng); còn lại "checklist" hoặc "khac"',
+      },
+      event: {
+        type: "object",
+        description: "CHỈ khi kind=banner — sự kiện đọc từ banner, trích thô",
+        properties: {
+          title: { type: "string", description: "Tên sự kiện" },
+          startAt: {
+            type: "string",
+            description:
+              "ISO 8601 kèm offset của Mai. Banner không ghi năm → lấy lần xuất hiện gần nhất TỪ HÔM NAY TRỞ ĐI theo mốc thời gian thực; banner chỉ ghi ngày không ghi giờ → BỎ TRỐNG, đừng đoán giờ",
+          },
+          endAt: { type: "string", description: "ISO giờ kết thúc nếu banner ghi" },
+          location: { type: "string", description: "Địa điểm như banner ghi (để mở Google Maps)" },
+          organizer: { type: "string", description: "Đơn vị tổ chức" },
+          registrationUrl: {
+            type: "string",
+            description:
+              "Link đăng ký/mua vé viết trong ảnh; nếu lời nhắn có 'QR trong ảnh: <url>' thì dùng url đó",
+          },
+          price: { type: "string", description: 'Giá vé, kể cả early bird ("500 baht, EB 350")' },
+          registrationDeadline: {
+            type: "string",
+            description: "ISO hạn đăng ký / early bird nếu banner ghi",
+          },
+          requirements: { type: "string", description: "Trang phục, mang theo gì, yêu cầu khác" },
+          timeOptions: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Banner ghi NHIỀU khung giờ/ngày → liệt kê hết dạng ISO, đừng tự chọn một cái; sự kiện nhiều ngày liên tục thì dùng startAt/endAt",
+          },
+          confidence: { type: "number", description: "0–1" },
+        },
+        required: ["title", "confidence"],
+      },
     },
     required: ["items"],
   },
@@ -69,7 +111,8 @@ Bây giờ ở chỗ Mai là ${localNow}. Mỗi dòng trong ảnh thành một v
 Lời nhắn kèm ảnh (nếu có) cho biết dự án và hạn áp cho CẢ danh sách. Dự án, category và danh bạ khách CỦA MAI (chỉ dùng đúng các id này):
 ${taxonomyText(taxonomy)}
 Tên khách trong ảnh khớp danh bạ (kể cả tên gọi tắt) → điền clientId; tên lạ bỏ trống, không đoán. Ảnh không ghi hạn → bỏ trống dueAt, không tự đề xuất.
-Chữ khó đọc → vẫn trả dòng đó với confidence thấp, đừng bỏ. Không bịa dòng không có trong ảnh.`;
+Chữ khó đọc → vẫn trả dòng đó với confidence thấp, đừng bỏ. Không bịa dòng không có trong ảnh.
+ẢNH BANNER SỰ KIỆN (v3.0): ảnh là banner/poster/thiệp mời/bài đăng sự kiện → kind="banner", items để RỖNG, điền event theo mô tả từng trường. Ngày giờ LUÔN đối chiếu mốc "bây giờ" phía trên: thiếu năm → lần xuất hiện gần nhất từ hôm nay trở đi (kể cả khi đó là năm sau); ngày đã qua vẫn trả nguyên (server tự báo "đã diễn ra"). Chỉ trích thứ có trong ảnh, không bịa.`;
 }
 
 function localIso(epochMs: number, tzOffsetMin: number): string {
@@ -84,7 +127,12 @@ function localIso(epochMs: number, tzOffsetMin: number): string {
 interface ClaudeContent {
   type: string;
   name?: string;
-  input?: { items?: ImageItem[]; question?: string };
+  input?: {
+    items?: ImageItem[];
+    question?: string;
+    kind?: ImageParseResult["kind"];
+    event?: BannerEvent;
+  };
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
@@ -95,6 +143,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   let images: string[] = [];
   let caption = "";
+  let qrUrls: string[] = [];
   let epochMs = Date.now();
   let tzOffsetMin = 0;
   let taxonomy = readTaxonomy(undefined);
@@ -102,6 +151,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const body = (await req.json()) as {
       images?: unknown;
       caption?: unknown;
+      qrUrls?: unknown;
       epochMs?: unknown;
       tzOffsetMin?: unknown;
       taxonomy?: unknown;
@@ -111,6 +161,13 @@ export async function POST(req: Request): Promise<NextResponse> {
       images = body.images.filter((x): x is string => typeof x === "string").slice(0, MAX_IMAGES);
     }
     if (typeof body.caption === "string") caption = body.caption.slice(0, 500);
+    // Link giải từ mã QR TRÊN CLIENT (jsQR) — AI không tự đọc được QR.
+    if (Array.isArray(body.qrUrls)) {
+      qrUrls = body.qrUrls
+        .filter((x): x is string => typeof x === "string")
+        .map((x) => x.slice(0, 500))
+        .slice(0, 4);
+    }
     if (typeof body.epochMs === "number" && Number.isFinite(body.epochMs)) epochMs = body.epochMs;
     if (typeof body.tzOffsetMin === "number" && Number.isFinite(body.tzOffsetMin))
       tzOffsetMin = body.tzOffsetMin;
@@ -162,9 +219,10 @@ export async function POST(req: Request): Promise<NextResponse> {
               ...imageBlocks,
               {
                 type: "text",
-                text: caption
-                  ? `Lời nhắn kèm ảnh của Mai: "${caption}". Trích danh sách việc từ ảnh.`
-                  : "Trích danh sách việc từ ảnh.",
+                text:
+                  (caption ? `Lời nhắn kèm ảnh của Mai: "${caption}". ` : "") +
+                  (qrUrls.length ? `QR trong ảnh: ${qrUrls.join(" , ")}. ` : "") +
+                  "Đọc ảnh: checklist thì trích danh sách việc; banner sự kiện thì trích sự kiện.",
               },
             ],
           },
@@ -182,8 +240,16 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
       const items = toolUse?.input?.items;
       if (Array.isArray(items)) {
+        const ev = toolUse?.input?.event;
         const out: ImageParseResult = {
           items,
+          kind: toolUse?.input?.kind,
+          // Banner: chỉ nhận event có tên; QR client giải được thì ưu tiên
+          // làm link đăng ký khi AI không thấy link chữ trong ảnh.
+          event:
+            toolUse?.input?.kind === "banner" && ev && typeof ev.title === "string" && ev.title
+              ? { ...ev, registrationUrl: ev.registrationUrl || qrUrls[0] }
+              : undefined,
           question: toolUse?.input?.question,
           source: "claude",
         };

@@ -164,6 +164,12 @@ export interface CalEvent {
   /** Nơi cần đặt chỗ: chưa đặt thì lịch "có thể không thành" (§5.4.2). */
   bookingStatus?: "pending" | "booked";
   placeId?: string;
+  /** Link đăng ký/mua vé từ banner (v3.0) — kể cả link giải từ mã QR. */
+  linkUrl?: string;
+  /** Khóa blob ảnh banner gốc trong IndexedDB (src/lib/fileStore). */
+  bannerImage?: string;
+  /** Ghi chú của sự kiện: đơn vị tổ chức, giá vé, yêu cầu… (v3.0). */
+  notes?: string;
 }
 
 export type Destination = "tokyo" | "hcmc" | "bkk";
@@ -285,8 +291,30 @@ export interface ImageItem {
   confidence: number;
 }
 
+/** Sự kiện soạn sẵn từ ảnh banner/poster/thiệp mời (PRD §5.1.1 v3.0). */
+export interface BannerEvent {
+  title: string;
+  /** ISO kèm offset của Mai — AI đã suy năm theo mốc thời gian thực. */
+  startAt?: string;
+  endAt?: string;
+  location?: string;
+  organizer?: string;
+  /** Link đăng ký/mua vé — chữ trong ảnh hoặc mã QR client giải được. */
+  registrationUrl?: string;
+  price?: string;
+  /** Hạn đăng ký / early bird → hạn của việc "Đăng ký / mua vé". */
+  registrationDeadline?: string;
+  requirements?: string;
+  /** Banner nhiều khung giờ/ngày → các ISO ứng viên để Mai chọn một. */
+  timeOptions?: string[];
+  confidence: number;
+}
+
 export interface ImageParseResult {
   items: ImageItem[];
+  /** Ảnh là checklist hay banner sự kiện (v3.0) — banner đi kèm `event`. */
+  kind?: "checklist" | "banner" | "khac";
+  event?: BannerEvent;
   question?: string;
   source: "claude";
 }

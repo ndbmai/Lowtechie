@@ -6,6 +6,7 @@ import { Blossom } from "@/components/Blossom";
 import { Bubble } from "@/components/Bubble";
 import { DueEditor } from "@/components/DueEditor";
 import { SearchSelect, type PickOption } from "@/components/SearchSelect";
+import { bannerNote, findDuplicateEvent, resolveBannerTiming } from "@/core/banner";
 import { classify, findDuplicate, learnableTerms, CONFIDENCE_THRESHOLD } from "@/core/classify";
 import {
   clientProjectHint,
@@ -27,6 +28,7 @@ import {
   sanitizeTaxonomy,
 } from "@/core/projects";
 import type {
+  BannerEvent,
   Category,
   Client,
   DueType,
@@ -36,8 +38,9 @@ import type {
   Project,
   ProjectId,
 } from "@/core/types";
-import { fmtDayTime, fmtRelativeDay, fmtTime, isSameDay } from "@/lib/format";
-import { compressImage } from "@/lib/image";
+import { fmtDayFull, fmtDayTime, fmtRelativeDay, fmtTime, isSameDay } from "@/lib/format";
+import { putFile } from "@/lib/fileStore";
+import { compressImage, dataUrlToBlob, decodeQr } from "@/lib/image";
 import { useSpeech } from "@/lib/speech";
 import { useStore, type TaskDraft } from "@/lib/store";
 import { createGcalEvent, deleteGcalEvent, useAccounts, useGoogleStatus } from "@/lib/useGoogle";
@@ -129,7 +132,10 @@ export default function CapturePage() {
     completeTask,
     places,
     addTriage,
+    updateEvent,
   } = useStore();
+  /** Sự kiện soạn sẵn từ ảnh banner (v3.0) — chờ Mai duyệt trên thẻ. */
+  const [banner, setBanner] = useState<{ ev: BannerEvent; image: string } | null>(null);
   /** Tên khách đang gõ dở theo từng thẻ — Lưu là vào danh bạ (v2.3). */
   const [clientQ, setClientQ] = useState<Record<number, string>>({});
   /** Ghi chú Mai gõ trên từng thẻ việc (3d) — tách riêng với Nguồn. */
@@ -490,12 +496,17 @@ export default function CapturePage() {
     setImgBusy(true);
     setImgError(null);
     try {
+      // Mã QR trên banner giải ngay trên máy (AI không đọc được QR).
+      const qrUrls = (await Promise.all(images.map((i) => decodeQr(i)))).filter(
+        (x): x is string => Boolean(x),
+      );
       const res = await fetch("/api/parse-image", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           images,
           caption: text.trim(),
+          qrUrls,
           epochMs: Date.now(),
           tzOffsetMin: new Date().getTimezoneOffset(),
           taxonomy: taxonomyPayload({ projects, categories, clients }),
@@ -519,6 +530,14 @@ export default function CapturePage() {
         return;
       }
       const data = (await res.json()) as ImageParseResult;
+
+      // Ảnh là banner sự kiện (v3.0) → thẻ xem trước sự kiện, không vào Hộp duyệt.
+      if (data.kind === "banner" && data.event) {
+        setBanner({ ev: data.event, image: images[0] });
+        setImages([]);
+        setText("");
+        return;
+      }
 
       const caption = text.trim();
       const capProject = caption ? detectProject(caption) : { id: "canhan" as ProjectId, explicit: false };
@@ -670,11 +689,22 @@ export default function CapturePage() {
             ))}
           </div>
           <button className="btn primary" disabled={imgBusy} onClick={() => void runImageParse()}>
-            {imgBusy ? "Đang đọc ảnh…" : `Trích việc từ ${images.length} ảnh → Hộp duyệt`}
+            {imgBusy ? "Đang đọc ảnh…" : `Đọc ${images.length} ảnh — việc hoặc sự kiện`}
           </button>
         </div>
       )}
       {imgError && <div className="note-box">{imgError}</div>}
+
+      {banner && (
+        <BannerCard
+          ev={banner.ev}
+          image={banner.image}
+          onDone={(lines) => {
+            setBanner(null);
+            if (lines.length) setSavedLines(lines);
+          }}
+        />
+      )}
 
       {result && (
         <>
@@ -951,5 +981,315 @@ export default function CapturePage() {
         <p className="muted small">Trình duyệt này chưa hỗ trợ voice — Mai gõ hoặc gửi ảnh nhé.</p>
       )}
     </main>
+  );
+}
+
+/**
+ * Thẻ xem trước sự kiện từ ảnh banner/thiệp mời (PRD §5.1.1 v3.0):
+ * AI soạn sẵn, Mai duyệt — chỉ tạo lịch/book khi Mai bấm. Thiếu giờ →
+ * hỏi đúng MỘT câu; trùng tên + ngày → đề xuất cập nhật thay vì tạo mới.
+ */
+function BannerCard({
+  ev,
+  image,
+  onDone,
+}: {
+  ev: BannerEvent;
+  image: string;
+  onDone: (lines: string[]) => void;
+}) {
+  const { events, projects, categories, feedback, settings, addEvent, updateEvent, addTriage } =
+    useStore();
+  const gs = useGoogleStatus();
+  const accts = useAccounts();
+  const calAccounts = accts.accounts.filter((x) => x.parts.cal);
+
+  const guessed = useMemo(() => {
+    const cls = classify(`${ev.title} ${ev.organizer ?? ""}`, feedback);
+    return sanitizeTaxonomy(projects, categories, cls.projectId, undefined).projectId;
+  }, [ev, feedback, projects, categories]);
+
+  const [title, setTitle] = useState(ev.title);
+  const [projectId, setProjectId] = useState<ProjectId>(guessed);
+  const [startAt, setStartAt] = useState(ev.startAt);
+  const [endAt] = useState(ev.endAt);
+  /** Mai đã tự chọn giờ → thôi hỏi, dù banner có nhiều khung giờ. */
+  const [picked, setPicked] = useState(false);
+  const [book, setBook] = useState(false);
+  const [bookAcct, setBookAcct] = useState("");
+  const [makeTask, setMakeTask] = useState(
+    Boolean(ev.registrationUrl || ev.registrationDeadline),
+  );
+  const [busy, setBusy] = useState(false);
+
+  const timing = resolveBannerTiming(
+    { ...ev, startAt, endAt, timeOptions: picked ? undefined : ev.timeOptions },
+    Date.now(),
+  );
+  const dup =
+    timing.status === "ok"
+      ? findDuplicateEvent(
+          events.filter((e) => e.kind === "event"),
+          title,
+          timing.startAt,
+        )
+      : undefined;
+
+  if (timing.status === "past") {
+    return (
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <b>🎪 {ev.title}</b>
+        <div className="warn">Sự kiện này đã diễn ra — ngày trên banner đã qua, mình không tạo lịch.</div>
+        <button className="btn" onClick={() => onDone([])}>
+          Đóng
+        </button>
+      </div>
+    );
+  }
+
+  async function save(mode: "create" | "update") {
+    if (timing.status !== "ok") return;
+    setBusy(true);
+    const lines: string[] = [];
+    const notes = bannerNote(ev);
+    const linkUrl = ev.registrationUrl;
+    // Ảnh banner gốc đính vào sự kiện — blob nằm ở IndexedDB.
+    const fileId = `banner-${Date.now().toString(36)}`;
+    const blob = dataUrlToBlob(image);
+    const savedImg = blob ? await putFile(fileId, blob) : false;
+
+    let gcalId: string | undefined;
+    let calAccount: string | undefined;
+    if (mode === "create" && book && gs.connected) {
+      const created = await createGcalEvent(
+        {
+          title,
+          startAt: timing.startAt,
+          endAt: timing.endAt,
+          description: [notes, linkUrl].filter(Boolean).join(" · ") || undefined,
+        },
+        bookAcct || settings.projectCalendar[projectId],
+      );
+      gcalId = created?.gcalId;
+      calAccount = created?.accountId;
+      lines.push(gcalId ? "Đã book lên lịch ngoài ✓" : "Book lịch ngoài lỗi — mới lưu trong app.");
+    }
+
+    if (mode === "update" && dup) {
+      updateEvent(dup.id, {
+        title,
+        startAt: timing.startAt,
+        endAt: timing.endAt,
+        location: ev.location ?? dup.location,
+        projectId,
+        linkUrl: linkUrl ?? dup.linkUrl,
+        notes: notes || dup.notes,
+        bannerImage: savedImg ? fileId : dup.bannerImage,
+      });
+      lines.unshift(`Đã cập nhật sự kiện "${title}" — ${fmtDayFull(timing.startAt)} (không tạo trùng).`);
+    } else {
+      addEvent({
+        title,
+        startAt: timing.startAt,
+        endAt: timing.endAt,
+        location: ev.location,
+        kind: "event",
+        projectId,
+        gcalId,
+        calAccount,
+        linkUrl,
+        notes: notes || undefined,
+        bannerImage: savedImg ? fileId : undefined,
+      });
+      lines.unshift(`Đã tạo sự kiện "${title}" — ${fmtDayFull(timing.startAt)}.`);
+    }
+
+    // Việc đi kèm tự đề xuất, vẫn qua Hộp duyệt (nguyên tắc số 1).
+    if (makeTask) {
+      const deadline =
+        ev.registrationDeadline && !Number.isNaN(Date.parse(ev.registrationDeadline))
+          ? ev.registrationDeadline
+          : undefined;
+      addTriage({
+        title: `Đăng ký / mua vé: ${title}`,
+        projectId,
+        assignee: "mai",
+        dueAt: deadline,
+        dueType: deadline ? "hard" : undefined,
+        dueSource: deadline ? "nguon" : undefined,
+        source: {
+          channel: "app-chat",
+          quote: `Từ banner "${title}"${ev.price ? ` — ${ev.price}` : ""}${linkUrl ? ` — ${linkUrl}` : ""}`,
+        },
+        confidence: ev.confidence,
+      });
+      lines.push(
+        `Việc "Đăng ký / mua vé" đã vào Hộp duyệt${deadline ? ` (hạn ${fmtDayFull(deadline)})` : ""}.`,
+      );
+    }
+    setBusy(false);
+    onDone(lines);
+  }
+
+  return (
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", gap: 10 }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={image}
+          alt="Ảnh banner sự kiện"
+          style={{ width: 84, height: 84, objectFit: "cover", borderRadius: 12, flex: "0 0 84px" }}
+        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
+          <div className="k">Sự kiện từ ảnh banner</div>
+          <input
+            className="transcript"
+            style={{ minHeight: 0, padding: "6px 10px", fontWeight: 700 }}
+            value={title}
+            aria-label="Tên sự kiện"
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <span className="small">
+            {timing.status === "ok" ? (
+              <>
+                🗓 <b>{fmtDayTime(timing.startAt)}</b> – {fmtTime(timing.endAt)}
+              </>
+            ) : (
+              <span className="muted">🗓 chưa có giờ</span>
+            )}
+          </span>
+        </div>
+      </div>
+
+      {timing.status === "needs-time" && (
+        <div className="note-box small" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          Sự kiện diễn ra lúc nào?
+          {timing.options.map((o) => (
+            <button
+              key={o}
+              className="btn small"
+              onClick={() => {
+                setStartAt(o);
+                setPicked(true);
+              }}
+            >
+              {fmtDayTime(o)}
+            </button>
+          ))}
+          <input
+            type="datetime-local"
+            className="btn small"
+            aria-label="Chọn giờ sự kiện"
+            onChange={(e) => {
+              if (e.target.value) {
+                setStartAt(new Date(e.target.value).toISOString());
+                setPicked(true);
+              }
+            }}
+          />
+        </div>
+      )}
+
+      <div className="small" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        {ev.location && (
+          <span>
+            📍 {ev.location}{" "}
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location)}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Mở Maps
+            </a>
+          </span>
+        )}
+        {bannerNote(ev) && <span className="muted">{bannerNote(ev)}</span>}
+        {ev.registrationDeadline && !Number.isNaN(Date.parse(ev.registrationDeadline)) && (
+          <span>⏳ Hạn đăng ký: <b>{fmtDayFull(ev.registrationDeadline)}</b></span>
+        )}
+        {ev.registrationUrl && (
+          <span>
+            🔗{" "}
+            <a href={ev.registrationUrl} target="_blank" rel="noreferrer" style={{ overflowWrap: "anywhere" }}>
+              {ev.registrationUrl}
+            </a>
+          </span>
+        )}
+      </div>
+
+      <SearchSelect
+        label="Dự án"
+        value={projectId}
+        options={activeProjects(projects).map((p) => ({ id: p.id, label: p.name, color: p.color }))}
+        onPick={(id) => {
+          if (id) setProjectId(id);
+        }}
+      />
+
+      {gs.connected && (
+        <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <label className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              className="check"
+              checked={book}
+              onChange={(e) => setBook(e.target.checked)}
+            />
+            Book lên lịch
+          </label>
+          {book && calAccounts.length > 1 && (
+            <select
+              className="btn small"
+              value={bookAcct}
+              aria-label="Lịch đích"
+              onChange={(e) => setBookAcct(e.target.value)}
+            >
+              <option value="">Theo dự án / mặc định</option>
+              {calAccounts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.provider === "lark" ? "Lark" : "Google"} · {c.email ?? c.id}
+                </option>
+              ))}
+            </select>
+          )}
+        </span>
+      )}
+
+      <label className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <input
+          type="checkbox"
+          className="check"
+          checked={makeTask}
+          onChange={(e) => setMakeTask(e.target.checked)}
+        />
+        Thêm việc “Đăng ký / mua vé” vào Hộp duyệt
+      </label>
+
+      {dup && <span className="small muted">Đã có “{dup.title}” cùng ngày trong lịch.</span>}
+      <div style={{ display: "flex", gap: 8 }}>
+        {dup ? (
+          <>
+            <button className="btn primary" style={{ flex: 1 }} disabled={busy} onClick={() => void save("update")}>
+              Cập nhật sự kiện đã có
+            </button>
+            <button className="btn" disabled={busy} onClick={() => void save("create")}>
+              Tạo bản mới
+            </button>
+          </>
+        ) : (
+          <button
+            className="btn primary"
+            style={{ flex: 1 }}
+            disabled={busy || timing.status !== "ok"}
+            onClick={() => void save("create")}
+          >
+            Tạo sự kiện
+          </button>
+        )}
+        <button className="btn ghost" onClick={() => onDone([])}>
+          Bỏ
+        </button>
+      </div>
+    </div>
   );
 }

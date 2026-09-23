@@ -4,7 +4,7 @@ Trợ lý AI chief-of-staff cá nhân cho Mai — người vận hành song song
 
 Tài liệu gốc:
 
-- [PRD v2.9](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
+- [PRD v3.0](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
 - [Mockup UI & user flow](docs/prototypes/mai-lowtechie-ui.html) — hệ thống thiết kế + 7 màn hình
 - [Checklist bay](docs/prototypes/checklist-bay.html) — nguyên mẫu module Chuyến đi (§5.9)
 
@@ -93,6 +93,7 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] "Deadline 7 ngày tới" **đầy đủ** (§5.3.3 v2.8, sửa lỗi thiếu việc 23/9): tiêu đề có số đếm, nhóm theo ngày, "Xem tất cả (N)" thay vì cắt bớt; khoảng tính theo ngày địa phương — có test 20+ việc cùng hạn
 - [x] Danh bạ ↔ voice/ảnh (§5.3.2 v2.8): tên khách làm từ vựng ưu tiên cho Whisper; thẻ duyệt ghi rõ *nhận từ "đô thị"*; cách viết Mai gõ cho khách đã có tự thành tên gọi khác; ô "+ khách hàng" hết bị cắt chữ, chọn loại ngay khi thêm
 - [x] **Nhiều tài khoản Google/Lark cùng lúc (§5.3.4)**: màn Kết nối — mỗi tài khoản một dòng bật/tắt Lịch·Mail·Drive, thêm nhiều Google song song với Lark (OAuth Lark, cần `LARK_APP_ID/SECRET`); lịch mọi tài khoản gộp một góc nhìn + khử trùng sự kiện mời chéo; lịch đích mặc định theo dự án + chọn ngay trên thẻ xem trước; quét vé chạy trên mọi hộp thư, kết quả ghi rõ hộp nào (Lark Mail best-effort, chờ kiểm chứng quyền của tổ chức); cookie Google cũ giữ nguyên — không phải nối lại
+- [x] **Chụp ảnh banner sự kiện → tạo lịch** (§5.1.1 v3.0): ảnh banner/poster/thiệp mời → thẻ xem trước sự kiện (tên, giờ, địa điểm + Mở Maps, tổ chức, giá, hạn đăng ký, link kể cả mã QR giải trên máy); năm suy theo hôm nay, banner đã qua → báo "đã diễn ra"; thiếu giờ hỏi đúng một câu; trùng tên + ngày → Cập nhật thay vì tạo trùng; việc "Đăng ký / mua vé" tự vào Hộp duyệt với hạn đăng ký; ảnh gốc đính vào sự kiện (nút 🖼 ở Lịch)
 - [ ] Lịch con từng tài khoản + dấu tài khoản trên sự kiện + trạng thái đồng bộ từng dòng; soạn email trả lời từ đúng hộp thư
 - [ ] Sync Google Sheets · ghi âm họp offline + recap
 - [ ] Giai đoạn 2: Lark (bot group, Mail, Calendar) trước, sau đó bot 1:1 WhatsApp/Zalo

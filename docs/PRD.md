@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 2.9 — 23/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng; tạo lịch trong app → xem trước → book Google Calendar; kết nối Lark Mail, Lark Calendar và bot trong group chat Lark; chuỗi ngày bay đầy đủ hai đầu, chỉnh sửa được; sửa lỗi voice; xóa chuyến bay cũ; tự lưu vé PDF vào chuyến mới; sửa cảnh báo nửa đêm sai; cập nhật danh sách phương tiện; màn Lịch xem theo tháng, không giới hạn quá khứ/tương lai; lịch hẹn định kỳ dài hạn (gia hạn giấy tờ); tên khách hàng nhập một lần được lưu và gợi ý lại; mục ghi chú trong từng việc; nhắc đặt lịch trước với spa và các nơi cần booking; chạm để xem chi tiết việc, chỉ tick hoặc "Xong" mới đóng việc, mở lại việc cũ; màn chi tiết dự án (category, việc, khách hàng); danh bạ khách hàng liên kết với việc nhập bằng voice và ảnh; bỏ mục tiêu giờ/tuần; nhiều tài khoản email và lịch; bỏ mô tả dự án; ô thêm việc đầy đủ trường + voice; gom bộ lọc vào dropdown.*
+*Phiên bản 3.0 — 23/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng; tạo lịch trong app → xem trước → book Google Calendar; kết nối Lark Mail, Lark Calendar và bot trong group chat Lark; chuỗi ngày bay đầy đủ hai đầu, chỉnh sửa được; sửa lỗi voice; xóa chuyến bay cũ; tự lưu vé PDF vào chuyến mới; sửa cảnh báo nửa đêm sai; cập nhật danh sách phương tiện; màn Lịch xem theo tháng, không giới hạn quá khứ/tương lai; lịch hẹn định kỳ dài hạn (gia hạn giấy tờ); tên khách hàng nhập một lần được lưu và gợi ý lại; mục ghi chú trong từng việc; nhắc đặt lịch trước với spa và các nơi cần booking; chạm để xem chi tiết việc, chỉ tick hoặc "Xong" mới đóng việc, mở lại việc cũ; màn chi tiết dự án (category, việc, khách hàng); danh bạ khách hàng liên kết với việc nhập bằng voice và ảnh; bỏ mục tiêu giờ/tuần; nhiều tài khoản email và lịch; bỏ mô tả dự án; ô thêm việc đầy đủ trường + voice; gom bộ lọc vào dropdown; chụp ảnh banner sự kiện để tạo lịch.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -68,6 +68,7 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 |---|---|
 | Giao việc | "Thứ Ba nhắc chị gửi báo giá cho OKR, dự án Circle, gấp" |
 | Ảnh | *(gửi ảnh checklist)* + "việc của Circle, hạn thứ Sáu" |
+| Ảnh banner sự kiện | *(chụp banner)* → xem trước sự kiện → "ok book đi, thêm việc mua vé" |
 | Lịch & di chuyển | "Tối nay 7 giờ hẹn ở Thonglor, đi tàu" / "Mai đi ô tô ra sân bay nhé" |
 | Xem lịch | "Tháng 12 chị có gì?" / "Lần gia hạn trước là ngày nào?" |
 | Tạo & book lịch | "Thứ Năm 2 giờ họp với Đô thị, tạo link Meet" → xem trước → "ok book đi" |
@@ -103,6 +104,16 @@ Mai gửi ảnh, Lowtechie tự trích danh sách việc.
 - **Dòng đọc không chắc** (chữ tay khó đọc, ảnh mờ, lóa) được đánh dấu riêng kèm vùng cắt từ ảnh để Mai xem và sửa nhanh.
 - **Biến ảnh thành mẫu:** ảnh một danh sách dùng lặp lại (ví dụ đồ mang theo khi bay) có thể lưu thành mẫu checklist cho module 5.9 thay vì thành việc một lần.
 - **Lưu ảnh:** ảnh gốc lưu theo thời hạn (ví dụ 90 ngày) rồi xóa, danh sách việc giữ lâu dài.
+
+**Ảnh banner / thiệp mời sự kiện → tạo lịch**
+- Mai chụp hoặc chia sẻ ảnh banner, poster, thiệp mời, ảnh chụp màn hình bài đăng sự kiện → Lowtechie đọc ảnh và **soạn sẵn một sự kiện**, rồi hiện **thẻ xem trước** (5.4). Chỉ book vào lịch sau khi Mai bấm.
+- **Trích:** tên sự kiện · ngày · giờ bắt đầu và kết thúc · địa điểm (khớp Google Maps) · đơn vị tổ chức · link đăng ký hoặc mua vé (kể cả **mã QR trong ảnh**) · giá vé · hạn đăng ký / early bird · yêu cầu khác (trang phục, mang theo gì). Tiếng Việt, Thái, Anh.
+- **Ngày giờ theo mốc thời gian thực:** banner không ghi năm → lấy lần xuất hiện gần nhất **từ hôm nay trở đi**; ngày đã qua → báo "sự kiện này đã diễn ra", không tạo lịch.
+- **Thiếu thông tin thì hỏi một câu:** banner chỉ ghi ngày mà không ghi giờ, hoặc nhiều khung giờ / nhiều ngày → hỏi Mai chọn, hoặc tạo cả chuỗi nếu là sự kiện nhiều ngày.
+- **Kèm theo sự kiện:** ảnh banner gốc đính vào sự kiện; link đăng ký và mã QR lưu trong ghi chú; địa điểm mở được bằng Google Maps.
+- **Việc đi kèm tự đề xuất (Mai duyệt):** "Đăng ký / mua vé" với hạn là hạn đăng ký; chuỗi Chuẩn bị + Di chuyển theo 5.4.1; nếu nơi tổ chức cần đặt chỗ thì theo 5.4.2.
+- **Gắn dự án:** hỏi hoặc đoán theo nội dung (sự kiện ngành → Circle; workshop học → Học tập), Mai đổi một chạm trên thẻ xem trước.
+- **Không tạo trùng:** đã có sự kiện cùng tên/ngày trong lịch → đề xuất cập nhật thay vì tạo mới.
 
 Độ khó kỹ thuật: thấp. Mô hình Claude đọc ảnh trực tiếp; phần việc chính là thiết kế bước duyệt và xử lý dòng đọc không chắc.
 
@@ -892,7 +903,7 @@ Ghi chú lựa chọn:
 - `checklist_templates` (destination, group, item, hint, learned_from_user)
 - `trip_checklist_items` (trip_id, template_item_id / custom_text, done)
 - `voice_inputs` (audio_ref, transcript, language, parsed_actions, channel)
-- `image_inputs` (image_ref, channel, caption, extracted_items, low_confidence_regions, expires_at)
+- `image_inputs` (image_ref, channel, caption, kind: checklist/banner/khac, extracted_items, low_confidence_regions, expires_at)
 - `meetings` (calendar_event_id, mode online/offline, recording_ref, transcript_ref, recap, consent_confirmed, project_id)
 - `actions_log` (proposed, approved_by, executed_at, result)
 

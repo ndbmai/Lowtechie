@@ -122,6 +122,8 @@ interface LowtechieState {
 
   addEvent: (ev: Omit<CalEvent, "id">) => CalEvent;
   addEvents: (evs: Omit<CalEvent, "id">[]) => void;
+  /** Cập nhật sự kiện đã có — banner trùng tên/ngày đề xuất cập nhật (v3.0). */
+  updateEvent: (id: string, patch: Partial<Omit<CalEvent, "id">>) => void;
   removeEvent: (id: string) => void;
   removeChain: (eventId: string) => void;
   reschedule: (what: string, toWhenIso: string, keepTime: boolean) => "event" | "task" | null;
@@ -452,6 +454,10 @@ export const useStore = create<LowtechieState>()(
       },
       addEvents: (evs) =>
         set((s) => ({ events: [...s.events, ...evs.map((e) => ({ ...e, id: uid() }))] })),
+      updateEvent: (id, patch) =>
+        set((s) => ({
+          events: s.events.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+        })),
       removeEvent: (id) =>
         set((s) => ({ events: s.events.filter((e) => e.id !== id) })),
       removeChain: (eventId) =>
