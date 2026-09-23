@@ -35,8 +35,12 @@ export function larkAuthUrl(origin: string, state: string): string {
     redirect_uri: larkRedirectUri(origin),
     response_type: "code",
     state,
-    // offline_access để có refresh token; các quyền lịch/mail nằm ở cấp app.
-    scope: "offline_access",
+    // Token NGƯỜI DÙNG chỉ mang scope đã XIN ở đây — xin thiếu là gọi lịch
+    // dính 99991xxx "không quyền" dù admin đã duyệt app (lỗi thật 23/9).
+    // offline_access = refresh token; calendar:calendar = đọc/ghi lịch.
+    // KHÔNG xin mail ở đây: mail là best-effort (PRD §9), xin mà app chưa
+    // khai quyền là vỡ cả bước đăng nhập (lỗi 20027).
+    scope: "offline_access calendar:calendar",
   });
   return `${ACCOUNTS_BASE}/open-apis/authen/v1/authorize?${p}`;
 }

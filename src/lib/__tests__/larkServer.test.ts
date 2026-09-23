@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  larkAuthUrl,
   larkErrorAction,
   larkEventsAllCalendars,
   larkListCalendars,
@@ -102,6 +103,18 @@ describe("larkServer v3.2 — lỗi thật 23/9: lịch Lark 'trống' im lặng
       vi.fn(async () => res({ code: 0, data: { calendar_list: [], has_more: false } })),
     );
     await expect(larkEventsAllCalendars("at", 0, 1000)).rejects.toThrow("lark-nocal");
+  });
+});
+
+describe("larkAuthUrl — token người dùng CHỈ mang scope đã xin", () => {
+  it("xin cả offline_access LẪN calendar:calendar (xin thiếu → 99991xxx không quyền lịch)", () => {
+    process.env.LARK_APP_ID = "cli_test";
+    const u = new URL(larkAuthUrl("https://lowtechie.vercel.app", "st1"));
+    expect(u.searchParams.get("scope")).toBe("offline_access calendar:calendar");
+    expect(u.searchParams.get("redirect_uri")).toBe(
+      "https://lowtechie.vercel.app/api/lark/callback",
+    );
+    expect(u.searchParams.get("client_id")).toBe("cli_test");
   });
 });
 
