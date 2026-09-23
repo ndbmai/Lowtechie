@@ -107,14 +107,25 @@ describe("larkServer v3.2 — lỗi thật 23/9: lịch Lark 'trống' im lặng
 });
 
 describe("larkAuthUrl — token người dùng CHỈ mang scope đã xin", () => {
-  it("xin cả offline_access LẪN calendar:calendar (xin thiếu → 99991xxx không quyền lịch)", () => {
+  it("xin offline_access + 4 scope lịch DẠNG CON app đã khai (xin scope cha chưa khai → 20027 chặn đăng nhập)", () => {
     process.env.LARK_APP_ID = "cli_test";
+    delete process.env.LARK_OAUTH_SCOPES;
     const u = new URL(larkAuthUrl("https://lowtechie.vercel.app", "st1"));
-    expect(u.searchParams.get("scope")).toBe("offline_access calendar:calendar");
+    expect(u.searchParams.get("scope")).toBe(
+      "offline_access calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:create calendar:calendar.event:delete",
+    );
     expect(u.searchParams.get("redirect_uri")).toBe(
       "https://lowtechie.vercel.app/api/lark/callback",
     );
     expect(u.searchParams.get("client_id")).toBe("cli_test");
+  });
+
+  it("LARK_OAUTH_SCOPES ghi đè danh sách scope — đổi khai báo console không cần deploy", () => {
+    process.env.LARK_APP_ID = "cli_test";
+    process.env.LARK_OAUTH_SCOPES = "offline_access calendar:calendar";
+    const u = new URL(larkAuthUrl("https://lowtechie.vercel.app", "st1"));
+    expect(u.searchParams.get("scope")).toBe("offline_access calendar:calendar");
+    delete process.env.LARK_OAUTH_SCOPES;
   });
 });
 

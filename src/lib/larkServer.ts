@@ -29,18 +29,27 @@ export function larkRedirectUri(origin: string): string {
   return `${origin}/api/lark/callback`;
 }
 
+/**
+ * Scope user token XIN khi đăng nhập — PHẢI là tập con của các scope đã
+ * khai ở tab "User token scopes" trên console và đã publish. Hai lỗi thật
+ * 23/9: xin THIẾU → token không quyền, gọi lịch dính 99991xxx dù admin đã
+ * duyệt app; xin scope CHƯA KHAI → Lark chặn ngay bước đăng nhập (20027).
+ * App của Mai khai 4 scope lịch DẠNG CON (không khai scope cha
+ * `calendar:calendar`) — nên xin đúng 4 scope con. KHÔNG xin mail
+ * (best-effort, PRD §9). Đổi danh sách không cần deploy: env
+ * LARK_OAUTH_SCOPES; đổi scope thì Mai phải Kết nối lại — refresh token
+ * cũ không tự thêm quyền.
+ */
+const LARK_USER_SCOPES =
+  "offline_access calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:create calendar:calendar.event:delete";
+
 export function larkAuthUrl(origin: string, state: string): string {
   const p = new URLSearchParams({
     client_id: process.env.LARK_APP_ID ?? "",
     redirect_uri: larkRedirectUri(origin),
     response_type: "code",
     state,
-    // Token NGƯỜI DÙNG chỉ mang scope đã XIN ở đây — xin thiếu là gọi lịch
-    // dính 99991xxx "không quyền" dù admin đã duyệt app (lỗi thật 23/9).
-    // offline_access = refresh token; calendar:calendar = đọc/ghi lịch.
-    // KHÔNG xin mail ở đây: mail là best-effort (PRD §9), xin mà app chưa
-    // khai quyền là vỡ cả bước đăng nhập (lỗi 20027).
-    scope: "offline_access calendar:calendar",
+    scope: process.env.LARK_OAUTH_SCOPES || LARK_USER_SCOPES,
   });
   return `${ACCOUNTS_BASE}/open-apis/authen/v1/authorize?${p}`;
 }
