@@ -121,24 +121,74 @@ export async function larkUserEmail(at: string): Promise<string | undefined> {
 
 // ── Lark Calendar v4 (đọc/ghi như Google — §5.5.1) ───────────────────────
 
-interface LarkCalendar {
-  calendar_id?: string;
+/**
+ * Lark hay trả HTTP 200 KÈM `code != 0` khi lỗi (thiếu quyền, token
+ * hỏng) — PHẢI check code, đừng chỉ nhìn res.ok. Đây chính là lỗi thật
+ * 23/9: lịch Lark "trống" im lặng vì lỗi quyền bị nuốt (PRD v3.2).
+ */
+async function larkJson<T>(res: Response): Promise<T> {
+  const d = (await res.json().catch(() => ({}))) as { code?: number; msg?: string; data?: T };
+  if (!res.ok || (typeof d.code === "number" && d.code !== 0)) {
+    throw new Error(`lark-${d.code ?? res.status}`);
+  }
+  return (d.data ?? {}) as T;
+}
+
+/** Mã lỗi Lark → thông điệp CÓ VIỆC ĐỂ LÀM (v3.2 — không im lặng). */
+export function larkErrorAction(detail: string): string {
+  const code = detail.match(/lark-(\w+)/)?.[1] ?? "";
+  if (detail.includes("token") || detail.includes("expired"))
+    return "Phiên đăng nhập Lark hết hạn — bấm Kết nối lại.";
+  if (code.startsWith("99991"))
+    return "Thiếu quyền hoặc phiên hết hạn — kiểm tra admin đã duyệt quyền Calendar chưa, rồi bấm Kết nối lại.";
+  if (code.startsWith("1901") || code.startsWith("1951"))
+    return "Lịch Lark từ chối yêu cầu — kiểm tra quyền đọc lịch đã được admin duyệt và tài khoản có lịch con.";
+  if (code === "nocal") return "Chưa thấy lịch con nào trong tài khoản Lark này.";
+  if (code === "403" || code === "404")
+    return "Không truy cập được API lịch — kiểm tra quyền Calendar đã duyệt và app dùng đúng miền larksuite.com.";
+  return `Lark báo lỗi (${code || detail}) — bấm Đồng bộ ngay để thử lại, còn lỗi thì Kết nối lại.`;
+}
+
+export interface LarkCalendarInfo {
+  id: string;
+  name: string;
   type?: string;
   role?: string;
 }
 
-/** Lịch chính của người dùng; null nếu không tra được. */
-export async function larkPrimaryCalendarId(at: string): Promise<string | null> {
-  try {
-    const res = await fetch(`${OPEN_BASE}/open-apis/calendar/v4/calendars?page_size=50`, {
+/**
+ * DANH SÁCH LỊCH TRƯỚC rồi mới lấy sự kiện (v3.2): lịch chính, lịch
+ * nhóm, lịch đã đăng ký — theo phân trang page_token đến hết.
+ */
+export async function larkListCalendars(at: string): Promise<LarkCalendarInfo[]> {
+  const out: LarkCalendarInfo[] = [];
+  let pageToken = "";
+  for (let i = 0; i < 5; i++) {
+    const p = new URLSearchParams({ page_size: "50" });
+    if (pageToken) p.set("page_token", pageToken);
+    const res = await fetch(`${OPEN_BASE}/open-apis/calendar/v4/calendars?${p}`, {
       headers: { authorization: `Bearer ${at}` },
     });
-    const d = (await res.json().catch(() => ({}))) as {
-      data?: { calendar_list?: LarkCalendar[] };
-    };
-    const list = d.data?.calendar_list ?? [];
-    const primary = list.find((c) => c.type === "primary") ?? list[0];
-    return primary?.calendar_id ?? null;
+    const d = await larkJson<{
+      calendar_list?: { calendar_id?: string; summary?: string; type?: string; role?: string }[];
+      page_token?: string;
+      has_more?: boolean;
+    }>(res);
+    for (const c of d.calendar_list ?? []) {
+      if (c.calendar_id)
+        out.push({ id: c.calendar_id, name: c.summary ?? "", type: c.type, role: c.role });
+    }
+    if (!d.has_more || !d.page_token) break;
+    pageToken = d.page_token;
+  }
+  return out;
+}
+
+/** Lịch chính của người dùng (để GHI sự kiện); null nếu không tra được. */
+export async function larkPrimaryCalendarId(at: string): Promise<string | null> {
+  try {
+    const list = await larkListCalendars(at);
+    return (list.find((c) => c.type === "primary") ?? list[0])?.id ?? null;
   } catch {
     return null;
   }
@@ -172,73 +222,118 @@ function larkTime(t: LarkEvent["start_time"]): { iso: string; allDay: boolean } 
   return null;
 }
 
+function larkEventToDto(e: LarkEvent): RemoteEventDto | null {
+  if (!e.event_id || e.status === "cancelled") return null;
+  const s = larkTime(e.start_time);
+  const en = larkTime(e.end_time);
+  if (!s || !en) return null;
+  return {
+    gcalId: e.event_id,
+    title: e.summary || "(không tên)",
+    startAt: s.iso,
+    endAt: en.iso,
+    location: e.location?.name,
+    allDay: s.allDay,
+  };
+}
+
+/** Sự kiện MỘT lịch con — phân trang page_token đến hết (v3.2). */
 export async function larkListEvents(
   at: string,
   calendarId: string,
   fromMs: number,
   toMs: number,
 ): Promise<RemoteEventDto[]> {
-  const p = new URLSearchParams({
-    start_time: String(Math.floor(fromMs / 1000)),
-    end_time: String(Math.ceil(toMs / 1000)),
-    page_size: "100",
-  });
-  const res = await fetch(
-    `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events?${p}`,
-    { headers: { authorization: `Bearer ${at}` } },
-  );
-  if (!res.ok) throw new Error(`lark-cal-${res.status}`);
-  const d = (await res.json().catch(() => ({}))) as { data?: { items?: LarkEvent[] } };
   const out: RemoteEventDto[] = [];
-  for (const e of d.data?.items ?? []) {
-    if (!e.event_id || e.status === "cancelled") continue;
-    const s = larkTime(e.start_time);
-    const en = larkTime(e.end_time);
-    if (!s || !en) continue;
-    out.push({
-      gcalId: e.event_id,
-      title: e.summary || "(không tên)",
-      startAt: s.iso,
-      endAt: en.iso,
-      location: e.location?.name,
-      allDay: s.allDay,
+  let pageToken = "";
+  for (let i = 0; i < 5; i++) {
+    const p = new URLSearchParams({
+      start_time: String(Math.floor(fromMs / 1000)),
+      end_time: String(Math.ceil(toMs / 1000)),
+      page_size: "100",
     });
+    if (pageToken) p.set("page_token", pageToken);
+    const res = await fetch(
+      `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events?${p}`,
+      { headers: { authorization: `Bearer ${at}` } },
+    );
+    const d = await larkJson<{ items?: LarkEvent[]; page_token?: string; has_more?: boolean }>(res);
+    for (const e of d.items ?? []) {
+      const dto = larkEventToDto(e);
+      if (dto) out.push(dto);
+    }
+    if (!d.has_more || !d.page_token) break;
+    pageToken = d.page_token;
   }
   return out;
 }
 
-/** Tìm sự kiện theo từ khóa (§5.4.0) — lỗi thì trả [] để tìm kiếm không vỡ. */
-export async function larkSearchEvents(
+/**
+ * Sự kiện của MỌI lịch con (v3.2 — trước chỉ đọc lịch chính nên sự kiện
+ * lịch nhóm/lịch đăng ký "biến mất"). Một lịch lỗi không làm rỗng cả tài
+ * khoản; MỌI lịch cùng lỗi thì ném lỗi đầu để màn hình nói rõ, không im lặng.
+ */
+export async function larkEventsAllCalendars(
+  at: string,
+  fromMs: number,
+  toMs: number,
+): Promise<{ events: RemoteEventDto[]; calendars: number }> {
+  const calendars = (await larkListCalendars(at)).filter((c) => c.type !== "resource").slice(0, 10);
+  if (calendars.length === 0) throw new Error("lark-nocal");
+  const events: RemoteEventDto[] = [];
+  const seen = new Set<string>();
+  let firstError: unknown = null;
+  let ok = 0;
+  for (const c of calendars) {
+    try {
+      for (const ev of await larkListEvents(at, c.id, fromMs, toMs)) {
+        if (seen.has(ev.gcalId)) continue; // cùng sự kiện xuất hiện ở 2 lịch con
+        seen.add(ev.gcalId);
+        events.push(ev);
+      }
+      ok++;
+    } catch (e) {
+      firstError = firstError ?? e;
+    }
+  }
+  if (ok === 0 && firstError) throw firstError;
+  return { events, calendars: calendars.length };
+}
+
+async function larkSearchOne(
   at: string,
   calendarId: string,
   query: string,
 ): Promise<RemoteEventDto[]> {
+  const res = await fetch(
+    `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events/search?page_size=50`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
+      body: JSON.stringify({ query }),
+    },
+  );
+  const d = await larkJson<{ items?: LarkEvent[] }>(res);
+  return (d.items ?? []).flatMap((e) => {
+    const dto = larkEventToDto(e);
+    return dto ? [dto] : [];
+  });
+}
+
+/** Tìm theo từ khóa (§5.4.0) trên mọi lịch con — lỗi trả [] để tìm kiếm không vỡ. */
+export async function larkSearchEvents(at: string, query: string): Promise<RemoteEventDto[]> {
   try {
-    const res = await fetch(
-      `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events/search?page_size=50`,
-      {
-        method: "POST",
-        headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
-        body: JSON.stringify({ query }),
-      },
-    );
-    if (!res.ok) return [];
-    const d = (await res.json().catch(() => ({}))) as { data?: { items?: LarkEvent[] } };
-    return (d.data?.items ?? []).flatMap((e) => {
-      const s = larkTime(e.start_time);
-      const en = larkTime(e.end_time);
-      if (!e.event_id || !s || !en) return [];
-      return [
-        {
-          gcalId: e.event_id,
-          title: e.summary || "(không tên)",
-          startAt: s.iso,
-          endAt: en.iso,
-          location: e.location?.name,
-          allDay: s.allDay,
-        },
-      ];
-    });
+    const calendars = (await larkListCalendars(at)).filter((c) => c.type !== "resource").slice(0, 5);
+    const seen = new Set<string>();
+    const out: RemoteEventDto[] = [];
+    for (const c of calendars) {
+      for (const ev of await larkSearchOne(at, c.id, query).catch(() => [] as RemoteEventDto[])) {
+        if (seen.has(ev.gcalId)) continue;
+        seen.add(ev.gcalId);
+        out.push(ev);
+      }
+    }
+    return out;
   } catch {
     return [];
   }

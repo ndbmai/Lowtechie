@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { CAL_BASE, accessToken, type GoogleLink } from "@/lib/googleServer";
 import {
+  larkAccessToken,
   larkCalendarSession,
   larkCreateEvent,
-  larkListEvents,
+  larkEventsAllCalendars,
   larkSearchEvents,
 } from "@/lib/larkServer";
 import {
+  accountErrorAction,
   accountsWith,
   findAccount,
   readAccounts,
@@ -69,7 +71,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const toMs = Number(req.nextUrl.searchParams.get("toMs")) || fromMs + 7 * 86_400_000;
 
   const events: OutEvent[] = [];
-  const errors: { email?: string; detail: string }[] = [];
+  // v3.2: lỗi tài khoản phải NÓI RÕ có việc để làm, không trả lịch trống im lặng.
+  const errors: { email?: string; provider: "google" | "lark"; detail: string; action: string }[] =
+    [];
   const rotated: { account: Account; link: LarkLink }[] = [];
 
   for (const a of calAccounts) {
@@ -103,18 +107,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           });
         }
       } else {
-        const s = await larkCalendarSession((a.link as LarkLink).rt);
-        if (!s) throw new Error("token");
-        rotated.push({ account: a, link: { ...(a.link as LarkLink), rt: s.rt } });
+        const tokens = await larkAccessToken((a.link as LarkLink).rt);
+        if (!tokens) throw new Error("token");
+        rotated.push({ account: a, link: { ...(a.link as LarkLink), rt: tokens.rt } });
+        // v3.2: đọc MỌI lịch con (trước chỉ lịch chính → sự kiện "biến mất").
         const list = q
-          ? await larkSearchEvents(s.at, s.calendarId, q)
-          : await larkListEvents(s.at, s.calendarId, fromMs, toMs);
+          ? await larkSearchEvents(tokens.at, q)
+          : (await larkEventsAllCalendars(tokens.at, fromMs, toMs)).events;
         for (const e of list) {
           events.push({ ...e, account: a.id, accountEmail: a.email, provider: "lark" });
         }
       }
     } catch (err) {
-      errors.push({ email: a.email, detail: err instanceof Error ? err.message : "lỗi" });
+      const detail = err instanceof Error ? err.message : "lỗi";
+      errors.push({
+        email: a.email,
+        provider: a.provider,
+        detail,
+        action: accountErrorAction(a.provider, detail),
+      });
     }
   }
 

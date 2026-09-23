@@ -71,6 +71,24 @@ export interface ConnectedAccount {
   parts: { cal: boolean; mail: boolean; drive: boolean };
 }
 
+/** Kết quả "Đồng bộ ngay" một tài khoản (PRD v3.2). */
+export interface AccountProbe {
+  id: string;
+  provider: "google" | "lark";
+  email?: string;
+  calendars: number;
+  events: number;
+  error?: { detail: string; action: string };
+}
+
+/** Lỗi đọc lịch một tài khoản — kèm hành động rõ ràng (v3.2). */
+export interface CalendarSyncError {
+  email?: string;
+  provider?: "google" | "lark";
+  detail: string;
+  action?: string;
+}
+
 /** Danh sách tài khoản đã nối trên thiết bị này + bật/tắt từng phần. */
 export function useAccounts() {
   const [state, setState] = useState<{
@@ -127,7 +145,19 @@ export function useAccounts() {
     [reload],
   );
 
-  return { ...state, reload, setParts, disconnect };
+  /** "Đồng bộ ngay" (v3.2): đọc thử từng tài khoản, đếm lịch con + sự kiện. */
+  const probe = useCallback(async (fromMs: number, toMs: number): Promise<AccountProbe[] | null> => {
+    try {
+      const res = await fetch(`/api/accounts?probe=1&fromMs=${fromMs}&toMs=${toMs}`);
+      if (!res.ok) return null;
+      const d = (await res.json()) as { probe?: AccountProbe[] };
+      return d.probe ?? [];
+    } catch {
+      return null;
+    }
+  }, []);
+
+  return { ...state, reload, setParts, disconnect, probe };
 }
 
 /** Tìm trên TOÀN BỘ lịch Google (quá khứ + tương lai, §5.4.0 v2.3). */
@@ -142,9 +172,15 @@ export async function searchGcalEvents(q: string): Promise<GcalEvent[]> {
   }
 }
 
-/** Sự kiện Google trong khoảng thời gian; [] khi chưa nối. */
+/**
+ * Sự kiện lịch ngoài (mọi tài khoản bật Lịch) trong khoảng thời gian;
+ * [] khi chưa nối. v3.2: trả kèm `errors` (tài khoản đọc lỗi + hành động)
+ * và tự làm mới ~15 phút khi màn còn mở — sự kiện mới trên Lark/Google
+ * tự xuất hiện, không cần thoát app.
+ */
 export function useGoogleEvents(fromMs: number, toMs: number, enabled: boolean) {
   const [events, setEvents] = useState<GcalEvent[]>([]);
+  const [errors, setErrors] = useState<CalendarSyncError[]>([]);
 
   const reload = useCallback(async () => {
     if (!enabled) return;
@@ -152,20 +188,26 @@ export function useGoogleEvents(fromMs: number, toMs: number, enabled: boolean) 
       const res = await fetch(`/api/calendar/events?fromMs=${fromMs}&toMs=${toMs}`);
       if (!res.ok) {
         setEvents([]);
+        setErrors([]);
         return;
       }
-      const d = (await res.json()) as { events: GcalEvent[] };
+      const d = (await res.json()) as { events: GcalEvent[]; errors?: CalendarSyncError[] };
       setEvents(d.events ?? []);
+      setErrors(d.errors ?? []);
     } catch {
       setEvents([]);
+      setErrors([]);
     }
   }, [fromMs, toMs, enabled]);
 
   useEffect(() => {
     void reload();
-  }, [reload]);
+    if (!enabled) return;
+    const t = window.setInterval(() => void reload(), 15 * 60_000);
+    return () => window.clearInterval(t);
+  }, [reload, enabled]);
 
-  return { events, reload };
+  return { events, errors, reload };
 }
 
 /**

@@ -51,6 +51,18 @@ export interface PendingBlock {
 /** Hướng di chuyển khi Mai sắp xếp thứ tự (§5.3.1). */
 export type MoveDir = "up" | "down" | "top" | "bottom";
 
+/** Kết quả đồng bộ lịch một tài khoản (PRD v3.2 — màn Kết nối hiển thị). */
+export interface SyncStatus {
+  /** ISO thời điểm đồng bộ gần nhất. */
+  at: string;
+  /** Số lịch con đọc được. */
+  calendars: number;
+  /** Số sự kiện trong khoảng đã quét (tháng đang xem). */
+  events: number;
+  /** Thông điệp lỗi CÓ HÀNH ĐỘNG (accountErrorAction) — trống = ổn. */
+  error?: string;
+}
+
 interface LowtechieState {
   tasks: Task[];
   triage: TriageItem[];
@@ -91,6 +103,8 @@ interface LowtechieState {
     projectCalendar: Record<ProjectId, string>;
     /** Book THẲNG sự kiện từ banner cho dự án nào (v3.1 — Mai opt-in). */
     autoBookBanner: Record<ProjectId, boolean>;
+    /** Trạng thái đồng bộ lịch TỪNG tài khoản (v3.2): id → lần gần nhất. */
+    syncStatus: Record<string, SyncStatus>;
   };
 
   addTask: (draft: TaskDraft) => Task;
@@ -161,6 +175,8 @@ interface LowtechieState {
   setProjectCalendar: (projectId: ProjectId, accountId: string | undefined) => void;
   /** Bật/tắt book thẳng banner cho một dự án (v3.1). */
   setAutoBookBanner: (projectId: ProjectId, on: boolean) => void;
+  /** Ghi kết quả đồng bộ lịch một tài khoản (v3.2 — màn Kết nối). */
+  setSyncStatus: (accountId: string, status: SyncStatus | undefined) => void;
 
   addSeries: (
     s: Pick<RecurringSeries, "title" | "intervalUnit" | "intervalCount" | "nextDate"> &
@@ -279,6 +295,7 @@ export const useStore = create<LowtechieState>()(
         projectFilter: "all",
         projectCalendar: {},
         autoBookBanner: {},
+        syncStatus: {},
       },
 
       addTask: (draft) => {
@@ -663,6 +680,13 @@ export const useStore = create<LowtechieState>()(
             autoBookBanner: { ...s.settings.autoBookBanner, [projectId]: on },
           },
         })),
+      setSyncStatus: (accountId, status) =>
+        set((s) => {
+          const next = { ...s.settings.syncStatus };
+          if (status) next[accountId] = status;
+          else delete next[accountId];
+          return { settings: { ...s.settings, syncStatus: next } };
+        }),
 
       addSeries: (sr) =>
         set((s) => ({
@@ -906,7 +930,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 13,
+      version: 14,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -948,6 +972,7 @@ export const useStore = create<LowtechieState>()(
             projectFilter: s.settings?.projectFilter ?? "all",
             projectCalendar: s.settings?.projectCalendar ?? {},
             autoBookBanner: s.settings?.autoBookBanner ?? {},
+            syncStatus: s.settings?.syncStatus ?? {},
           };
         }
         if (version < 5) {
@@ -1007,6 +1032,7 @@ export const useStore = create<LowtechieState>()(
             projectFilter: prev?.projectFilter ?? "all",
             projectCalendar: prev?.projectCalendar ?? {},
             autoBookBanner: prev?.autoBookBanner ?? {},
+            syncStatus: prev?.syncStatus ?? {},
           };
         }
         if (version < 10) {
@@ -1025,6 +1051,7 @@ export const useStore = create<LowtechieState>()(
             projectFilter: prev?.projectFilter ?? "all",
             projectCalendar: {},
             autoBookBanner: {},
+            syncStatus: {},
           };
         }
         if (version < 12) {
@@ -1039,11 +1066,16 @@ export const useStore = create<LowtechieState>()(
             projectFilter: prev?.projectFilter ?? "all",
             projectCalendar: prev?.projectCalendar ?? {},
             autoBookBanner: prev?.autoBookBanner ?? {},
+            syncStatus: prev?.syncStatus ?? {},
           };
         }
         if (version < 13) {
           // v13 (PRD v3.1): cờ book thẳng banner theo dự án.
           if (s.settings && !s.settings.autoBookBanner) s.settings.autoBookBanner = {};
+        }
+        if (version < 14) {
+          // v14 (PRD v3.2): trạng thái đồng bộ lịch từng tài khoản.
+          if (s.settings && !s.settings.syncStatus) s.settings.syncStatus = {};
         }
         return s as LowtechieState;
       },

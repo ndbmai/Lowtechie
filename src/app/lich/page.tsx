@@ -1060,6 +1060,24 @@ export default function CalendarPage() {
     () => new Set(gcal.events.filter((g) => g.allDay).map((g) => `g:${g.gcalId}`)),
     [gcal.events],
   );
+  // v3.2: từ 2 tài khoản trở lên → dấu nhỏ "sự kiện thuộc tài khoản nào".
+  // Nhãn ngắn: phần trước @ nếu đủ phân biệt, trùng nhau thì dùng domain
+  // (mai@sorene.ai vs mai@thecircle.tech → "sorene.ai" / "thecircle.tech").
+  const eventAccountEmail = useMemo(() => {
+    const emails = [...new Set(gcal.events.map((g) => g.accountEmail).filter(Boolean))] as string[];
+    if (emails.length < 2) return new Map<string, { label: string; full: string }>();
+    const locals = new Set(emails.map((e) => e.split("@")[0]));
+    const short = (e: string) =>
+      locals.size === emails.length ? e.split("@")[0] : (e.split("@")[1] ?? e);
+    return new Map(
+      gcal.events
+        .filter((g) => g.accountEmail)
+        .map((g) => [
+          `g:${g.gcalId}`,
+          { label: short(g.accountEmail as string), full: g.accountEmail as string },
+        ]),
+    );
+  }, [gcal.events]);
 
   const applyFilters = useMemo(
     () => (list: CalEvent[]) =>
@@ -1178,6 +1196,11 @@ export default function CalendarPage() {
               <span className="small" style={{ color: "#2FA97C" }}> · ✓ đã đặt chỗ</span>
             )}
             {e.notes && <span className="muted small"> · {e.notes}</span>}
+            {eventAccountEmail.has(e.id) && (
+              <span className="muted small" title={eventAccountEmail.get(e.id)!.full}>
+                {" "}· {eventAccountEmail.get(e.id)!.label}
+              </span>
+            )}
           </span>
           {e.linkUrl && (
             <a
@@ -1275,6 +1298,20 @@ export default function CalendarPage() {
           <button className="btn ghost small" onClick={() => setGmsg(null)}>
             Ẩn
           </button>
+        </div>
+      )}
+      {/* v3.2: tài khoản đọc lỗi phải NÓI RÕ — không để lịch trống im lặng. */}
+      {mounted && gcal.errors.length > 0 && (
+        <div className="warn" role="alert">
+          {gcal.errors.map((er, i) => (
+            <div key={i} className="small">
+              ⚠ {er.provider === "lark" ? "Lark" : "Google"}
+              {er.email ? ` (${er.email})` : ""}: {er.action ?? er.detail}
+            </div>
+          ))}
+          <Link href="/ket-noi" className="btn ghost small" style={{ textDecoration: "none" }}>
+            Mở Kết nối
+          </Link>
         </div>
       )}
 

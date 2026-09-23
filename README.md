@@ -4,7 +4,7 @@ Trợ lý AI chief-of-staff cá nhân cho Mai — người vận hành song song
 
 Tài liệu gốc:
 
-- [PRD v3.1](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
+- [PRD v3.2](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
 - [Mockup UI & user flow](docs/prototypes/mai-lowtechie-ui.html) — hệ thống thiết kế + 7 màn hình
 - [Checklist bay](docs/prototypes/checklist-bay.html) — nguyên mẫu module Chuyến đi (§5.9)
 
@@ -96,7 +96,8 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] **Chụp ảnh banner sự kiện → tạo lịch** (§5.1.1 v3.0): ảnh banner/poster/thiệp mời → thẻ xem trước sự kiện (tên, giờ, địa điểm + Mở Maps, tổ chức, giá, hạn đăng ký, link kể cả mã QR giải trên máy); năm suy theo hôm nay, banner đã qua → báo "đã diễn ra"; thiếu giờ hỏi đúng một câu; trùng tên + ngày → Cập nhật thay vì tạo trùng; việc "Đăng ký / mua vé" tự vào Hộp duyệt với hạn đăng ký; ảnh gốc đính vào sự kiện (nút 🖼 ở Lịch)
 - [x] **Phân loại ảnh trước khi trích** (§5.1.1 v3.1, sửa lỗi "không đọc được dòng việc nào" 23/9): checklist · banner sự kiện · screenshot chat/email · tài liệu · **danh thiếp** (→ thẻ thêm vào danh bạ khách) · khác; không chắc thì hiện những gì đọc được + hỏi một câu + nút tạo thủ công; ảnh mờ/chữ nhỏ báo rõ lý do
 - [x] **Lịch đích hiện sẵn theo dự án** trên thẻ banner + **tùy chọn ⚡ book thẳng từng dự án** (đủ giờ + địa điểm + không trùng mới book, luôn có Hoàn tác; việc "Đăng ký / mua vé" vẫn qua Hộp duyệt)
-- [ ] Lịch con từng tài khoản + dấu tài khoản trên sự kiện + trạng thái đồng bộ từng dòng; soạn email trả lời từ đúng hộp thư
+- [x] **Lịch Lark đọc VỀ app** (v3.2, sửa lỗi "nối Lark mà sự kiện không hiện" 23/9): đọc MỌI lịch con theo phân trang, lỗi quyền/token không còn bị nuốt (Lark trả 200 kèm code lỗi — giờ bắt đúng); màn Kết nối có **Trạng thái đồng bộ** từng tài khoản (lần gần nhất · số lịch con · số sự kiện tháng này) + nút **Đồng bộ ngay**, 0 sự kiện có cảnh báo rõ; màn Lịch hiện lỗi kèm việc-phải-làm ("admin duyệt quyền", "Kết nối lại") + dấu tài khoản trên sự kiện khi có từ 2 tài khoản; lịch tự làm mới ~15 phút khi đang mở
+- [ ] Ô bật/tắt riêng từng lịch con (Google vẫn đọc lịch chính); webhook Lark + nhập sẵn 12 tháng (cần server lưu — Giai đoạn 3); soạn email trả lời từ đúng hộp thư
 - [ ] Sync Google Sheets · ghi âm họp offline + recap
 - [ ] Giai đoạn 2: Lark (bot group, Mail, Calendar) trước, sau đó bot 1:1 WhatsApp/Zalo
 - [ ] Giai đoạn 3: Supabase + RLS, tài khoản cộng sự, giao việc chéo, danh bạ đồng bộ máy chủ

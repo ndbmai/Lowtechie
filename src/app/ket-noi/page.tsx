@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { activeProjects } from "@/core/projects";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
@@ -96,11 +96,50 @@ function OAuthNotice() {
   return null;
 }
 
+/** "Đồng bộ 14:05 · 23/9/2026" — giờ thiết bị Mai. */
+function fmtSync(at: string): string {
+  const d = new Date(at);
+  return `Đồng bộ ${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} · ${d.toLocaleDateString("vi-VN")}`;
+}
+
 export default function ConnectionsPage() {
   const mounted = useMounted();
-  const { loading, configured, accounts, setParts, disconnect, reload } = useAccounts();
-  const { projects, settings, setProjectCalendar, setAutoBookBanner } = useStore();
+  const { loading, configured, accounts, setParts, disconnect, reload, probe } = useAccounts();
+  const { projects, settings, setProjectCalendar, setAutoBookBanner, setSyncStatus } = useStore();
   const calAccounts = accounts.filter((a) => a.parts.cal);
+  const [syncing, setSyncing] = useState(false);
+  const probedOnce = useRef(false);
+
+  // "Đồng bộ ngay" (v3.2): đọc thử tháng HIỆN TẠI theo giờ thiết bị Mai.
+  const runProbe = useCallback(async () => {
+    setSyncing(true);
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const to = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+    const got = await probe(from, to);
+    if (got) {
+      const at = new Date().toISOString();
+      for (const p of got) {
+        setSyncStatus(p.id, {
+          at,
+          calendars: p.calendars,
+          events: p.events,
+          error: p.error?.action,
+        });
+      }
+    }
+    setSyncing(false);
+  }, [probe, setSyncStatus]);
+
+  // Vừa nối xong (hoặc tài khoản chưa đồng bộ lần nào) → tự chạy một lần,
+  // để trong 1 phút sau khi nối Mai thấy ngay số sự kiện (PRD v3.2).
+  useEffect(() => {
+    if (!mounted || loading || probedOnce.current) return;
+    const cal = accounts.filter((a) => a.parts.cal);
+    if (cal.length === 0) return;
+    probedOnce.current = true;
+    if (cal.some((a) => !useStore.getState().settings.syncStatus[a.id])) void runProbe();
+  }, [mounted, loading, accounts, runProbe]);
 
   return (
     <main className="screen-body">
@@ -156,6 +195,47 @@ export default function ConnectionsPage() {
 
       {mounted && calAccounts.length > 0 && (
         <>
+          <div className="group-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span>Trạng thái đồng bộ</span>
+            <button
+              className="btn small"
+              style={{ marginLeft: "auto" }}
+              disabled={syncing}
+              onClick={() => void runProbe()}
+            >
+              {syncing ? "Đang đồng bộ…" : "Đồng bộ ngay"}
+            </button>
+          </div>
+          {calAccounts.map((a) => {
+            const st = settings.syncStatus[a.id];
+            return (
+              <div key={a.id}>
+                <div className="row" style={{ flexWrap: "wrap" }}>
+                  <span className="dot" style={{ background: a.provider === "lark" ? "#3370FF" : "#4285F4" }} />
+                  <span className="t">
+                    <b style={{ overflowWrap: "anywhere" }}>{a.email ?? PROVIDER_LABEL[a.provider]}</b>
+                    <span className="muted small">
+                      {st
+                        ? `${fmtSync(st.at)} · ${st.calendars} lịch con · ${st.events} sự kiện tháng này`
+                        : "Chưa đồng bộ lần nào — bấm Đồng bộ ngay."}
+                    </span>
+                  </span>
+                </div>
+                {st?.error && (
+                  <div className="warn small" style={{ marginTop: 4 }}>
+                    ⚠ {st.error}
+                  </div>
+                )}
+                {st && !st.error && st.events === 0 && (
+                  <div className="note-box small" style={{ marginTop: 4 }}>
+                    0 sự kiện tháng này — nếu lịch {PROVIDER_LABEL[a.provider]} của Mai có sự kiện
+                    mà đây vẫn 0, bấm Kết nối lại giúp mình nhé.
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
           <div className="group-title">Lịch đích theo dự án</div>
           {activeProjects(projects).map((p) => (
             <div className="row" key={p.id} style={{ flexWrap: "wrap" }}>

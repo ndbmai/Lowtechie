@@ -7,7 +7,7 @@ import {
   unsealFor,
   type GoogleLink,
 } from "@/lib/googleServer";
-import { larkKeyMaterial } from "@/lib/larkServer";
+import { larkErrorAction, larkKeyMaterial } from "@/lib/larkServer";
 
 /**
  * Sổ đăng ký NHIỀU tài khoản (PRD §5.3.4): mỗi tài khoản một cookie
@@ -145,6 +145,19 @@ export async function writeAccount(
 
 export function deleteAccountCookie(res: NextResponse, id: string, provider: "google" | "lark"): void {
   res.cookies.delete(cookieNameFor(id, provider));
+}
+
+/**
+ * Lỗi đồng bộ → thông điệp CÓ VIỆC ĐỂ LÀM (PRD v3.2 — "không hiện sự kiện"
+ * phải nói rõ vì sao và bấm gì, không im lặng trả lịch trống).
+ */
+export function accountErrorAction(provider: "google" | "lark", detail: string): string {
+  if (provider === "lark") return larkErrorAction(detail);
+  if (detail === "token" || detail.includes("401"))
+    return "Phiên đăng nhập Google hết hạn — bấm Kết nối lại.";
+  if (detail.includes("403"))
+    return "Google từ chối quyền lịch — bấm Kết nối lại và cấp lại quyền Calendar.";
+  return "Google báo lỗi — bấm Đồng bộ ngay thử lại, còn lỗi thì Kết nối lại.";
 }
 
 /** Dạng an toàn trả về client — KHÔNG kèm token. */
