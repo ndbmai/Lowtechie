@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bannerNote, findDuplicateEvent, resolveBannerTiming } from "../banner";
+import { bannerNote, canAutoBookBanner, findDuplicateEvent, resolveBannerTiming } from "../banner";
 
 // Thứ Tư 23/9/2026 16:00 giờ Bangkok.
 const NOW = Date.parse("2026-09-23T16:00:00+07:00");
@@ -78,6 +78,18 @@ describe("banner sự kiện → lịch (PRD §5.1.1 v3.0)", () => {
       findDuplicateEvent(events, "hoi thao ai viet nam", "2026-10-02T18:00:00+07:00")?.id,
     ).toBe("e1");
     expect(findDuplicateEvent(events, "Hội Thảo AI Việt Nam", "2026-10-03T09:00:00+07:00")).toBeUndefined();
+  });
+
+  it("v3.1: book thẳng chỉ khi giờ chắc chắn + có địa điểm + không trùng", () => {
+    const ok = resolveBannerTiming(
+      { title: "X", startAt: "2026-09-25T18:00:00+07:00", confidence: 0.9 },
+      NOW,
+    );
+    expect(canAutoBookBanner(ok, true, false)).toBe(true);
+    expect(canAutoBookBanner(ok, false, false)).toBe(false); // thiếu địa điểm
+    expect(canAutoBookBanner(ok, true, true)).toBe(false); // trùng → hỏi
+    const asking = resolveBannerTiming({ title: "X", confidence: 0.9 }, NOW);
+    expect(canAutoBookBanner(asking, true, false)).toBe(false); // đang hỏi giờ
   });
 
   it("ghi chú gộp tổ chức · giá · lưu ý, bỏ phần thiếu", () => {

@@ -307,14 +307,29 @@ export interface BannerEvent {
   requirements?: string;
   /** Banner nhiều khung giờ/ngày → các ISO ứng viên để Mai chọn một. */
   timeOptions?: string[];
+  /** AI đoán dự án theo logo/tổ chức trên banner (v3.1) — phải sanitize. */
+  projectHint?: string;
+  confidence: number;
+}
+
+/** Liên hệ đọc từ ảnh danh thiếp (v3.1) — gợi ý thêm vào danh bạ khách. */
+export interface BannerContact {
+  name: string;
+  org?: string;
+  phone?: string;
+  email?: string;
   confidence: number;
 }
 
 export interface ImageParseResult {
   items: ImageItem[];
-  /** Ảnh là checklist hay banner sự kiện (v3.0) — banner đi kèm `event`. */
-  kind?: "checklist" | "banner" | "khac";
+  /** Loại ảnh (v3.1 — PHÂN LOẠI TRƯỚC, trích sau): banner đi kèm `event`,
+   *  danh thiếp đi kèm `contact`; chat/tài liệu vẫn ra `items`. */
+  kind?: "checklist" | "banner" | "chat" | "document" | "danhthiep" | "khac";
   event?: BannerEvent;
+  contact?: BannerContact;
+  /** Lý do đọc kém (ảnh mờ, chữ nhỏ, lóa…) — báo rõ, không trả lời cụt. */
+  readNote?: string;
   question?: string;
   source: "claude";
 }

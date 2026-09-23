@@ -99,7 +99,7 @@ function OAuthNotice() {
 export default function ConnectionsPage() {
   const mounted = useMounted();
   const { loading, configured, accounts, setParts, disconnect, reload } = useAccounts();
-  const { projects, settings, setProjectCalendar } = useStore();
+  const { projects, settings, setProjectCalendar, setAutoBookBanner } = useStore();
   const calAccounts = accounts.filter((a) => a.parts.cal);
 
   return (
@@ -158,7 +158,7 @@ export default function ConnectionsPage() {
         <>
           <div className="group-title">Lịch đích theo dự án</div>
           {activeProjects(projects).map((p) => (
-            <div className="row" key={p.id}>
+            <div className="row" key={p.id} style={{ flexWrap: "wrap" }}>
               <span className="dot" style={{ background: p.color }} />
               <span className="t">
                 <b>{p.name}</b>
@@ -177,6 +177,20 @@ export default function ConnectionsPage() {
                   </option>
                 ))}
               </select>
+              {/* v3.1: banner đủ ngày giờ + địa điểm → book thẳng, báo sau. */}
+              <label
+                className="small"
+                style={{ display: "flex", gap: 5, alignItems: "center", width: "100%", paddingLeft: 20 }}
+              >
+                <input
+                  type="checkbox"
+                  className="check"
+                  checked={settings.autoBookBanner[p.id] ?? false}
+                  aria-label={`Book thẳng banner của ${p.name}`}
+                  onChange={(e) => setAutoBookBanner(p.id, e.target.checked)}
+                />
+                ⚡ Book thẳng sự kiện từ banner
+              </label>
             </div>
           ))}
         </>

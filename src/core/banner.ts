@@ -77,6 +77,20 @@ function sameLocalDay(aIso: string, bIso: string): boolean {
 }
 
 /**
+ * Book thẳng theo dự án (v3.1 — Mai opt-in từng dự án): chỉ khi đủ ngày
+ * giờ CHẮC CHẮN (không phải đang hỏi khung giờ), có địa điểm, không
+ * trùng sự kiện đã có. Banner không mời ai nên không đụng quy tắc "mời
+ * người luôn hỏi"; thiếu bất kỳ điều kiện nào → về thẻ xem trước.
+ */
+export function canAutoBookBanner(
+  timing: BannerTiming,
+  hasLocation: boolean,
+  hasDuplicate: boolean,
+): boolean {
+  return timing.status === "ok" && hasLocation && !hasDuplicate;
+}
+
+/**
  * Chống tạo trùng (v3.0): đã có sự kiện CÙNG TÊN (so fold dấu/hoa
  * thường) trong CÙNG NGÀY → trả về sự kiện đó để đề xuất "Cập nhật".
  */

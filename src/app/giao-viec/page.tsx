@@ -6,7 +6,7 @@ import { Blossom } from "@/components/Blossom";
 import { Bubble } from "@/components/Bubble";
 import { DueEditor } from "@/components/DueEditor";
 import { SearchSelect, type PickOption } from "@/components/SearchSelect";
-import { bannerNote, findDuplicateEvent, resolveBannerTiming } from "@/core/banner";
+import { bannerNote, canAutoBookBanner, findDuplicateEvent, resolveBannerTiming } from "@/core/banner";
 import { classify, findDuplicate, learnableTerms, CONFIDENCE_THRESHOLD } from "@/core/classify";
 import {
   clientProjectHint,
@@ -28,6 +28,7 @@ import {
   sanitizeTaxonomy,
 } from "@/core/projects";
 import type {
+  BannerContact,
   BannerEvent,
   Category,
   Client,
@@ -133,9 +134,27 @@ export default function CapturePage() {
     places,
     addTriage,
     updateEvent,
+    settings,
   } = useStore();
   /** Sự kiện soạn sẵn từ ảnh banner (v3.0) — chờ Mai duyệt trên thẻ. */
-  const [banner, setBanner] = useState<{ ev: BannerEvent; image: string } | null>(null);
+  const [banner, setBanner] = useState<{
+    ev: BannerEvent;
+    image: string;
+    projectId?: ProjectId;
+  } | null>(null);
+  /** Danh thiếp đọc từ ảnh (v3.1) — gợi ý thêm vào danh bạ khách. */
+  const [contactCard, setContactCard] = useState<{
+    contact: BannerContact;
+    readNote?: string;
+  } | null>(null);
+  /** Ảnh không chắc loại / đọc được ít (v3.1) — hỏi một câu, không trả lời cụt. */
+  const [unknown, setUnknown] = useState<{
+    image: string;
+    caption: string;
+    readNote?: string;
+    question?: string;
+    readTitles: string[];
+  } | null>(null);
   /** Tên khách đang gõ dở theo từng thẻ — Lưu là vào danh bạ (v2.3). */
   const [clientQ, setClientQ] = useState<Record<number, string>>({});
   /** Ghi chú Mai gõ trên từng thẻ việc (3d) — tách riêng với Nguồn. */
@@ -149,7 +168,7 @@ export default function CapturePage() {
   const [book, setBook] = useState<Record<number, boolean>>({});
   const [bookAcct, setBookAcct] = useState<Record<number, string>>({});
   const [lastBooked, setLastBooked] = useState<
-    { localId: string; gcalId: string; account?: string }[] | null
+    { localId: string; gcalId?: string; account?: string }[] | null
   >(null);
 
   const runParse = useCallback(
@@ -304,7 +323,7 @@ export default function CapturePage() {
   async function saveAll() {
     if (!result) return;
     const lines: string[] = [];
-    const booked: { localId: string; gcalId: string; account?: string }[] = [];
+    const booked: { localId: string; gcalId?: string; account?: string }[] = [];
     let goCalendar = false;
 
     for (const [i, a] of result.actions.entries()) {
@@ -470,11 +489,74 @@ export default function CapturePage() {
   /** Hoàn tác book: xóa trên lịch ngoài (đúng tài khoản) và gỡ sự kiện trong app. */
   function undoBook() {
     for (const b of lastBooked ?? []) {
-      void deleteGcalEvent(b.gcalId, b.account);
+      if (b.gcalId) void deleteGcalEvent(b.gcalId, b.account);
       removeEvent(b.localId);
     }
     setLastBooked(null);
     setSavedLines((s) => [...(s ?? []), "Đã gỡ sự kiện vừa book khỏi Google Calendar và lịch trong app."]);
+  }
+
+  /** Book thẳng banner (v3.1) — dự án đã bật quy tắc; LUÔN kèm Hoàn tác. */
+  async function autoBookFromBanner(
+    ev: BannerEvent,
+    projectId: ProjectId,
+    timing: { startAt: string; endAt: string },
+    image: string,
+  ) {
+    const lines: string[] = [];
+    const notes = bannerNote(ev);
+    const fileId = `banner-${Date.now().toString(36)}`;
+    const blob = dataUrlToBlob(image);
+    const savedImg = blob ? await putFile(fileId, blob) : false;
+    const created = await createGcalEvent(
+      {
+        title: ev.title,
+        startAt: timing.startAt,
+        endAt: timing.endAt,
+        description: [notes, ev.registrationUrl].filter(Boolean).join(" · ") || undefined,
+      },
+      settings.projectCalendar[projectId],
+    );
+    const local = addEvent({
+      title: ev.title,
+      startAt: timing.startAt,
+      endAt: timing.endAt,
+      location: ev.location,
+      kind: "event",
+      projectId,
+      gcalId: created?.gcalId,
+      calAccount: created?.accountId,
+      linkUrl: ev.registrationUrl,
+      notes: notes || undefined,
+      bannerImage: savedImg ? fileId : undefined,
+    });
+    lines.push(
+      `⚡ Đã book thẳng "${ev.title}" — ${fmtDayTime(timing.startAt)}${created ? "" : " (lịch ngoài lỗi, mới lưu trong app)"} theo quy tắc của dự án ${projectById(projects, projectId).name}.`,
+    );
+    if (ev.registrationUrl || ev.registrationDeadline) {
+      const deadline =
+        ev.registrationDeadline && !Number.isNaN(Date.parse(ev.registrationDeadline))
+          ? ev.registrationDeadline
+          : undefined;
+      addTriage({
+        title: `Đăng ký / mua vé: ${ev.title}`,
+        projectId,
+        assignee: "mai",
+        dueAt: deadline,
+        dueType: deadline ? "hard" : undefined,
+        dueSource: deadline ? "nguon" : undefined,
+        source: {
+          channel: "app-chat",
+          quote: `Từ banner "${ev.title}"${ev.price ? ` — ${ev.price}` : ""}${ev.registrationUrl ? ` — ${ev.registrationUrl}` : ""}`,
+        },
+        confidence: ev.confidence,
+      });
+      lines.push(
+        `Việc "Đăng ký / mua vé" đã vào Hộp duyệt${deadline ? ` (hạn ${fmtDayFull(deadline)})` : ""}.`,
+      );
+    }
+    setLastBooked([{ localId: local.id, gcalId: created?.gcalId, account: created?.accountId }]);
+    setSavedLines(lines);
   }
 
   async function pickImages(files: FileList | null) {
@@ -531,15 +613,69 @@ export default function CapturePage() {
       }
       const data = (await res.json()) as ImageParseResult;
 
-      // Ảnh là banner sự kiện (v3.0) → thẻ xem trước sự kiện, không vào Hộp duyệt.
+      // Ảnh là banner sự kiện (v3.0/v3.1): dự án đoán theo logo/tổ chức;
+      // dự án đã bật "book thẳng" + đủ giờ/địa điểm/không trùng → book luôn,
+      // báo sau kèm Hoàn tác; còn lại vào thẻ xem trước.
       if (data.kind === "banner" && data.event) {
-        setBanner({ ev: data.event, image: images[0] });
+        const ev = data.event;
+        const hinted = ev.projectHint
+          ? sanitizeTaxonomy(projects, categories, ev.projectHint, undefined).projectId
+          : undefined;
+        const guessed =
+          hinted ??
+          sanitizeTaxonomy(
+            projects,
+            categories,
+            classify(`${ev.title} ${ev.organizer ?? ""}`, feedback).projectId,
+            undefined,
+          ).projectId;
+        const timing = resolveBannerTiming(ev, Date.now());
+        const dup =
+          timing.status === "ok"
+            ? findDuplicateEvent(
+                events.filter((e) => e.kind === "event"),
+                ev.title,
+                timing.startAt,
+              )
+            : undefined;
+        if (
+          settings.autoBookBanner[guessed] &&
+          gs.connected &&
+          timing.status === "ok" &&
+          canAutoBookBanner(timing, Boolean(ev.location), Boolean(dup))
+        ) {
+          await autoBookFromBanner(ev, guessed, timing, images[0]);
+        } else {
+          setBanner({ ev, image: images[0], projectId: guessed });
+        }
         setImages([]);
         setText("");
         return;
       }
 
+      // Danh thiếp (v3.1) → gợi ý thêm vào danh bạ khách, Mai duyệt.
+      if (data.kind === "danhthiep" && data.contact) {
+        setContactCard({ contact: data.contact, readNote: data.readNote });
+        setImages([]);
+        return;
+      }
+
       const caption = text.trim();
+
+      // Không chắc loại ảnh (v3.1) → hỏi một câu, KỂ CẢ khi đọc lõm bõm
+      // được vài dòng — không âm thầm đẩy dòng mù mờ vào Hộp duyệt.
+      if (data.kind === "khac") {
+        setUnknown({
+          image: images[0],
+          caption,
+          readNote: data.readNote,
+          question: data.question,
+          readTitles: data.items.map((it) => it.title).slice(0, 5),
+        });
+        setImages([]);
+        return;
+      }
+
       const capProject = caption ? detectProject(caption) : { id: "canhan" as ProjectId, explicit: false };
       const capWhen = caption ? parseWhen(caption, new Date()) : { at: undefined, hasTime: false, spans: [] };
       const active = data.items.filter((it) => !it.done);
@@ -579,11 +715,21 @@ export default function CapturePage() {
       });
 
       if (drafts.length === 0) {
-        setImgError(
-          skipped > 0
-            ? `Cả ${skipped} mục trong ảnh đều đã tick xong — không có việc mới.`
-            : "Mình không đọc được dòng việc nào trong ảnh.",
-        );
+        if (skipped > 0) {
+          // Câu trả lời ĐÚNG, không phải trả lời cụt: mọi mục đã tick xong.
+          setImgError(`Cả ${skipped} mục trong ảnh đều đã tick xong — không có việc mới.`);
+          return;
+        }
+        // KHÔNG trả lời cụt (v3.1): hiện những gì đọc được + hỏi một câu
+        // + nút tạo thủ công; ảnh mờ/nhỏ/lóa thì nêu rõ lý do.
+        setUnknown({
+          image: images[0],
+          caption,
+          readNote: data.readNote,
+          question: data.question,
+          readTitles: data.items.map((it) => it.title).slice(0, 5),
+        });
+        setImages([]);
         return;
       }
 
@@ -592,6 +738,7 @@ export default function CapturePage() {
       setText("");
       setSavedLines([
         `${drafts.length} việc từ ảnh đã vào Hộp duyệt${skipped ? ` (bỏ qua ${skipped} mục đã tick)` : ""}.`,
+        ...(data.readNote ? [`📷 ${data.readNote} — nếu thiếu dòng nào, Mai gửi ảnh gốc hoặc chụp gần hơn nhé.`] : []),
       ]);
       router.push("/hop-duyet");
     } catch {
@@ -699,11 +846,67 @@ export default function CapturePage() {
         <BannerCard
           ev={banner.ev}
           image={banner.image}
+          initialProject={banner.projectId}
           onDone={(lines) => {
             setBanner(null);
             if (lines.length) setSavedLines(lines);
           }}
         />
+      )}
+
+      {contactCard && (
+        <ContactCard
+          contact={contactCard.contact}
+          readNote={contactCard.readNote}
+          onDone={(lines) => {
+            setContactCard(null);
+            if (lines.length) setSavedLines(lines);
+          }}
+        />
+      )}
+
+      {unknown && (
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {unknown.readNote && (
+            <div className="note-box small">
+              📷 {unknown.readNote} — Mai gửi ảnh gốc hoặc chụp gần hơn giúp mình nhé.
+            </div>
+          )}
+          {unknown.readTitles.length > 0 && (
+            <span className="small muted">
+              Mình mới đọc được: {unknown.readTitles.join(" · ")}
+            </span>
+          )}
+          <b className="small">
+            {unknown.question ?? "Ảnh này là sự kiện, danh sách việc, hay ghi chú?"}
+          </b>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              className="btn small"
+              onClick={() => {
+                setBanner({
+                  ev: { title: unknown.caption || "", confidence: 0.3 },
+                  image: unknown.image,
+                });
+                setUnknown(null);
+              }}
+            >
+              🗓 Tạo sự kiện thủ công
+            </button>
+            <button
+              className="btn small"
+              onClick={() => {
+                setUnknown(null);
+                inputRef.current?.focus();
+              }}
+            >
+              ✍️ Gõ việc thủ công
+            </button>
+            <button className="btn ghost small" onClick={() => setUnknown(null)}>
+              Đóng
+            </button>
+          </div>
+        </div>
       )}
 
       {result && (
@@ -971,7 +1174,7 @@ export default function CapturePage() {
           ))}
           {lastBooked && (
             <button className="btn small" style={{ marginTop: 4 }} onClick={undoBook}>
-              Hoàn tác book Google
+              Hoàn tác book
             </button>
           )}
         </Bubble>
@@ -992,10 +1195,13 @@ export default function CapturePage() {
 function BannerCard({
   ev,
   image,
+  initialProject,
   onDone,
 }: {
   ev: BannerEvent;
   image: string;
+  /** Dự án đoán sẵn (logo/tổ chức) — v3.1; thiếu thì tự classify. */
+  initialProject?: ProjectId;
   onDone: (lines: string[]) => void;
 }) {
   const { events, projects, categories, feedback, settings, addEvent, updateEvent, addTriage } =
@@ -1010,13 +1216,17 @@ function BannerCard({
   }, [ev, feedback, projects, categories]);
 
   const [title, setTitle] = useState(ev.title);
-  const [projectId, setProjectId] = useState<ProjectId>(guessed);
+  const [projectId, setProjectId] = useState<ProjectId>(initialProject ?? guessed);
   const [startAt, setStartAt] = useState(ev.startAt);
   const [endAt] = useState(ev.endAt);
   /** Mai đã tự chọn giờ → thôi hỏi, dù banner có nhiều khung giờ. */
   const [picked, setPicked] = useState(false);
   const [book, setBook] = useState(false);
-  const [bookAcct, setBookAcct] = useState("");
+  // Lịch đích HIỆN SẴN theo dự án (v3.1); Mai tự đổi thì giữ lựa chọn đó.
+  const [bookAcct, setBookAcct] = useState(
+    settings.projectCalendar[initialProject ?? guessed] ?? "",
+  );
+  const [acctTouched, setAcctTouched] = useState(false);
   const [makeTask, setMakeTask] = useState(
     Boolean(ev.registrationUrl || ev.registrationDeadline),
   );
@@ -1222,7 +1432,10 @@ function BannerCard({
         value={projectId}
         options={activeProjects(projects).map((p) => ({ id: p.id, label: p.name, color: p.color }))}
         onPick={(id) => {
-          if (id) setProjectId(id);
+          if (!id) return;
+          setProjectId(id);
+          // Đổi dự án → lịch đích đổi theo (trừ khi Mai đã tự chọn tay).
+          if (!acctTouched) setBookAcct(settings.projectCalendar[id] ?? "");
         }}
       />
 
@@ -1237,21 +1450,32 @@ function BannerCard({
             />
             Book lên lịch
           </label>
-          {book && calAccounts.length > 1 && (
+          {book && calAccounts.length > 1 ? (
             <select
               className="btn small"
               value={bookAcct}
               aria-label="Lịch đích"
-              onChange={(e) => setBookAcct(e.target.value)}
+              onChange={(e) => {
+                setBookAcct(e.target.value);
+                setAcctTouched(true);
+              }}
             >
-              <option value="">Theo dự án / mặc định</option>
+              <option value="">Lịch mặc định</option>
               {calAccounts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.provider === "lark" ? "Lark" : "Google"} · {c.email ?? c.id}
                 </option>
               ))}
             </select>
-          )}
+          ) : book ? (
+            <span className="small muted">
+              →{" "}
+              {(() => {
+                const t = calAccounts.find((c) => c.id === (bookAcct || settings.projectCalendar[projectId]));
+                return t ? `${t.provider === "lark" ? "Lark" : "Google"} · ${t.email ?? t.id}` : "lịch mặc định";
+              })()}
+            </span>
+          ) : null}
         </span>
       )}
 
@@ -1286,6 +1510,96 @@ function BannerCard({
             Tạo sự kiện
           </button>
         )}
+        <button className="btn ghost" onClick={() => onDone([])}>
+          Bỏ
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Danh thiếp từ ảnh (v3.1): gợi ý thêm liên hệ vào danh bạ khách của
+ * một dự án — Mai duyệt; tên trùng danh bạ thì cập nhật, không tạo đôi.
+ */
+function ContactCard({
+  contact,
+  readNote,
+  onDone,
+}: {
+  contact: BannerContact;
+  readNote?: string;
+  onDone: (lines: string[]) => void;
+}) {
+  const { projects, clients, addClient, updateClient, touchClient } = useStore();
+  const live = activeProjects(projects);
+  const [name, setName] = useState(contact.name);
+  const [projectId, setProjectId] = useState<ProjectId>(live[0]?.id ?? "canhan");
+  const [type, setType] = useState<Client["type"]>("khachhang");
+
+  function save() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const existing = findClientByName(clients, trimmed);
+    const c = existing ?? addClient(trimmed, projectId, type);
+    if (!c) return;
+    const contactStr = [contact.phone, contact.email].filter(Boolean).join(" · ");
+    updateClient(c.id, {
+      contact: contactStr || c.contact,
+      notes: contact.org ?? c.notes,
+      projectIds: c.projectIds.includes(projectId) ? c.projectIds : [...c.projectIds, projectId],
+    });
+    touchClient(c.id);
+    onDone([
+      existing
+        ? `"${c.name}" đã có trong danh bạ — mình cập nhật liên hệ từ danh thiếp.`
+        : `Đã thêm "${c.name}" vào danh bạ ${projectById(projects, projectId).name}.`,
+    ]);
+  }
+
+  return (
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="k">Danh thiếp — thêm vào danh bạ?</div>
+      {readNote && <div className="note-box small">📷 {readNote}</div>}
+      <input
+        className="transcript"
+        style={{ minHeight: 0, padding: "6px 10px", fontWeight: 700 }}
+        value={name}
+        aria-label="Tên liên hệ"
+        onChange={(e) => setName(e.target.value)}
+      />
+      <span className="small muted">
+        {[contact.org, contact.phone, contact.email].filter(Boolean).join(" · ") ||
+          "(không đọc được thêm chi tiết)"}
+      </span>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <select
+          className="btn small"
+          value={projectId}
+          aria-label="Thuộc dự án"
+          onChange={(e) => setProjectId(e.target.value)}
+        >
+          {live.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <select
+          className="btn small"
+          value={type}
+          aria-label="Loại liên hệ"
+          onChange={(e) => setType(e.target.value as Client["type"])}
+        >
+          <option value="khachhang">khách hàng</option>
+          <option value="doitac">đối tác</option>
+          <option value="nhacungcap">nhà cung cấp</option>
+        </select>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="btn primary" style={{ flex: 1 }} disabled={!name.trim()} onClick={save}>
+          Thêm vào danh bạ
+        </button>
         <button className="btn ghost" onClick={() => onDone([])}>
           Bỏ
         </button>

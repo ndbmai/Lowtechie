@@ -89,6 +89,8 @@ interface LowtechieState {
     projectFilter: "all" | "due" | "nodue" | "high" | "others" | "overdue";
     /** Lịch đích MẶC ĐỊNH theo dự án (§5.3.4): projectId → id tài khoản. */
     projectCalendar: Record<ProjectId, string>;
+    /** Book THẲNG sự kiện từ banner cho dự án nào (v3.1 — Mai opt-in). */
+    autoBookBanner: Record<ProjectId, boolean>;
   };
 
   addTask: (draft: TaskDraft) => Task;
@@ -157,6 +159,8 @@ interface LowtechieState {
   }) => void;
   /** Đặt/xóa lịch đích mặc định của một dự án (§5.3.4). */
   setProjectCalendar: (projectId: ProjectId, accountId: string | undefined) => void;
+  /** Bật/tắt book thẳng banner cho một dự án (v3.1). */
+  setAutoBookBanner: (projectId: ProjectId, on: boolean) => void;
 
   addSeries: (
     s: Pick<RecurringSeries, "title" | "intervalUnit" | "intervalCount" | "nextDate"> &
@@ -274,6 +278,7 @@ export const useStore = create<LowtechieState>()(
         projectGroupBy: "category",
         projectFilter: "all",
         projectCalendar: {},
+        autoBookBanner: {},
       },
 
       addTask: (draft) => {
@@ -651,6 +656,13 @@ export const useStore = create<LowtechieState>()(
           else delete next[projectId];
           return { settings: { ...s.settings, projectCalendar: next } };
         }),
+      setAutoBookBanner: (projectId, on) =>
+        set((s) => ({
+          settings: {
+            ...s.settings,
+            autoBookBanner: { ...s.settings.autoBookBanner, [projectId]: on },
+          },
+        })),
 
       addSeries: (sr) =>
         set((s) => ({
@@ -894,7 +906,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 12,
+      version: 13,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -935,6 +947,7 @@ export const useStore = create<LowtechieState>()(
             projectGroupBy: s.settings?.projectGroupBy ?? "category",
             projectFilter: s.settings?.projectFilter ?? "all",
             projectCalendar: s.settings?.projectCalendar ?? {},
+            autoBookBanner: s.settings?.autoBookBanner ?? {},
           };
         }
         if (version < 5) {
@@ -993,6 +1006,7 @@ export const useStore = create<LowtechieState>()(
             projectGroupBy: prev?.projectGroupBy ?? "category",
             projectFilter: prev?.projectFilter ?? "all",
             projectCalendar: prev?.projectCalendar ?? {},
+            autoBookBanner: prev?.autoBookBanner ?? {},
           };
         }
         if (version < 10) {
@@ -1010,6 +1024,7 @@ export const useStore = create<LowtechieState>()(
             projectGroupBy: prev?.projectGroupBy ?? "category",
             projectFilter: prev?.projectFilter ?? "all",
             projectCalendar: {},
+            autoBookBanner: {},
           };
         }
         if (version < 12) {
@@ -1023,7 +1038,12 @@ export const useStore = create<LowtechieState>()(
             projectGroupBy: prev?.projectGroupBy ?? "category",
             projectFilter: prev?.projectFilter ?? "all",
             projectCalendar: prev?.projectCalendar ?? {},
+            autoBookBanner: prev?.autoBookBanner ?? {},
           };
+        }
+        if (version < 13) {
+          // v13 (PRD v3.1): cờ book thẳng banner theo dự án.
+          if (s.settings && !s.settings.autoBookBanner) s.settings.autoBookBanner = {};
         }
         return s as LowtechieState;
       },

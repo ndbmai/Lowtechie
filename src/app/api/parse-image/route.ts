@@ -62,9 +62,26 @@ const TOOL_SCHEMA = {
       question: { type: "string", description: "TỐI ĐA MỘT câu hỏi lại, tiếng Việt" },
       kind: {
         type: "string",
-        enum: ["checklist", "banner", "khac"],
+        enum: ["checklist", "banner", "chat", "document", "danhthiep", "khac"],
         description:
-          'Loại ảnh: "banner" khi ảnh là banner/poster/thiệp mời/bài đăng SỰ KIỆN (khi đó điền `event` và để items rỗng); còn lại "checklist" hoặc "khac"',
+          'PHÂN LOẠI ảnh TRƯỚC (v3.1): "checklist" = checklist/ghi chú tay/bảng trắng; "banner" = banner/poster/thiệp mời/bài đăng SỰ KIỆN (điền `event`, items rỗng); "chat" = chụp màn hình chat/email (trích items kèm người + hạn); "document" = tài liệu/hợp đồng (items = việc + mốc quan trọng); "danhthiep" = danh thiếp (điền `contact`, items rỗng); "khac" = không chắc (điền question + những gì đọc được vào items)',
+      },
+      contact: {
+        type: "object",
+        description: "CHỈ khi kind=danhthiep — liên hệ đọc từ danh thiếp",
+        properties: {
+          name: { type: "string", description: "Tên người" },
+          org: { type: "string", description: "Công ty / tổ chức" },
+          phone: { type: "string" },
+          email: { type: "string" },
+          confidence: { type: "number" },
+        },
+        required: ["name", "confidence"],
+      },
+      readNote: {
+        type: "string",
+        description:
+          "Ảnh khó đọc → nêu RÕ lý do bằng tiếng Việt (độ phân giải thấp, chữ quá nhỏ, lóa, chụp lại màn hình…) để app đề nghị Mai gửi ảnh gốc/chụp gần hơn; ảnh đọc tốt thì bỏ trống",
       },
       event: {
         type: "object",
@@ -96,6 +113,11 @@ const TOOL_SCHEMA = {
             description:
               "Banner ghi NHIỀU khung giờ/ngày → liệt kê hết dạng ISO, đừng tự chọn một cái; sự kiện nhiều ngày liên tục thì dùng startAt/endAt",
           },
+          projectHint: {
+            type: "string",
+            description:
+              "Id dự án của Mai nếu banner có LOGO/tên tổ chức trùng dự án (ví dụ sự kiện do The Circle tổ chức → circle) — CHỈ dùng id trong danh sách ở system prompt",
+          },
           confidence: { type: "number", description: "0–1" },
         },
         required: ["title", "confidence"],
@@ -112,7 +134,8 @@ Lời nhắn kèm ảnh (nếu có) cho biết dự án và hạn áp cho CẢ d
 ${taxonomyText(taxonomy)}
 Tên khách trong ảnh khớp danh bạ (kể cả tên gọi tắt) → điền clientId; tên lạ bỏ trống, không đoán. Ảnh không ghi hạn → bỏ trống dueAt, không tự đề xuất.
 Chữ khó đọc → vẫn trả dòng đó với confidence thấp, đừng bỏ. Không bịa dòng không có trong ảnh.
-ẢNH BANNER SỰ KIỆN (v3.0): ảnh là banner/poster/thiệp mời/bài đăng sự kiện → kind="banner", items để RỖNG, điền event theo mô tả từng trường. Ngày giờ LUÔN đối chiếu mốc "bây giờ" phía trên: thiếu năm → lần xuất hiện gần nhất từ hôm nay trở đi (kể cả khi đó là năm sau); ngày đã qua vẫn trả nguyên (server tự báo "đã diễn ra"). Chỉ trích thứ có trong ảnh, không bịa.`;
+PHÂN LOẠI TRƯỚC, TRÍCH SAU (v3.1): xác định kind trước rồi mới trích theo loại. Banner/poster/thiệp mời/bài đăng sự kiện → kind="banner", items RỖNG, điền event theo mô tả từng trường; banner có logo/tên tổ chức trùng một dự án của Mai → điền event.projectHint. Chụp màn hình chat/email → kind="chat", trích items kèm người và hạn. Tài liệu/hợp đồng → kind="document", items = việc + mốc quan trọng. Danh thiếp → kind="danhthiep", điền contact. Ngày giờ của event LUÔN đối chiếu mốc "bây giờ" phía trên: thiếu năm → lần xuất hiện gần nhất từ hôm nay trở đi (kể cả khi đó là năm sau); ngày đã qua vẫn trả nguyên (server tự báo "đã diễn ra").
+KHÔNG BAO GIỜ TRẢ LỜI CỤT: không chắc loại ảnh hoặc đọc được ít → kind="khac", đưa những gì đọc được vào items (confidence thấp) và hỏi đúng MỘT câu trong question. Ảnh mờ/chữ nhỏ/lóa/chụp lại màn hình → nêu rõ lý do trong readNote. Chỉ trích thứ có trong ảnh, không bịa.`;
 }
 
 function localIso(epochMs: number, tzOffsetMin: number): string {
@@ -132,6 +155,8 @@ interface ClaudeContent {
     question?: string;
     kind?: ImageParseResult["kind"];
     event?: BannerEvent;
+    contact?: ImageParseResult["contact"];
+    readNote?: string;
   };
 }
 
@@ -249,6 +274,16 @@ export async function POST(req: Request): Promise<NextResponse> {
           event:
             toolUse?.input?.kind === "banner" && ev && typeof ev.title === "string" && ev.title
               ? { ...ev, registrationUrl: ev.registrationUrl || qrUrls[0] }
+              : undefined,
+          contact:
+            toolUse?.input?.kind === "danhthiep" &&
+            typeof toolUse?.input?.contact?.name === "string" &&
+            toolUse.input.contact.name
+              ? toolUse.input.contact
+              : undefined,
+          readNote:
+            typeof toolUse?.input?.readNote === "string" && toolUse.input.readNote
+              ? toolUse.input.readNote.slice(0, 300)
               : undefined,
           question: toolUse?.input?.question,
           source: "claude",
