@@ -3,15 +3,16 @@ import type { Category, Project, ProjectId } from "./types";
 /**
  * Dự án khởi tạo — Mai tự thêm/sửa/xóa trong app (Dự án → Quản lý),
  * đây chỉ là seed cho thiết bị mới. Quyết định của Mai (22/9/2026):
- * bỏ Favstay và Edge khỏi danh sách. Không còn mục tiêu giờ/tuần (v2.8):
+ * bỏ Favstay và Edge khỏi danh sách. Không còn mục tiêu giờ/tuần (v2.8)
+ * và cũng không còn dòng mô tả (v2.9) — dự án chỉ cần tên và màu;
  * ưu tiên giữa dự án tính theo THỨ TỰ Mai sắp xếp danh sách này.
  */
 export const DEFAULT_PROJECTS: Project[] = [
-  { id: "sorene", name: "Sorene", color: "#8B7BFF", goal: "Pitch deck + gọi vốn" },
-  { id: "circle", name: "Circle", color: "#1FA9B8", goal: "Tư vấn AI — Bangkok, HCMC, Tokyo" },
-  { id: "canhan", name: "Cá nhân", color: "#FF7FA8", goal: "Spa, sức khỏe, giấy tờ" },
-  { id: "hoctap", name: "Học tập", color: "#9BC53D", goal: "Tiếng Thái + khóa học" },
-  { id: "admin", name: "Admin chung", color: "#8A8FB0", goal: "Thuế, hóa đơn, công cụ" },
+  { id: "sorene", name: "Sorene", color: "#8B7BFF" },
+  { id: "circle", name: "Circle", color: "#1FA9B8" },
+  { id: "canhan", name: "Cá nhân", color: "#FF7FA8" },
+  { id: "hoctap", name: "Học tập", color: "#9BC53D" },
+  { id: "admin", name: "Admin chung", color: "#8A8FB0" },
 ];
 
 /** Bảng màu cho dự án mới (PRD §6.1: dự án tự thêm chọn từ bảng có sẵn). */

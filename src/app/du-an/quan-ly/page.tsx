@@ -325,14 +325,6 @@ function ProjectCard({ project }: { project: Project }) {
           </button>
         </div>
       )}
-      <input
-        className="transcript"
-        style={{ minHeight: 0, padding: 8 }}
-        placeholder="Mục tiêu (chữ, tùy chọn — ví dụ: 3 buổi tiếng Thái mỗi tuần)"
-        aria-label={`Mục tiêu của ${project.name}`}
-        value={project.goal ?? ""}
-        onChange={(e) => updateProject(project.id, { goal: e.target.value })}
-      />
       <ColorPicker
         value={project.color}
         onChange={(c) => updateProject(project.id, { color: c })}

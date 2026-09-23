@@ -13,7 +13,6 @@ export interface Project {
   id: ProjectId;
   name: string;
   color: string;
-  goal?: string;
   /** Lưu trữ = ẩn khỏi Hôm nay/Dự án/review, giữ nguyên dữ liệu (§5.3.1). */
   status?: "active" | "archived";
 }

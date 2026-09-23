@@ -4,7 +4,7 @@ Trợ lý AI chief-of-staff cá nhân cho Mai — người vận hành song song
 
 Tài liệu gốc:
 
-- [PRD v2.8](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
+- [PRD v2.9](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
 - [Mockup UI & user flow](docs/prototypes/mai-lowtechie-ui.html) — hệ thống thiết kế + 7 màn hình
 - [Checklist bay](docs/prototypes/checklist-bay.html) — nguyên mẫu module Chuyến đi (§5.9)
 
@@ -50,7 +50,7 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Task engine + triage inbox (nguồn gốc + độ tin cậy trên từng thẻ)
 - [x] Giao việc bằng chat & voice (Web Speech; 1 câu → nhiều hành động; hỏi lại tối đa 1 câu)
 - [x] Phân loại 2 tầng Dự án → Category (§5.2.1) + **học từ sửa đổi** — nhớ cả dự án Mai tự thêm
-- [x] **Dự án & category tự quản** (Dự án → ⚙️ Quản lý): thêm/đổi tên/màu/mục tiêu (chữ), thêm-sửa-xóa category; xóa dự án thì việc chuyển về Cá nhân (22/9: đã bỏ Favstay & Edge)
+- [x] **Dự án & category tự quản** (Dự án → ⚙️ Quản lý): thêm/đổi tên/màu (v2.9: bỏ dòng mô tả — dự án chỉ cần tên và màu), thêm-sửa-xóa category; xóa dự án thì việc chuyển về Cá nhân (22/9: đã bỏ Favstay & Edge)
 - [x] Thẻ xác nhận trước khi lưu: tóm tắt nhóm, sửa phân loại một chạm, bắt việc trùng (đề xuất gộp), cảnh báo hạn đã qua
 - [x] Nhập việc từ **ảnh** (§5.1.1): chụp checklist/bảng trắng → Claude vision đọc → nhóm trong Hộp duyệt kèm ảnh nguồn, bỏ qua mục đã tick (cần `ANTHROPIC_API_KEY`)
 - [x] `/api/parse` dùng Claude API khi có key, tự fallback bộ phân tích luật
@@ -87,7 +87,9 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Sửa nút "Mở" vé máy bay không hoạt động trên điện thoại: đổi window.open (bị chặn popup) thành link trực tiếp + nút Tải
 - [x] Tạm ngưng dự án + xóa phải chọn nơi chuyển việc (§5.3.1)
 - [x] Màn Dự án = **lưới ô như thư mục** (§5.3.0 v2.8, sửa lỗi 22–23/9): mỗi dự án một ô chạm được (kể cả Cá nhân/Học tập/Admin), hiện số mở/quá hạn/7 ngày; bỏ danh sách "Việc đang mở" trùng với Hôm nay
-- [x] **Màn chi tiết dự án** (§5.3.0 v2.8): 3 tab Theo category / Theo khách hàng / Theo hạn, "+ Thêm việc" ngay trong từng category, "Đã xong (N)" từng nhóm, lọc nhanh, Book block, lịch sắp tới của dự án
+- [x] **Màn chi tiết dự án** (§5.3.0 v2.9): nhóm theo Category / Khách hàng / Hạn + bộ lọc gom vào **hai dropdown một dòng** (app nhớ lựa chọn), "Đã xong (N)" từng nhóm, Book block, lịch sắp tới của dự án
+- [x] Ô **"+ Thêm việc" đầy đủ trường** trong dự án (v2.9): Tên · Ghi chú · Category · Khách · Deadline · ⭐, nút 🎤 nói một câu là tự điền các ô; thiếu category/khách/hạn thì hỏi **đúng một câu** với 2–3 lựa chọn bấm nhanh + Bỏ qua; lưu xong giữ nguyên category để nhập liên tiếp
+- [x] Nhóm **"Chưa gắn khách"** (v2.9): chạm tiêu đề nhóm để gắn cả nhóm cho một khách, ô 🤝 trên từng dòng gắn một việc một chạm (chạm dòng vẫn mở chi tiết), kèm "Tạo khách mới"
 - [x] "Deadline 7 ngày tới" **đầy đủ** (§5.3.3 v2.8, sửa lỗi thiếu việc 23/9): tiêu đề có số đếm, nhóm theo ngày, "Xem tất cả (N)" thay vì cắt bớt; khoảng tính theo ngày địa phương — có test 20+ việc cùng hạn
 - [x] Danh bạ ↔ voice/ảnh (§5.3.2 v2.8): tên khách làm từ vựng ưu tiên cho Whisper; thẻ duyệt ghi rõ *nhận từ "đô thị"*; cách viết Mai gõ cho khách đã có tự thành tên gọi khác; ô "+ khách hàng" hết bị cắt chữ, chọn loại ngay khi thêm
 - [ ] **Nhiều tài khoản Google/Lark cùng lúc (§5.3.4)** — việc lớn kế tiếp (phải thiết kế lại cookie một-token hiện tại)

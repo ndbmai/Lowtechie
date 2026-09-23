@@ -20,7 +20,16 @@ export function ProjectChip({ project }: { project: Project }) {
  * đóng việc — chỉ ô tick (hoặc nút Xong trong chi tiết) mới đóng. Tick
  * xong hiện "Đã xong · Hoàn tác" vài giây để cứu tick nhầm.
  */
-export function TaskRow({ task, showDue = true }: { task: Task; showDue?: boolean }) {
+export function TaskRow({
+  task,
+  showDue = true,
+  trailing,
+}: {
+  task: Task;
+  showDue?: boolean;
+  /** Nút phụ cuối dòng (vd. gắn khách một chạm, v2.9) — tự chặn click lan ra dòng. */
+  trailing?: React.ReactNode;
+}) {
   const projects = useStore((s) => s.projects);
   const categories = useStore((s) => s.categories);
   const completeTask = useStore((s) => s.completeTask);
@@ -82,6 +91,7 @@ export function TaskRow({ task, showDue = true }: { task: Task; showDue?: boolea
             {task.priority === "high" && !done && <> · ⭐</>}
           </span>
         </span>
+        {trailing}
         {done && undoUntil && (
           <button
             className="btn small"

@@ -84,6 +84,9 @@ interface LowtechieState {
     homeAddress: string;
     /** Chế độ xem Lịch lần trước — app nhớ (§5.4.0 v2.3). */
     calendarView: "day" | "week" | "month" | "list";
+    /** Màn chi tiết dự án nhớ cách nhóm + bộ lọc lần trước (§5.3.0 v2.9). */
+    projectGroupBy: "category" | "client" | "due";
+    projectFilter: "all" | "due" | "nodue" | "high" | "others" | "overdue";
   };
 
   addTask: (draft: TaskDraft) => Task;
@@ -99,6 +102,8 @@ interface LowtechieState {
   reopenTask: (id: string) => void;
   updateTaskTitle: (id: string, title: string) => void;
   setTaskPriority: (id: string, priority: "high" | undefined) => void;
+  /** Gắn/gỡ khách cho một việc — gắn nhanh ở nhóm "Chưa gắn khách" (v2.9). */
+  setTaskClient: (id: string, clientId: string | undefined) => void;
   addTaskNote: (taskId: string, body: string) => void;
   updateTaskNote: (taskId: string, noteId: string, body: string) => void;
   deleteTaskNote: (taskId: string, noteId: string) => void;
@@ -142,6 +147,10 @@ interface LowtechieState {
   setWalkToStation: (min: number) => void;
   setHomeAddress: (address: string) => void;
   setCalendarView: (view: "day" | "week" | "month" | "list") => void;
+  setProjectView: (patch: {
+    groupBy?: "category" | "client" | "due";
+    filter?: "all" | "due" | "nodue" | "high" | "others" | "overdue";
+  }) => void;
 
   addSeries: (
     s: Pick<RecurringSeries, "title" | "intervalUnit" | "intervalCount" | "nextDate"> &
@@ -169,7 +178,7 @@ interface LowtechieState {
   addProject: (name: string, color: string) => Project | null;
   updateProject: (
     id: ProjectId,
-    patch: Partial<Pick<Project, "name" | "color" | "goal" | "status">>,
+    patch: Partial<Pick<Project, "name" | "color" | "status">>,
   ) => void;
   /** Xóa dự án: Mai CHỌN việc còn mở chuyển sang dự án nào (§5.3.1). */
   deleteProject: (id: ProjectId, moveTo: ProjectId) => void;
@@ -251,7 +260,14 @@ export const useStore = create<LowtechieState>()(
       feedback: [],
       triageImages: {},
       pendingBlock: undefined,
-      settings: { walkToStationMin: 12, defaultPrepMinutes: 90, homeAddress: "", calendarView: "week" },
+      settings: {
+        walkToStationMin: 12,
+        defaultPrepMinutes: 90,
+        homeAddress: "",
+        calendarView: "week",
+        projectGroupBy: "category",
+        projectFilter: "all",
+      },
 
       addTask: (draft) => {
         const t: Task = {
@@ -329,6 +345,10 @@ export const useStore = create<LowtechieState>()(
       setTaskPriority: (id, priority) =>
         set((s) => ({
           tasks: s.tasks.map((t) => (t.id === id ? { ...t, priority } : t)),
+        })),
+      setTaskClient: (id, clientId) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => (t.id === id ? { ...t, clientId } : t)),
         })),
       addTaskNote: (taskId, body) =>
         set((s) => {
@@ -605,6 +625,14 @@ export const useStore = create<LowtechieState>()(
         set((s) => ({ settings: { ...s.settings, homeAddress: address.slice(0, 300) } })),
       setCalendarView: (view) =>
         set((s) => ({ settings: { ...s.settings, calendarView: view } })),
+      setProjectView: (patch) =>
+        set((s) => ({
+          settings: {
+            ...s.settings,
+            projectGroupBy: patch.groupBy ?? s.settings.projectGroupBy,
+            projectFilter: patch.filter ?? s.settings.projectFilter,
+          },
+        })),
 
       addSeries: (sr) =>
         set((s) => ({
@@ -848,7 +876,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 10,
+      version: 11,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -886,6 +914,8 @@ export const useStore = create<LowtechieState>()(
             homeAddress: "",
             ...(s.settings ?? {}),
             calendarView: s.settings?.calendarView ?? "week",
+            projectGroupBy: s.settings?.projectGroupBy ?? "category",
+            projectFilter: s.settings?.projectFilter ?? "all",
           };
         }
         if (version < 5) {
@@ -941,11 +971,25 @@ export const useStore = create<LowtechieState>()(
             defaultPrepMinutes: prev?.defaultPrepMinutes ?? 90,
             homeAddress: prev?.homeAddress ?? "",
             calendarView: prev?.calendarView ?? "week",
+            projectGroupBy: prev?.projectGroupBy ?? "category",
+            projectFilter: prev?.projectFilter ?? "all",
           };
         }
         if (version < 10) {
           // v10 (PRD v2.6): nơi cần đặt chỗ trước (§5.4.2).
           s.places = s.places ?? [];
+        }
+        if (version < 11) {
+          // v11 (PRD v2.9): màn chi tiết dự án nhớ cách nhóm + bộ lọc.
+          const prev = s.settings;
+          s.settings = {
+            walkToStationMin: prev?.walkToStationMin ?? 12,
+            defaultPrepMinutes: prev?.defaultPrepMinutes ?? 90,
+            homeAddress: prev?.homeAddress ?? "",
+            calendarView: prev?.calendarView ?? "week",
+            projectGroupBy: prev?.projectGroupBy ?? "category",
+            projectFilter: prev?.projectFilter ?? "all",
+          };
         }
         return s as LowtechieState;
       },
