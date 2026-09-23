@@ -78,6 +78,8 @@ export interface AccountProbe {
   email?: string;
   calendars: number;
   events: number;
+  /** Chi tiết từng lịch con — soi lịch nào rỗng/lỗi. */
+  note?: string;
   error?: { detail: string; action: string };
 }
 

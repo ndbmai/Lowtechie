@@ -133,6 +133,7 @@ export default function ConnectionsPage() {
           calendars: p.calendars,
           events: p.events,
           error: p.error?.action,
+          note: p.note,
         });
       }
     }
@@ -219,7 +220,12 @@ export default function ConnectionsPage() {
             return (
               <div key={a.id}>
                 <div className="row" style={{ flexWrap: "wrap" }}>
-                  <span className="dot" style={{ background: a.provider === "lark" ? "#3370FF" : "#4285F4" }} />
+                  <span
+                    className="chip"
+                    style={{ background: a.provider === "lark" ? "#3370FF" : "#4285F4" }}
+                  >
+                    {PROVIDER_LABEL[a.provider]}
+                  </span>
                   <span className="t">
                     <b style={{ overflowWrap: "anywhere" }}>{a.email ?? PROVIDER_LABEL[a.provider]}</b>
                     <span className="muted small">
@@ -227,6 +233,11 @@ export default function ConnectionsPage() {
                         ? `${fmtSync(st.at)} · ${st.calendars} lịch con · ${st.events} sự kiện tháng này`
                         : "Chưa đồng bộ lần nào — bấm Đồng bộ ngay."}
                     </span>
+                    {st?.note && (
+                      <span className="muted small" style={{ display: "block" }}>
+                        {st.note}
+                      </span>
+                    )}
                   </span>
                 </div>
                 {st?.error && (

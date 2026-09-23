@@ -294,36 +294,99 @@ export async function larkListEvents(
   return out;
 }
 
+/** Cửa sổ con ≤30 ngày — instance_view giới hạn độ dài khoảng truy vấn. */
+function chunkRange(fromMs: number, toMs: number): [number, number][] {
+  const MAX = 30 * 86_400_000;
+  const out: [number, number][] = [];
+  for (let a = fromMs; a < toMs; a += MAX) out.push([a, Math.min(a + MAX, toMs)]);
+  return out.length ? out : [[fromMs, toMs]];
+}
+
+/**
+ * Đọc sự kiện MỘT lịch con qua `events/instance_view`: BUNG sự kiện lặp
+ * lại (họp weekly The Circle…) thành từng buổi trong khoảng. `/events`
+ * thường KHÔNG bung — tháng toàn họp định kỳ sẽ ra 0 (lỗi thật 23/9
+ * "6 lịch con · 0 sự kiện" trong khi app Lark đầy sự kiện).
+ */
+async function larkInstanceView(
+  at: string,
+  calendarId: string,
+  fromMs: number,
+  toMs: number,
+): Promise<RemoteEventDto[]> {
+  const out: RemoteEventDto[] = [];
+  for (const [a, b] of chunkRange(fromMs, toMs)) {
+    const p = new URLSearchParams({
+      start_time: String(Math.floor(a / 1000)),
+      end_time: String(Math.ceil(b / 1000)),
+    });
+    const res = await fetch(
+      `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events/instance_view?${p}`,
+      { headers: { authorization: `Bearer ${at}` } },
+    );
+    const d = await larkJson<{ items?: LarkEvent[] }>(res);
+    for (const e of d.items ?? []) {
+      const dto = larkEventToDto(e);
+      if (dto) out.push(dto);
+    }
+  }
+  return out;
+}
+
+/** Kết quả đọc từng lịch con — v3.2: soi được lịch nào hỏng/rỗng. */
+export interface LarkCalendarRead {
+  name: string;
+  events: number;
+  error?: string;
+}
+
 /**
  * Sự kiện của MỌI lịch con (v3.2 — trước chỉ đọc lịch chính nên sự kiện
- * lịch nhóm/lịch đăng ký "biến mất"). Một lịch lỗi không làm rỗng cả tài
- * khoản; MỌI lịch cùng lỗi thì ném lỗi đầu để màn hình nói rõ, không im lặng.
+ * lịch nhóm/lịch đăng ký "biến mất"). Ưu tiên instance_view (bung sự kiện
+ * lặp), lịch không hỗ trợ thì rơi về `/events`. Một lịch lỗi không làm
+ * rỗng cả tài khoản — ghi vào `perCalendar` để màn Kết nối soi từng lịch;
+ * MỌI lịch cùng lỗi mới ném lỗi đầu, không im lặng.
  */
 export async function larkEventsAllCalendars(
   at: string,
   fromMs: number,
   toMs: number,
-): Promise<{ events: RemoteEventDto[]; calendars: number }> {
+): Promise<{ events: RemoteEventDto[]; calendars: number; perCalendar: LarkCalendarRead[] }> {
   const calendars = (await larkListCalendars(at)).filter((c) => c.type !== "resource").slice(0, 10);
   if (calendars.length === 0) throw new Error("lark-nocal");
   const events: RemoteEventDto[] = [];
+  const perCalendar: LarkCalendarRead[] = [];
   const seen = new Set<string>();
   let firstError: unknown = null;
   let ok = 0;
   for (const c of calendars) {
     try {
-      for (const ev of await larkListEvents(at, c.id, fromMs, toMs)) {
-        if (seen.has(ev.gcalId)) continue; // cùng sự kiện xuất hiện ở 2 lịch con
-        seen.add(ev.gcalId);
+      const got = await larkInstanceView(at, c.id, fromMs, toMs).catch(() =>
+        larkListEvents(at, c.id, fromMs, toMs),
+      );
+      let added = 0;
+      for (const ev of got) {
+        // Sự kiện LẶP: cùng event_id nhưng khác giờ từng buổi — khóa phải
+        // kèm startAt, dedupe theo mỗi id trần là mất các buổi sau.
+        const key = `${ev.gcalId}|${ev.startAt}`;
+        if (seen.has(key)) continue; // cùng buổi xuất hiện ở 2 lịch con
+        seen.add(key);
         events.push(ev);
+        added++;
       }
+      perCalendar.push({ name: c.name, events: added });
       ok++;
     } catch (e) {
       firstError = firstError ?? e;
+      perCalendar.push({
+        name: c.name,
+        events: 0,
+        error: e instanceof Error ? e.message : "lỗi",
+      });
     }
   }
   if (ok === 0 && firstError) throw firstError;
-  return { events, calendars: calendars.length };
+  return { events, calendars: calendars.length, perCalendar };
 }
 
 async function larkSearchOne(

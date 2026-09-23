@@ -78,6 +78,86 @@ describe("larkServer v3.2 — lỗi thật 23/9: lịch Lark 'trống' im lặng
     expect(got.calendars).toBe(3); // c3 (resource) bị loại khỏi danh sách đọc
     expect(called).not.toContain("c3");
     expect(got.events.map((e) => e.gcalId).sort()).toEqual(["dup", "e1", "e2"]);
+    // v3.2: soi được từng lịch con — lịch nào góp mấy sự kiện, lịch nào hỏng.
+    expect(got.perCalendar).toEqual([
+      { name: "Chính", events: 2 },
+      { name: "Nhóm The Circle", events: 1 },
+      { name: "Hỏng quyền", events: 0, error: "lark-1901001" },
+    ]);
+  });
+
+  it("sự kiện LẶP LẠI bung thành từng buổi — cùng event_id khác giờ phải GIỮ ĐỦ (lỗi thật '6 lịch con · 0 sự kiện')", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: RequestInfo | URL) => {
+        const u = String(url);
+        if (u.includes("/calendars?")) {
+          return res({
+            code: 0,
+            data: {
+              calendar_list: [{ calendar_id: "c1", summary: "Chính", type: "primary" }],
+              has_more: false,
+            },
+          });
+        }
+        expect(u).toContain("/events/instance_view?");
+        return res({
+          code: 0,
+          data: {
+            items: [
+              { event_id: "r1", summary: "Họp tuần", start_time: { timestamp: "1000" }, end_time: { timestamp: "2000" } },
+              { event_id: "r1", summary: "Họp tuần", start_time: { timestamp: "605800" }, end_time: { timestamp: "606800" } },
+            ],
+          },
+        });
+      }),
+    );
+    const got = await larkEventsAllCalendars("at", 0, 1_000_000_000);
+    expect(got.events).toHaveLength(2);
+    expect(got.perCalendar).toEqual([{ name: "Chính", events: 2 }]);
+  });
+
+  it("khoảng >30 ngày chia thành nhiều cửa sổ instance_view", async () => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u.includes("/calendars?")) {
+        return res({
+          code: 0,
+          data: {
+            calendar_list: [{ calendar_id: "c1", summary: "Chính", type: "primary" }],
+            has_more: false,
+          },
+        });
+      }
+      return res({ code: 0, data: { items: [] } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await larkEventsAllCalendars("at", 0, 45 * 86_400_000);
+    const views = fetchMock.mock.calls.filter((c) => String(c[0]).includes("instance_view"));
+    expect(views).toHaveLength(2);
+  });
+
+  it("lịch không hỗ trợ instance_view → rơi về /events, không mất lịch", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: RequestInfo | URL) => {
+        const u = String(url);
+        if (u.includes("/calendars?")) {
+          return res({
+            code: 0,
+            data: {
+              calendar_list: [{ calendar_id: "c1", summary: "Chính", type: "primary" }],
+              has_more: false,
+            },
+          });
+        }
+        if (u.includes("instance_view")) return res({ code: 190403, msg: "not supported" });
+        return res({ code: 0, data: { items: [ev("e1")] } });
+      }),
+    );
+    const got = await larkEventsAllCalendars("at", 0, 1000);
+    expect(got.events.map((e) => e.gcalId)).toEqual(["e1"]);
+    expect(got.perCalendar).toEqual([{ name: "Chính", events: 1 }]);
   });
 
   it("MỌI lịch cùng lỗi → ném lỗi đầu để màn hình nói rõ, không im lặng", async () => {

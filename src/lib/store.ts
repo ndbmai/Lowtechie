@@ -61,6 +61,8 @@ export interface SyncStatus {
   events: number;
   /** Thông điệp lỗi CÓ HÀNH ĐỘNG (accountErrorAction) — trống = ổn. */
   error?: string;
+  /** Chi tiết từng lịch con "Tên: N · Tên: lỗi …" (v3.2 — chẩn đoán). */
+  note?: string;
 }
 
 interface LowtechieState {

@@ -23,6 +23,8 @@ interface ProbeResult {
   email?: string;
   calendars: number;
   events: number;
+  /** Chi tiết từng lịch con "Tên: N · Tên: lỗi …" (v3.2 — chẩn đoán). */
+  note?: string;
   error?: { detail: string; action: string };
 }
 
@@ -69,12 +71,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         // Lark xoay vòng refresh token → PHẢI ghi lại cookie.
         rotated.push({ account: a, link: { ...(a.link as LarkLink), rt: tokens.rt } });
         const got = await larkEventsAllCalendars(tokens.at, fromMs, toMs);
+        const note =
+          got.perCalendar.length > 1 || got.perCalendar.some((c) => c.error)
+            ? got.perCalendar
+                .map(
+                  (c) =>
+                    `${(c.name || "(không tên)").slice(0, 24)}: ${c.error ? `lỗi ${c.error}` : c.events}`,
+                )
+                .join(" · ")
+                .slice(0, 400)
+            : undefined;
         probe.push({
           id: a.id,
           provider: "lark",
           email: a.email,
           calendars: got.calendars,
           events: got.events.length,
+          note,
         });
       }
     } catch (err) {
