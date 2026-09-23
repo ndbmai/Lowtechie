@@ -3,8 +3,10 @@ import {
   larkAuthUrl,
   larkErrorAction,
   larkEventsAllCalendars,
+  larkExchangeCode,
   larkListCalendars,
   larkListEvents,
+  larkScopeHasCalendar,
 } from "../larkServer";
 
 function res(body: unknown, status = 200): Response {
@@ -126,6 +128,25 @@ describe("larkAuthUrl — token người dùng CHỈ mang scope đã xin", () =>
     const u = new URL(larkAuthUrl("https://lowtechie.vercel.app", "st1"));
     expect(u.searchParams.get("scope")).toBe("offline_access calendar:calendar");
     delete process.env.LARK_OAUTH_SCOPES;
+  });
+});
+
+describe("scope Lark THẬT SỰ cấp — bắt ca nhớ-lần-cho-phép-cũ", () => {
+  it("larkExchangeCode trả kèm scope từ phản hồi token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        res({ access_token: "at1", refresh_token: "rt1", scope: "offline_access" }),
+      ),
+    );
+    const got = await larkExchangeCode("code1", "https://lowtechie.vercel.app");
+    expect(got).toEqual({ at: "at1", rt: "rt1", scope: "offline_access" });
+  });
+
+  it("scope thiếu calendar → phát hiện; có calendar → ổn; không trả scope → không chặn oan", () => {
+    expect(larkScopeHasCalendar("offline_access")).toBe(false);
+    expect(larkScopeHasCalendar("offline_access calendar:calendar.event:read")).toBe(true);
+    expect(larkScopeHasCalendar(undefined)).toBe(true);
   });
 });
 

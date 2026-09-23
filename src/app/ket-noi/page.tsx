@@ -92,6 +92,14 @@ function OAuthNotice() {
   if (gok || lok) return <div className="warn" style={{ background: "var(--surface)" }}>Đã nối xong ✓</div>;
   if (gerr === "config") return <div className="warn">Server chưa có GOOGLE_CLIENT_ID/SECRET.</div>;
   if (lerr === "config") return <div className="warn">Server chưa có LARK_APP_ID/LARK_APP_SECRET (Vercel → Environment Variables).</div>;
+  if (lerr === "noscope")
+    return (
+      <div className="warn">
+        Lark cấp phiên KHÔNG kèm quyền lịch — thường do Lark nhớ lần cho phép cũ nên không hỏi
+        lại. Mở Lark → ảnh đại diện → Settings → Security → mục ứng dụng đã cấp quyền (Authorized
+        apps) → gỡ &ldquo;Mai Lowtechie&rdquo;, rồi quay lại đây bấm Kết nối lại.
+      </div>
+    );
   if (gerr || lerr) return <div className="warn">Nối lỗi: {gerr ?? lerr} — thử lại nhé.</div>;
   return null;
 }

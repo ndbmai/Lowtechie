@@ -61,7 +61,9 @@ interface LarkTokenResponse {
   access_token?: string;
   refresh_token?: string;
   expires_in?: number;
-  data?: { access_token?: string; refresh_token?: string };
+  /** Scope Lark THẬT SỰ cấp — có thể hẹp hơn scope đã xin (nhớ lần cho phép cũ). */
+  scope?: string;
+  data?: { access_token?: string; refresh_token?: string; scope?: string };
 }
 
 function pickTokens(d: LarkTokenResponse): { at: string; rt?: string } | null {
@@ -70,11 +72,11 @@ function pickTokens(d: LarkTokenResponse): { at: string; rt?: string } | null {
   return at ? { at, rt } : null;
 }
 
-/** Đổi code lấy access + refresh token. */
+/** Đổi code lấy access + refresh token (+ scope Lark thật sự cấp). */
 export async function larkExchangeCode(
   code: string,
   origin: string,
-): Promise<{ at: string; rt: string } | { error: string }> {
+): Promise<{ at: string; rt: string; scope?: string } | { error: string }> {
   const res = await fetch(`${OPEN_BASE}/open-apis/authen/v2/oauth/token`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -91,7 +93,18 @@ export async function larkExchangeCode(
   if (!res.ok || !tokens?.rt) {
     return { error: data.error_description ?? data.error ?? `lark-${data.code ?? res.status}` };
   }
-  return { at: tokens.at, rt: tokens.rt };
+  return { at: tokens.at, rt: tokens.rt, scope: data.scope ?? data.data?.scope };
+}
+
+/**
+ * Token Lark cấp có kèm quyền lịch không — bắt ca "Lark nhớ lần cho phép
+ * CŨ nên không hỏi lại, cấp phiên chỉ có offline_access" (lỗi thật 23/9:
+ * đã khai + publish 4 scope lịch mà token mới vẫn không đọc được lịch).
+ * Lark không trả scope thì không kết luận được — coi như ổn, đừng chặn oan.
+ */
+export function larkScopeHasCalendar(scope: string | undefined): boolean {
+  if (!scope) return true;
+  return scope.includes("calendar:");
 }
 
 /**

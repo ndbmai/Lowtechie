@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { newSlotId, readAccounts, writeAccount, type LarkLink } from "@/lib/accounts";
-import { LARK_STATE_COOKIE, larkExchangeCode, larkUserEmail } from "@/lib/larkServer";
+import {
+  LARK_STATE_COOKIE,
+  larkExchangeCode,
+  larkScopeHasCalendar,
+  larkUserEmail,
+} from "@/lib/larkServer";
 
 export const runtime = "nodejs";
 
@@ -28,7 +33,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     (a) => a.provider === "lark" && (email ? a.email === email : true),
   );
   const link: LarkLink = { rt: result.rt, email, parts: existing?.parts };
-  const res = back("lok=1");
+  // Lark có thể nhớ lần cho phép CŨ và cấp phiên KHÔNG kèm quyền lịch —
+  // vẫn cất cookie (mail/phần khác còn dùng được) nhưng báo rõ ở Kết nối.
+  const res = back(larkScopeHasCalendar(result.scope) ? "lok=1" : "lerr=noscope");
   await writeAccount(res, origin, existing?.id ?? newSlotId(), "lark", link);
   return res;
 }
