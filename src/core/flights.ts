@@ -28,6 +28,8 @@ export interface FlightSegment {
   /** Lịch trình cũ đã bị email đổi vé thay thế. */
   superseded?: boolean;
   subject?: string;
+  /** Hộp thư nguồn (§5.3.4 — quét trên nhiều tài khoản cùng lúc). */
+  mailbox?: string;
   confidence: number;
 }
 
@@ -45,6 +47,8 @@ export interface TripCandidate {
   airportBufferMin?: number;
   flights: string;
   subject: string;
+  /** Hộp thư tìm thấy vé — "kết quả ghi rõ đến từ hộp thư nào" (§5.3.4). */
+  mailbox?: string;
   confidence: number;
 }
 
@@ -117,13 +121,14 @@ export function classifyAndGroup(segments: FlightSegment[], nowMs: number): Clas
 
   const history: string[] = [];
   const upcoming: FlightSegment[] = [];
+  const box = (s: FlightSegment) => (s.mailbox ? ` · ${s.mailbox}` : "");
   for (const s of byKey.values()) {
     if (s.cancelled) {
-      history.push(`${segmentLabel(s)} — đã hủy`);
+      history.push(`${segmentLabel(s)} — đã hủy${box(s)}`);
     } else if (s.superseded) {
-      history.push(`${segmentLabel(s)} — lịch cũ trước khi đổi vé`);
+      history.push(`${segmentLabel(s)} — lịch cũ trước khi đổi vé${box(s)}`);
     } else if (Date.parse(s.departLocal) <= nowMs) {
-      history.push(`${segmentLabel(s)} — đã bay`);
+      history.push(`${segmentLabel(s)} — đã bay${box(s)}`);
     } else {
       upcoming.push(s);
     }
@@ -159,6 +164,7 @@ export function classifyAndGroup(segments: FlightSegment[], nowMs: number): Clas
       airportBufferMin: first.checkinMinutes,
       flights: segs.map((s) => segmentLabel(s) + (s === first && extras ? ` (${extras})` : "")).join(" · "),
       subject: first.subject ?? "",
+      mailbox: first.mailbox,
       confidence: Math.min(...segs.map((s) => s.confidence)),
     });
   }

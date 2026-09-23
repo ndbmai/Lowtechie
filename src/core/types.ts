@@ -157,8 +157,10 @@ export interface CalEvent {
   kind: "event" | "prep" | "travel" | "airport" | "flight" | "block";
   /** id sự kiện chính mà block phụ thuộc vào (event_chains của PRD §8). */
   chainOf?: string;
-  /** id trên Google Calendar khi block đã được ghi sang đó (PRD §5.4). */
+  /** id trên lịch ngoài (Google/Lark) khi block đã được ghi sang đó (§5.4). */
   gcalId?: string;
+  /** Tài khoản lịch chứa sự kiện đó (§5.3.4) — để xóa/hoàn tác đúng nơi. */
+  calAccount?: string;
   /** Nơi cần đặt chỗ: chưa đặt thì lịch "có thể không thành" (§5.4.2). */
   bookingStatus?: "pending" | "booked";
   placeId?: string;

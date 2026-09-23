@@ -46,12 +46,46 @@ function fromB64url(s: string): Uint8Array {
   return Uint8Array.from(b, (c) => c.charCodeAt(0));
 }
 
-async function aesKey(): Promise<CryptoKey> {
-  const material = new TextEncoder().encode(
-    `lowtechie-cookie::${process.env.GOOGLE_CLIENT_SECRET ?? ""}`,
-  );
-  const hash = await crypto.subtle.digest("SHA-256", material);
+async function aesKeyFor(material: string): Promise<CryptoKey> {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
   return crypto.subtle.importKey("raw", hash, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+/** Khóa cho cookie Google — GIỮ NGUYÊN cách dẫn xuất cũ để cookie đã nối vẫn đọc được. */
+function googleKeyMaterial(): string {
+  return `lowtechie-cookie::${process.env.GOOGLE_CLIENT_SECRET ?? ""}`;
+}
+
+/** Mã hóa/giải mã JSON bất kỳ theo khóa dẫn xuất từ chuỗi bí mật (đa tài khoản v3.0). */
+export async function sealFor(material: string, obj: unknown): Promise<string> {
+  const key = await aesKeyFor(material);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(JSON.stringify(obj)),
+  );
+  const out = new Uint8Array(iv.length + ct.byteLength);
+  out.set(iv);
+  out.set(new Uint8Array(ct), iv.length);
+  return b64url(out);
+}
+
+export async function unsealFor<T>(material: string, value: string | undefined): Promise<T | null> {
+  if (!value) return null;
+  try {
+    const bytes = fromB64url(value);
+    const key = await aesKeyFor(material);
+    const pt = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: bytes.slice(0, 12) },
+      key,
+      bytes.slice(12),
+    );
+    return JSON.parse(new TextDecoder().decode(pt)) as T;
+  } catch {
+    // Cookie cũ/hỏng hoặc secret đã đổi → coi như chưa nối.
+    return null;
+  }
 }
 
 export interface GoogleLink {
@@ -60,38 +94,17 @@ export interface GoogleLink {
   email?: string;
   /** Đã cấp quyền đọc Gmail chưa (cookie cũ nối trước khi thêm scope thì chưa). */
   gm?: boolean;
+  /** Bật/tắt từng phần của tài khoản (§5.3.4) — thiếu = bật hết. */
+  parts?: { cal: boolean; mail: boolean; drive: boolean };
 }
 
 export async function seal(link: GoogleLink): Promise<string> {
-  const key = await aesKey();
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    new TextEncoder().encode(JSON.stringify(link)),
-  );
-  const out = new Uint8Array(iv.length + ct.byteLength);
-  out.set(iv);
-  out.set(new Uint8Array(ct), iv.length);
-  return b64url(out);
+  return sealFor(googleKeyMaterial(), link);
 }
 
 export async function unseal(value: string | undefined): Promise<GoogleLink | null> {
-  if (!value) return null;
-  try {
-    const bytes = fromB64url(value);
-    const key = await aesKey();
-    const pt = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: bytes.slice(0, 12) },
-      key,
-      bytes.slice(12),
-    );
-    const parsed = JSON.parse(new TextDecoder().decode(pt)) as GoogleLink;
-    return typeof parsed.rt === "string" && parsed.rt ? parsed : null;
-  } catch {
-    // Cookie cũ/hỏng hoặc GOOGLE_CLIENT_SECRET đã đổi → coi như chưa nối.
-    return null;
-  }
+  const parsed = await unsealFor<GoogleLink>(googleKeyMaterial(), value);
+  return parsed && typeof parsed.rt === "string" && parsed.rt ? parsed : null;
 }
 
 // ── OAuth ────────────────────────────────────────────────────────────────
@@ -100,15 +113,16 @@ export function redirectUri(origin: string): string {
   return `${origin}/api/google/callback`;
 }
 
-export function authUrl(origin: string, state: string): string {
+export function authUrl(origin: string, state: string, pickAccount = false): string {
   const p = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID ?? "",
     redirect_uri: redirectUri(origin),
     response_type: "code",
     scope: SCOPES,
     access_type: "offline",
-    // Bắt buộc để Google cấp refresh_token cả khi Mai đã đồng ý trước đó.
-    prompt: "consent",
+    // "consent" bắt buộc để Google cấp refresh_token cả khi đã đồng ý trước;
+    // thêm select_account khi Mai nối TÀI KHOẢN NỮA (§5.3.4) để chọn đúng hộp.
+    prompt: pickAccount ? "consent select_account" : "consent",
     state,
   });
   return `${AUTH_URL}?${p}`;

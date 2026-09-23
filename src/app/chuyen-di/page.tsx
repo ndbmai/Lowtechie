@@ -132,6 +132,8 @@ interface ScanResult {
   attachments: GmailAttachmentRef[];
   scanned: number;
   today: string;
+  /** Hộp thư quét lỗi/chưa đọc được (§5.3.4). */
+  mailboxNotes: string[];
 }
 
 /**
@@ -179,6 +181,7 @@ function GmailScan() {
       attachments: r.attachments,
       scanned: r.scanned,
       today: r.todayLocal,
+      mailboxNotes: r.mailboxNotes,
     });
   }
 
@@ -286,6 +289,7 @@ function GmailScan() {
                   {c.returnAt ? ` · về ${fmtDay(c.returnAt)}` : ""}
                   {refsFor(c).length > 0 ? ` · 🎫 ${refsFor(c).length} file PDF sẽ lưu kèm` : ""} · từ
                   email “{c.subject.slice(0, 60)}”
+                  {c.mailbox ? ` — hộp thư ${c.mailbox}` : ""}
                 </span>
               </span>
               {c.destination === "other" ? (
@@ -304,6 +308,11 @@ function GmailScan() {
           {result.skipped.length > 0 && (
             <p className="muted small" style={{ margin: 0 }}>
               Lịch sử: {result.skipped.slice(0, 6).join(" · ")}
+            </p>
+          )}
+          {result.mailboxNotes.length > 0 && (
+            <p className="small" style={{ margin: 0, color: "var(--note-ink)" }}>
+              {result.mailboxNotes.join(" · ")}
             </p>
           )}
         </div>
@@ -706,7 +715,7 @@ export default function TripsPage() {
       const t = trips.find((x) => x.id === id);
       if (!t) continue;
       for (const e of events.filter((e) => e.chainOf === id)) {
-        if (e.gcalId) void deleteGcalEvent(e.gcalId);
+        if (e.gcalId) void deleteGcalEvent(e.gcalId, e.calAccount);
       }
       if (!keep) for (const a of t.attachments ?? []) void deleteFile(a.id);
       deleteTrip(id);

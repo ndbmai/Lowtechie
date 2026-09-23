@@ -55,6 +55,79 @@ export function useGoogleStatus() {
 export interface GcalEvent extends Omit<CalEvent, "id" | "kind"> {
   gcalId: string;
   allDay?: boolean;
+  /** Tài khoản chứa sự kiện (§5.3.4). */
+  account?: string;
+  accountEmail?: string;
+  provider?: "google" | "lark";
+}
+
+// ── Nhiều tài khoản (§5.3.4) ────────────────────────────────────────────
+
+export interface ConnectedAccount {
+  id: string;
+  provider: "google" | "lark";
+  email?: string;
+  gmail: boolean;
+  parts: { cal: boolean; mail: boolean; drive: boolean };
+}
+
+/** Danh sách tài khoản đã nối trên thiết bị này + bật/tắt từng phần. */
+export function useAccounts() {
+  const [state, setState] = useState<{
+    loading: boolean;
+    configured: { google: boolean; lark: boolean };
+    accounts: ConnectedAccount[];
+  }>({ loading: true, configured: { google: false, lark: false }, accounts: [] });
+
+  const reload = useCallback(async () => {
+    try {
+      const res = await fetch("/api/accounts");
+      const d = (await res.json()) as {
+        configured?: { google?: boolean; lark?: boolean };
+        accounts?: ConnectedAccount[];
+      };
+      setState({
+        loading: false,
+        configured: { google: Boolean(d.configured?.google), lark: Boolean(d.configured?.lark) },
+        accounts: d.accounts ?? [],
+      });
+    } catch {
+      setState((s) => ({ ...s, loading: false }));
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const setParts = useCallback(
+    async (id: string, parts: Partial<ConnectedAccount["parts"]>) => {
+      // Đổi ngay trên màn (optimistic) rồi mới ghi cookie — tick không bị trễ.
+      setState((s) => ({
+        ...s,
+        accounts: s.accounts.map((a) =>
+          a.id === id ? { ...a, parts: { ...a.parts, ...parts } } : a,
+        ),
+      }));
+      await fetch("/api/accounts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, parts }),
+      });
+      await reload();
+    },
+    [reload],
+  );
+
+  const disconnect = useCallback(
+    async (id: string) => {
+      await fetch(`/api/accounts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      await reload();
+    },
+    [reload],
+  );
+
+  return { ...state, reload, setParts, disconnect };
 }
 
 /** Tìm trên TOÀN BỘ lịch Google (quá khứ + tương lai, §5.4.0 v2.3). */
@@ -95,32 +168,35 @@ export function useGoogleEvents(fromMs: number, toMs: number, enabled: boolean) 
   return { events, reload };
 }
 
-/** Ghi một block vào Google Calendar; trả gcalId hoặc null nếu lỗi. */
-export async function createGcalEvent(ev: {
-  title: string;
-  startAt: string;
-  endAt: string;
-  description?: string;
-}): Promise<string | null> {
+/**
+ * Ghi một block vào lịch ngoài; `accountId` chọn LỊCH ĐÍCH (§5.3.4 —
+ * mặc định theo dự án), bỏ trống thì server lấy tài khoản bật Lịch đầu.
+ * Trả về id sự kiện + tài khoản đã ghi để lưu kèm block (xóa đúng nơi).
+ */
+export async function createGcalEvent(
+  ev: { title: string; startAt: string; endAt: string; description?: string },
+  accountId?: string,
+): Promise<{ gcalId: string; accountId?: string } | null> {
   try {
     const res = await fetch("/api/calendar/events", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(ev),
+      body: JSON.stringify({ ...ev, accountId }),
     });
     if (!res.ok) return null;
-    const d = (await res.json()) as { gcalId?: string };
-    return d.gcalId ?? null;
+    const d = (await res.json()) as { gcalId?: string; accountId?: string };
+    return d.gcalId ? { gcalId: d.gcalId, accountId: d.accountId } : null;
   } catch {
     return null;
   }
 }
 
-export async function deleteGcalEvent(gcalId: string): Promise<void> {
+export async function deleteGcalEvent(gcalId: string, account?: string): Promise<void> {
   try {
-    await fetch(`/api/calendar/events/${encodeURIComponent(gcalId)}`, { method: "DELETE" });
+    const q = account ? `?account=${encodeURIComponent(account)}` : "";
+    await fetch(`/api/calendar/events/${encodeURIComponent(gcalId)}${q}`, { method: "DELETE" });
   } catch {
-    /* xóa lỗi thì Mai xóa tay trên Google, block local vẫn gỡ */
+    /* xóa lỗi thì Mai xóa tay trên lịch, block local vẫn gỡ */
   }
 }
 
@@ -140,6 +216,8 @@ export interface FlightTripCandidate {
   airportBufferMin?: number;
   flights: string;
   subject: string;
+  /** Hộp thư tìm thấy vé (§5.3.4). */
+  mailbox?: string;
   confidence: number;
 }
 
@@ -150,6 +228,8 @@ export interface GmailAttachmentRef {
   filename: string;
   size: number;
   subject: string;
+  /** Tài khoản chứa email (§5.3.4) — thiếu = cookie Google đời đầu. */
+  account?: string;
 }
 
 export async function fetchFlightTrips(): Promise<
@@ -160,6 +240,8 @@ export async function fetchFlightTrips(): Promise<
       attachments: GmailAttachmentRef[];
       scanned: number;
       todayLocal: string;
+      /** Hộp thư quét lỗi/chưa đọc được (Lark Mail chưa bật…) — §5.3.4. */
+      mailboxNotes: string[];
     }
   | { ok: false; reason: "no-gmail-scope" | "no-key" | "not-connected" | "failed"; detail?: string }
 > {
@@ -181,6 +263,7 @@ export async function fetchFlightTrips(): Promise<
           attachments?: GmailAttachmentRef[];
           scanned?: number;
           todayLocal?: string;
+          mailboxNotes?: string[];
           detail?: string;
         }
       | null;
@@ -192,6 +275,7 @@ export async function fetchFlightTrips(): Promise<
       attachments: body?.attachments ?? [],
       scanned: body?.scanned ?? 0,
       todayLocal: body?.todayLocal ?? "",
+      mailboxNotes: body?.mailboxNotes ?? [],
     };
   } catch {
     return { ok: false, reason: "failed" };
@@ -202,6 +286,7 @@ export async function fetchFlightTrips(): Promise<
 export async function fetchGmailAttachment(ref: GmailAttachmentRef): Promise<Blob | null> {
   try {
     const p = new URLSearchParams({ messageId: ref.messageId, attachmentId: ref.attachmentId });
+    if (ref.account) p.set("account", ref.account);
     const res = await fetch(`/api/gmail/attachment?${p}`);
     if (!res.ok) return null;
     const body = (await res.json()) as { data?: string };

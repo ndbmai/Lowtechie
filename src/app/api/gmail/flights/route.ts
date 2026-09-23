@@ -1,6 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { classifyAndGroup, type FlightSegment } from "@/core/flights";
-import { GCAL_COOKIE, accessToken, unseal } from "@/lib/googleServer";
+import { accessToken, type GoogleLink } from "@/lib/googleServer";
+import { larkAccessToken, larkRecentMail } from "@/lib/larkServer";
+import {
+  accountsWith,
+  readAccounts,
+  writeAccount,
+  type Account,
+  type LarkLink,
+} from "@/lib/accounts";
 
 /**
  * Quét Gmail tìm email xác nhận vé máy bay (PRD §5.9, bản 6b — sửa lỗi
@@ -153,21 +161,101 @@ interface ClaudeContent {
   input?: { segments?: FlightSegment[] };
 }
 
-export async function GET(req: NextRequest): Promise<NextResponse> {
-  // Mốc thời gian THẬT của Mai (PRD §5.9: không bao giờ để AI tự đoán ngày).
-  const epochMs = Number(req.nextUrl.searchParams.get("epochMs")) || Date.now();
-  const tzOffsetMin = Number(req.nextUrl.searchParams.get("tzOffsetMin")) || 0;
-  const tzName = req.nextUrl.searchParams.get("tz")?.slice(0, 64) || "UTC";
-  const todayLocal = localLabel(epochMs, tzOffsetMin);
+/** Một lời gọi Claude trích chặng thô từ một hộp thư. */
+async function claudeExtract(
+  apiKey: string,
+  emailsText: string,
+  pdfDocs: { label: string; data: string }[],
+  clock: { epochMs: number; tzOffsetMin: number; tzName: string; todayLocal: string },
+): Promise<{ segments: FlightSegment[] } | { error: string }> {
+  const headers: Record<string, string> = {
+    "x-api-key": apiKey,
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json",
+  };
+  if (process.env.ANTHROPIC_WORKSPACE_ID) {
+    headers["anthropic-workspace-id"] = process.env.ANTHROPIC_WORKSPACE_ID;
+  }
+  const content: unknown[] = [
+    ...pdfDocs.map((p) => ({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: p.data },
+    })),
+    {
+      type: "text",
+      text:
+        (pdfDocs.length
+          ? `Các PDF phía trên theo thứ tự: ${pdfDocs.map((p, i) => `(${i + 1}) ${p.label}`).join("; ")}.\n\n`
+          : "") + emailsText,
+    },
+  ];
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: process.env.LOWTECHIE_MODEL || "claude-sonnet-5",
+        // Trần rộng + effort thấp: phần "suy nghĩ" cũng ăn vào max_tokens,
+        // để hẹp là danh sách bị cắt và mất luôn tool_use (lỗi "HTTP 200").
+        max_tokens: 16000,
+        output_config: { effort: "low" },
+        system: `Bạn trích vé máy bay cho Mai Lowtechie theo PRD §5.9 bản 6b — trích THEO CHẶNG, trả thô.
+MỐC THỜI GIAN THẬT: bây giờ là ${localIso(clock.epochMs, clock.tzOffsetMin)} — ${clock.todayLocal}, múi giờ ${clock.tzName} nơi Mai đang ở. Mốc này CHỈ để suy ra năm khi vé ghi kiểu "02OCT" không có năm (đối chiếu ngày gửi email) — KHÔNG dùng để lọc chặng.
+Quy tắc:
+- Trả về TẤT CẢ các chặng bay tìm thấy, kể cả chặng đã bay trong quá khứ. Việc so với "bây giờ" là của server, không phải của bạn — đừng tự bỏ chặng nào.
+- Mỗi chiều bay là MỘT chặng riêng (vé khứ hồi = 2 chặng; nối chuyến = mỗi đoạn 1 chặng). Đừng bao giờ trả chặng đi mà bỏ quên chặng về — hành trình đầy đủ thường nằm trong PDF đính kèm, đọc kỹ cả PDF.
+- departLocal/arriveLocal là ISO 8601 KÈM đúng offset múi giờ sân bay (Bangkok/VN +07:00, Nhật +09:00).
+- cancelled=true chỉ khi có email báo hủy chặng đó; superseded=true chỉ cho lịch trình CŨ khi có email đổi vé mới hơn cùng PNR.
+- Email check-in/nhắc chuyến lặp lại một chặng đã có → cứ trả bình thường, server tự khử trùng theo PNR + số hiệu + ngày bay.
+- Ghi đủ nếu vé có: PNR, nhà ga (terminal), ghế, hành lý ký gửi, quy định "có mặt trước X phút" (đổi ra checkinMinutes).
+- Chỉ trích chuyến THẬT từ email xác nhận/đổi/hủy vé; bỏ quảng cáo, khuyến mãi, gợi ý giá. Không bịa chặng không có trong nguồn.`,
+        tools: [TOOL_SCHEMA],
+        tool_choice: { type: "tool", name: "emit_segments" },
+        messages: [{ role: "user", content }],
+      }),
+    });
+    const data = (await res.json().catch(() => null)) as {
+      content?: ClaudeContent[];
+      stop_reason?: string;
+      error?: { type?: string; message?: string };
+    } | null;
+    if (res.ok && data) {
+      const toolUse = data.content?.find((c) => c.type === "tool_use" && c.name === "emit_segments");
+      if (Array.isArray(toolUse?.input?.segments)) return { segments: toolUse.input.segments };
+    }
+    return {
+      error:
+        data?.error?.message?.slice(0, 200) ??
+        (res.ok
+          ? `Claude 200 nhưng thiếu danh sách (stop_reason: ${data?.stop_reason ?? "?"})`
+          : `Claude HTTP ${res.status}`),
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message.slice(0, 200) : "lỗi mạng phía server" };
+  }
+}
 
-  const link = await unseal(req.cookies.get(GCAL_COOKIE)?.value);
-  if (!link) return NextResponse.json({ error: "not-connected" }, { status: 401 });
-  if (!link.gm) return NextResponse.json({ error: "no-gmail-scope" }, { status: 403 });
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "no-key" }, { status: 501 });
+/** Ref file PDF để client tự lưu vé — kèm tài khoản chứa email (§5.3.4). */
+interface AttachmentRef {
+  messageId: string;
+  attachmentId: string;
+  filename: string;
+  size: number;
+  subject: string;
+  account: string;
+}
 
-  const at = await accessToken(link);
-  if (!at) return NextResponse.json({ error: "not-connected" }, { status: 401 });
+/** Quét MỘT hộp Gmail: gom email + PDF, Claude trích chặng thô. */
+async function scanGmailbox(
+  apiKey: string,
+  account: Account,
+  clock: { epochMs: number; tzOffsetMin: number; tzName: string; todayLocal: string },
+): Promise<
+  | { segments: FlightSegment[]; refs: AttachmentRef[]; scanned: number }
+  | { error: string }
+> {
+  const at = await accessToken(account.link as GoogleLink);
+  if (!at) return { error: "không lấy được token — cần Kết nối lại" };
   const gauth = { authorization: `Bearer ${at}` };
 
   // 1. Tìm email nghi là vé máy bay.
@@ -175,17 +263,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     `${GMAIL}/messages?q=${encodeURIComponent(SEARCH_Q)}&maxResults=${MAX_EMAILS}`,
     { headers: gauth },
   );
-  if (listRes.status === 403) {
-    return NextResponse.json({ error: "no-gmail-scope" }, { status: 403 });
-  }
-  if (!listRes.ok) {
-    return NextResponse.json({ error: `gmail-${listRes.status}` }, { status: 502 });
-  }
+  if (listRes.status === 403) return { error: "chưa cấp quyền đọc Gmail — cần Kết nối lại" };
+  if (!listRes.ok) return { error: `gmail-${listRes.status}` };
   const list = (await listRes.json()) as { messages?: { id: string }[] };
   const ids = (list.messages ?? []).map((m) => m.id);
-  if (ids.length === 0) {
-    return NextResponse.json({ trips: [], skipped: [], scanned: 0, todayLocal });
-  }
+  if (ids.length === 0) return { segments: [], refs: [], scanned: 0 };
 
   // 2. Lấy nội dung từng email (song song), kèm danh sách PDF đính kèm.
   const emails = await Promise.all(
@@ -205,6 +287,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }),
   );
   const usable = emails.filter((e): e is NonNullable<typeof e> => Boolean(e?.body || e?.pdfs.length));
+  if (usable.length === 0) return { segments: [], refs: [], scanned: 0 };
 
   // 2b. Tải tối đa MAX_PDFS tệp PDF — hành trình đầy đủ (chặng về!) hay chỉ
   // nằm trong đây chứ không nằm trong thân email (đúng lỗi OADC5J).
@@ -233,102 +316,122 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (pdfDocs.length >= MAX_PDFS) break;
   }
 
-  // 3. Claude trích THÔ mọi chặng (không lọc thời gian — code lọc ở bước 4).
-  const headers: Record<string, string> = {
-    "x-api-key": apiKey,
-    "anthropic-version": "2023-06-01",
-    "content-type": "application/json",
-  };
-  if (process.env.ANTHROPIC_WORKSPACE_ID) {
-    headers["anthropic-workspace-id"] = process.env.ANTHROPIC_WORKSPACE_ID;
-  }
+  // 3. Claude trích THÔ mọi chặng của hộp thư này.
   const emailsText = usable
     .map(
       (e, i) =>
         `--- EMAIL ${i + 1} ---\nFrom: ${e.from}\nDate: ${e.date}\nSubject: ${e.subject}\n${e.body}`,
     )
     .join("\n\n");
-  const content: unknown[] = [
-    ...pdfDocs.map((p) => ({
-      type: "document",
-      source: { type: "base64", media_type: "application/pdf", data: p.data },
-    })),
-    {
-      type: "text",
-      text:
-        (pdfDocs.length
-          ? `Các PDF phía trên theo thứ tự: ${pdfDocs.map((p, i) => `(${i + 1}) ${p.label}`).join("; ")}.\n\n`
-          : "") + emailsText,
-    },
-  ];
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: process.env.LOWTECHIE_MODEL || "claude-sonnet-5",
-        // Trần rộng + effort thấp: phần "suy nghĩ" cũng ăn vào max_tokens,
-        // để hẹp là danh sách bị cắt và mất luôn tool_use (lỗi "HTTP 200").
-        max_tokens: 16000,
-        output_config: { effort: "low" },
-        system: `Bạn trích vé máy bay cho Mai Lowtechie theo PRD §5.9 bản 6b — trích THEO CHẶNG, trả thô.
-MỐC THỜI GIAN THẬT: bây giờ là ${localIso(epochMs, tzOffsetMin)} — ${todayLocal}, múi giờ ${tzName} nơi Mai đang ở. Mốc này CHỈ để suy ra năm khi vé ghi kiểu "02OCT" không có năm (đối chiếu ngày gửi email) — KHÔNG dùng để lọc chặng.
-Quy tắc:
-- Trả về TẤT CẢ các chặng bay tìm thấy, kể cả chặng đã bay trong quá khứ. Việc so với "bây giờ" là của server, không phải của bạn — đừng tự bỏ chặng nào.
-- Mỗi chiều bay là MỘT chặng riêng (vé khứ hồi = 2 chặng; nối chuyến = mỗi đoạn 1 chặng). Đừng bao giờ trả chặng đi mà bỏ quên chặng về — hành trình đầy đủ thường nằm trong PDF đính kèm, đọc kỹ cả PDF.
-- departLocal/arriveLocal là ISO 8601 KÈM đúng offset múi giờ sân bay (Bangkok/VN +07:00, Nhật +09:00).
-- cancelled=true chỉ khi có email báo hủy chặng đó; superseded=true chỉ cho lịch trình CŨ khi có email đổi vé mới hơn cùng PNR.
-- Email check-in/nhắc chuyến lặp lại một chặng đã có → cứ trả bình thường, server tự khử trùng theo PNR + số hiệu + ngày bay.
-- Ghi đủ nếu vé có: PNR, nhà ga (terminal), ghế, hành lý ký gửi, quy định "có mặt trước X phút" (đổi ra checkinMinutes).
-- Chỉ trích chuyến THẬT từ email xác nhận/đổi/hủy vé; bỏ quảng cáo, khuyến mãi, gợi ý giá. Không bịa chặng không có trong nguồn.`,
-        tools: [TOOL_SCHEMA],
-        tool_choice: { type: "tool", name: "emit_segments" },
-        messages: [{ role: "user", content }],
-      }),
-    });
-    const data = (await res.json().catch(() => null)) as {
-      content?: ClaudeContent[];
-      stop_reason?: string;
-      error?: { type?: string; message?: string };
-    } | null;
-    if (res.ok && data) {
-      const toolUse = data.content?.find((c) => c.type === "tool_use" && c.name === "emit_segments");
-      if (Array.isArray(toolUse?.input?.segments)) {
-        // 4. CODE phân loại + khử trùng + gộp (hàng rào thật của §5.9 —
-        // giữ nguyên tên trường trả về để client cũ vẫn chạy).
-        const { candidates, history } = classifyAndGroup(toolUse.input.segments, epochMs);
-        // Ref file PDF để client TỰ LƯU vé vào chuyến khi Mai xác nhận
-        // (v2.0) — chỉ ref, không nhét cả file vào response.
-        const attachments = usable
-          .flatMap((e) =>
-            e.pdfs.slice(0, 3).map((p) => ({
-              messageId: e.id,
-              attachmentId: p.attachmentId,
-              filename: p.filename,
-              size: p.size,
-              subject: e.subject,
-            })),
-          )
-          .slice(0, 8);
-        return NextResponse.json({
-          trips: candidates,
-          skipped: history,
-          attachments,
-          scanned: usable.length,
-          todayLocal,
-        });
+  const out = await claudeExtract(apiKey, emailsText, pdfDocs, clock);
+  if ("error" in out) return out;
+  const refs = usable
+    .flatMap((e) =>
+      e.pdfs.slice(0, 3).map((p) => ({
+        messageId: e.id,
+        attachmentId: p.attachmentId,
+        filename: p.filename,
+        size: p.size,
+        subject: e.subject,
+        account: account.id,
+      })),
+    )
+    .slice(0, 8);
+  return { segments: out.segments, refs, scanned: usable.length };
+}
+
+/**
+ * Quét vé trên TẤT CẢ hộp thư đã bật Mail (§5.3.4): Gmail đầy đủ (email
+ * + PDF); Lark Mail best-effort (PRD §9 — tổ chức chưa bật Mail API thì
+ * ghi chú, không vỡ cả lần quét). Chặng của mọi hộp gộp chung một lần
+ * khử trùng để vé forward qua hai hộp không thành hai chuyến.
+ */
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  // Mốc thời gian THẬT của Mai (PRD §5.9: không bao giờ để AI tự đoán ngày).
+  const epochMs = Number(req.nextUrl.searchParams.get("epochMs")) || Date.now();
+  const tzOffsetMin = Number(req.nextUrl.searchParams.get("tzOffsetMin")) || 0;
+  const tzName = req.nextUrl.searchParams.get("tz")?.slice(0, 64) || "UTC";
+  const todayLocal = localLabel(epochMs, tzOffsetMin);
+  const clock = { epochMs, tzOffsetMin, tzName, todayLocal };
+
+  const accounts = await readAccounts(req);
+  if (accounts.length === 0) {
+    return NextResponse.json({ error: "not-connected" }, { status: 401 });
+  }
+  const mailboxes = accountsWith(accounts, "mail").filter(
+    (a) => a.provider === "lark" || a.gm,
+  );
+  if (mailboxes.length === 0) {
+    return NextResponse.json({ error: "no-gmail-scope" }, { status: 403 });
+  }
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return NextResponse.json({ error: "no-key" }, { status: 501 });
+
+  const segments: FlightSegment[] = [];
+  const refs: AttachmentRef[] = [];
+  const notes: string[] = [];
+  const rotated: { account: Account; link: LarkLink }[] = [];
+  let scanned = 0;
+  let okBoxes = 0;
+
+  for (const a of mailboxes.slice(0, 4)) {
+    const label = a.email ?? (a.provider === "lark" ? "Lark Mail" : "Gmail");
+    if (a.provider === "google") {
+      const r = await scanGmailbox(apiKey, a, clock);
+      if ("error" in r) {
+        notes.push(`${label}: ${r.error}`);
+        continue;
+      }
+      okBoxes++;
+      scanned += r.scanned;
+      refs.push(...r.refs);
+      segments.push(...r.segments.map((s) => ({ ...s, mailbox: a.email })));
+    } else {
+      const tokens = await larkAccessToken((a.link as LarkLink).rt);
+      if (!tokens) {
+        notes.push(`${label}: không lấy được token — cần Kết nối lại`);
+        continue;
+      }
+      rotated.push({ account: a, link: { ...(a.link as LarkLink), rt: tokens.rt } });
+      const mail = await larkRecentMail(tokens.at, MAX_EMAILS);
+      if ("error" in mail) {
+        // PRD §9: phạm vi Mail API tùy gói Lark của tổ chức — báo rõ.
+        notes.push(`${label}: Lark Mail chưa đọc được (${mail.error}) — kiểm tra quyền Mail API`);
+        continue;
+      }
+      okBoxes++;
+      scanned += mail.messages.length;
+      if (mail.messages.length > 0) {
+        const text = mail.messages
+          .map((m, i) => `--- EMAIL ${i + 1} ---\nSubject: ${m.subject}\n${m.bodyText}`)
+          .join("\n\n");
+        const out = await claudeExtract(apiKey, text, [], clock);
+        if ("error" in out) notes.push(`${label}: ${out.error}`);
+        else segments.push(...out.segments.map((s) => ({ ...s, mailbox: a.email ?? "Lark" })));
       }
     }
-    const detail =
-      data?.error?.message?.slice(0, 200) ??
-      (res.ok
-        ? `Claude 200 nhưng thiếu danh sách (stop_reason: ${data?.stop_reason ?? "?"}, blocks: ${(data?.content ?? []).map((c) => c.type).join(",") || "rỗng"})`
-        : `Claude HTTP ${res.status}`);
-    console.error("gmail/flights failed:", detail);
-    return NextResponse.json({ error: "claude-failed", detail }, { status: 502 });
-  } catch (e) {
-    const detail = e instanceof Error ? e.message.slice(0, 200) : "lỗi mạng phía server";
+  }
+
+  if (okBoxes === 0) {
+    const detail = notes.join(" · ").slice(0, 300) || "không quét được hộp thư nào";
     console.error("gmail/flights failed:", detail);
     return NextResponse.json({ error: "claude-failed", detail }, { status: 502 });
   }
+
+  // 4. CODE phân loại + khử trùng + gộp trên TẤT CẢ chặng (hàng rào thật
+  // của §5.9 — giữ nguyên tên trường trả về để client cũ vẫn chạy).
+  const { candidates, history } = classifyAndGroup(segments, epochMs);
+  const res = NextResponse.json({
+    trips: candidates,
+    skipped: history,
+    attachments: refs.slice(0, 8),
+    scanned,
+    todayLocal,
+    mailboxNotes: notes.length ? notes : undefined,
+  });
+  // Lark xoay vòng refresh token → ghi lại cookie tài khoản.
+  for (const r of rotated) {
+    await writeAccount(res, req.nextUrl.origin, r.account.id, "lark", r.link);
+  }
+  return res;
 }

@@ -184,3 +184,41 @@ describe("điểm đến & dữ liệu hỏng", () => {
     expect(r.history[0]).toContain("đã bay");
   });
 });
+
+describe("quét trên nhiều hộp thư (§5.3.4 v3.0)", () => {
+  it("ứng viên + dòng lịch sử ghi rõ đến từ hộp thư nào", () => {
+    const r = classifyAndGroup(
+      [
+        seg({
+          pnr: "AAA111",
+          flightNo: "VJ903",
+          fromIata: "SGN",
+          toIata: "BKK",
+          departLocal: "2026-10-02T11:50:00+07:00",
+          mailbox: "mai@sorene.ai",
+        }),
+        seg({
+          flightNo: "VJ902",
+          departLocal: "2026-09-01T10:00:00+07:00",
+          mailbox: "mai@thecircle.tech",
+        }),
+      ],
+      NOW,
+    );
+    expect(r.candidates[0].mailbox).toBe("mai@sorene.ai");
+    expect(r.history[0]).toContain("mai@thecircle.tech");
+  });
+
+  it("cùng vé forward qua hai hộp thư → vẫn khử trùng theo PNR + số hiệu + ngày", () => {
+    const a = seg({
+      pnr: "BBB222",
+      flightNo: "TG551",
+      departLocal: "2026-10-05T08:00:00+07:00",
+      mailbox: "mai@sorene.ai",
+    });
+    const b = { ...a, mailbox: "personal@gmail.com", confidence: 0.7 };
+    const r = classifyAndGroup([a, b], NOW);
+    expect(r.candidates).toHaveLength(1);
+    expect(r.candidates[0].mailbox).toBe("mai@sorene.ai");
+  });
+});

@@ -1,17 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { GCAL_COOKIE, isConfigured, unseal } from "@/lib/googleServer";
+import { isConfigured } from "@/lib/googleServer";
+import { isLarkConfigured } from "@/lib/larkServer";
+import { readAccounts } from "@/lib/accounts";
 
 export const runtime = "nodejs";
 
-/** Trạng thái nối Google + các dịch vụ server của thiết bị này. */
+/**
+ * Trạng thái nối + các dịch vụ server của thiết bị này. Từ §5.3.4 có thể
+ * nhiều tài khoản: connected/gmail nói về BẤT KỲ tài khoản Google nào —
+ * các màn cũ (Hôm nay, Chuyến đi) vẫn đọc như trước.
+ */
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const link = await unseal(req.cookies.get(GCAL_COOKIE)?.value);
+  const accounts = await readAccounts(req);
+  const googles = accounts.filter((a) => a.provider === "google");
+  const first = googles[0];
   return NextResponse.json({
     configured: isConfigured(),
-    connected: Boolean(link),
-    email: link?.email,
-    /** Quyền đọc Gmail (nối trước khi có scope này thì phải nối lại). */
-    gmail: Boolean(link?.gm),
+    connected: googles.length > 0,
+    email: first?.email,
+    /** Có tài khoản Google nào bật Mail và đã cấp quyền Gmail chưa. */
+    gmail: googles.some((a) => a.gm && a.parts.mail),
+    /** Số tài khoản đã nối (mọi nhà cung cấp) — màn Kết nối dùng chi tiết hơn. */
+    accounts: accounts.length,
+    larkConfigured: isLarkConfigured(),
     /** Server có GOOGLE_MAPS_API_KEY chưa (Routes API, §5.4.1). */
     maps: Boolean(process.env.GOOGLE_MAPS_API_KEY),
     /** Server có ANTHROPIC_API_KEY chưa (đọc ảnh, trích vé bay). */

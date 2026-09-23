@@ -40,7 +40,7 @@ import { fmtDayTime, fmtRelativeDay, fmtTime, isSameDay } from "@/lib/format";
 import { compressImage } from "@/lib/image";
 import { useSpeech } from "@/lib/speech";
 import { useStore, type TaskDraft } from "@/lib/store";
-import { createGcalEvent, deleteGcalEvent, useGoogleStatus } from "@/lib/useGoogle";
+import { createGcalEvent, deleteGcalEvent, useAccounts, useGoogleStatus } from "@/lib/useGoogle";
 
 function taxonomyPayload(t: { projects: Project[]; categories: Category[]; clients: Client[] }) {
   return {
@@ -136,9 +136,15 @@ export default function CapturePage() {
   const [noteEdits, setNoteEdits] = useState<Record<number, string>>({});
   const [dueEdits, setDueEdits] = useState<Record<number, { dueAt?: string; dueType?: DueType }>>({});
   const gs = useGoogleStatus();
-  /** Book sự kiện lên Google Calendar sau khi xem trước (§5.4 v2.0). */
+  const accts = useAccounts();
+  /** Tài khoản đang bật Lịch — chọn LỊCH ĐÍCH ở thẻ xem trước (§5.3.4). */
+  const calAccounts = accts.accounts.filter((x) => x.parts.cal);
+  /** Book sự kiện lên lịch ngoài sau khi xem trước (§5.4 v2.0). */
   const [book, setBook] = useState<Record<number, boolean>>({});
-  const [lastBooked, setLastBooked] = useState<{ localId: string; gcalId: string }[] | null>(null);
+  const [bookAcct, setBookAcct] = useState<Record<number, string>>({});
+  const [lastBooked, setLastBooked] = useState<
+    { localId: string; gcalId: string; account?: string }[] | null
+  >(null);
 
   const runParse = useCallback(
     async (t: string) => {
@@ -292,7 +298,7 @@ export default function CapturePage() {
   async function saveAll() {
     if (!result) return;
     const lines: string[] = [];
-    const booked: { localId: string; gcalId: string }[] = [];
+    const booked: { localId: string; gcalId: string; account?: string }[] = [];
     let goCalendar = false;
 
     for (const [i, a] of result.actions.entries()) {
@@ -340,15 +346,22 @@ export default function CapturePage() {
         if (a.startAt) {
           const start = new Date(a.startAt);
           const end = new Date(start.getTime() + (a.durationMinutes ?? 60) * 60_000);
-          // Book lên Google chỉ sau khi Mai tick ở thẻ xem trước (§5.4).
+          // Book lên lịch ngoài chỉ sau khi Mai tick ở thẻ xem trước (§5.4);
+          // lịch đích chọn được trên thẻ (§5.3.4).
           let gcalId: string | null = null;
+          let calAccount: string | undefined;
           if (book[i] && gs.connected) {
-            gcalId = await createGcalEvent({
-              title: a.title,
-              startAt: start.toISOString(),
-              endAt: end.toISOString(),
-              description: a.location ? `Ở ${a.location}` : undefined,
-            });
+            const created = await createGcalEvent(
+              {
+                title: a.title,
+                startAt: start.toISOString(),
+                endAt: end.toISOString(),
+                description: a.location ? `Ở ${a.location}` : undefined,
+              },
+              bookAcct[i] || undefined,
+            );
+            gcalId = created?.gcalId ?? null;
+            calAccount = created?.accountId;
           }
           // Nơi cần đặt chỗ trước (§5.4.2): lịch mang trạng thái "Chưa đặt"
           // + việc "Đặt lịch…" tự vào Hộp duyệt với hạn = ngày hẹn − đặt trước.
@@ -364,6 +377,7 @@ export default function CapturePage() {
             location: a.location,
             kind: "event",
             gcalId: gcalId ?? undefined,
+            calAccount,
             bookingStatus: place ? "pending" : undefined,
             placeId: place?.id,
           });
@@ -386,7 +400,7 @@ export default function CapturePage() {
             });
             lines.push(`🔖 ${place.name} cần đặt trước ${place.bookingLeadDays} ngày — việc "Đặt lịch" đang chờ trong Hộp duyệt.`);
           }
-          if (gcalId) booked.push({ localId: ev.id, gcalId });
+          if (gcalId) booked.push({ localId: ev.id, gcalId, account: calAccount });
           lines.push(
             `Đã thêm “${a.title}” lúc ${fmtTime(a.startAt)} ${fmtRelativeDay(a.startAt)}${
               gcalId
@@ -447,10 +461,10 @@ export default function CapturePage() {
     if (goCalendar) router.push("/lich");
   }
 
-  /** Hoàn tác book: xóa trên Google Calendar và gỡ sự kiện trong app. */
+  /** Hoàn tác book: xóa trên lịch ngoài (đúng tài khoản) và gỡ sự kiện trong app. */
   function undoBook() {
     for (const b of lastBooked ?? []) {
-      void deleteGcalEvent(b.gcalId);
+      void deleteGcalEvent(b.gcalId, b.account);
       removeEvent(b.localId);
     }
     setLastBooked(null);
@@ -699,15 +713,33 @@ export default function CapturePage() {
                     </div>
                   )}
                   {a.startAt && gs.connected && (
-                    <label className="small" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
-                      <input
-                        type="checkbox"
-                        className="check"
-                        checked={book[i] ?? false}
-                        onChange={(e) => setBook((s) => ({ ...s, [i]: e.target.checked }))}
-                      />
-                      Book lên Google Calendar{gs.email ? ` (${gs.email})` : ""}
-                    </label>
+                    <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+                      <label className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
+                          className="check"
+                          checked={book[i] ?? false}
+                          onChange={(e) => setBook((s) => ({ ...s, [i]: e.target.checked }))}
+                        />
+                        Book lên lịch
+                        {calAccounts.length <= 1 && gs.email ? ` (${gs.email})` : ""}
+                      </label>
+                      {/* Lịch đích hiện rõ và đổi được ngay trên thẻ (§5.3.4). */}
+                      {(book[i] ?? false) && calAccounts.length > 1 && (
+                        <select
+                          className="btn small"
+                          value={bookAcct[i] ?? ""}
+                          aria-label="Lịch đích"
+                          onChange={(e) => setBookAcct((s) => ({ ...s, [i]: e.target.value }))}
+                        >
+                          {calAccounts.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.provider === "lark" ? "Lark" : "Google"} · {c.email ?? c.id}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </span>
                   )}
                 </div>
               ) : a.kind === "note" || a.kind === "complete" ? (

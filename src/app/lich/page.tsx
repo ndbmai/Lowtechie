@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Bubble } from "@/components/Bubble";
 import { projectById } from "@/core/projects";
@@ -115,15 +116,24 @@ function ChainForm({
     const blocks = chain.blocks.filter((b) => b.kind === "prep" || b.kind === "travel");
     const toStore: Omit<CalEvent, "id">[] = [];
     let anyGcalFail = false;
+    // Lịch đích theo dự án của sự kiện chính (§5.3.4), không có thì mặc định.
+    const targetAcct = event.projectId
+      ? useStore.getState().settings.projectCalendar[event.projectId]
+      : undefined;
     for (const b of blocks) {
       let gcalId: string | undefined;
+      let calAccount: string | undefined;
       if (gcalConnected && writeGcal) {
-        gcalId =
-          (await createGcalEvent({
+        const created = await createGcalEvent(
+          {
             title: `🌼 ${b.label} — ${event.title}`,
             startAt: b.startAt,
             endAt: b.endAt,
-          })) ?? undefined;
+          },
+          targetAcct,
+        );
+        gcalId = created?.gcalId;
+        calAccount = created?.accountId;
         if (!gcalId) anyGcalFail = true;
       }
       toStore.push({
@@ -133,6 +143,7 @@ function ChainForm({
         kind: b.kind as CalEvent["kind"],
         chainOf: event.id,
         gcalId,
+        calAccount,
       });
     }
     addEvents(toStore);
@@ -1110,7 +1121,7 @@ export default function CalendarPage() {
 
   async function removeChainEverywhere(ev: CalEvent) {
     const withGcal = events.filter((x) => x.chainOf === ev.id && x.gcalId);
-    await Promise.allSettled(withGcal.map((b) => deleteGcalEvent(b.gcalId!)));
+    await Promise.allSettled(withGcal.map((b) => deleteGcalEvent(b.gcalId!, b.calAccount)));
     removeChain(ev.id);
     void gcal.reload();
   }
@@ -1223,18 +1234,25 @@ export default function CalendarPage() {
         {!mounted || gs.loading ? (
           <span className="muted small">…</span>
         ) : gs.connected ? (
-          <span className="muted small">
-            GCal · {gs.email ?? "đã nối"}{" "}
-            <button className="btn ghost small" onClick={() => void gs.disconnect()}>
-              Ngắt
-            </button>
+          <span className="muted small" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            {gs.email ?? "đã nối"}
+            <Link href="/ket-noi" className="btn ghost small" style={{ textDecoration: "none" }}>
+              ⚙️ Kết nối
+            </Link>
           </span>
         ) : gs.configured ? (
-          <a className="btn small" href="/api/google/auth" style={{ textDecoration: "none" }}>
-            🔗 Nối Google Calendar
-          </a>
+          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            <a className="btn small" href="/api/google/auth" style={{ textDecoration: "none" }}>
+              🔗 Nối Google Calendar
+            </a>
+            <Link href="/ket-noi" className="muted small">
+              Kết nối…
+            </Link>
+          </span>
         ) : (
-          <span className="muted small">local</span>
+          <Link href="/ket-noi" className="muted small">
+            local
+          </Link>
         )}
       </div>
       {gmsg && (

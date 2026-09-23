@@ -92,7 +92,8 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Nhóm **"Chưa gắn khách"** (v2.9): chạm tiêu đề nhóm để gắn cả nhóm cho một khách, ô 🤝 trên từng dòng gắn một việc một chạm (chạm dòng vẫn mở chi tiết), kèm "Tạo khách mới"
 - [x] "Deadline 7 ngày tới" **đầy đủ** (§5.3.3 v2.8, sửa lỗi thiếu việc 23/9): tiêu đề có số đếm, nhóm theo ngày, "Xem tất cả (N)" thay vì cắt bớt; khoảng tính theo ngày địa phương — có test 20+ việc cùng hạn
 - [x] Danh bạ ↔ voice/ảnh (§5.3.2 v2.8): tên khách làm từ vựng ưu tiên cho Whisper; thẻ duyệt ghi rõ *nhận từ "đô thị"*; cách viết Mai gõ cho khách đã có tự thành tên gọi khác; ô "+ khách hàng" hết bị cắt chữ, chọn loại ngay khi thêm
-- [ ] **Nhiều tài khoản Google/Lark cùng lúc (§5.3.4)** — việc lớn kế tiếp (phải thiết kế lại cookie một-token hiện tại)
+- [x] **Nhiều tài khoản Google/Lark cùng lúc (§5.3.4)**: màn Kết nối — mỗi tài khoản một dòng bật/tắt Lịch·Mail·Drive, thêm nhiều Google song song với Lark (OAuth Lark, cần `LARK_APP_ID/SECRET`); lịch mọi tài khoản gộp một góc nhìn + khử trùng sự kiện mời chéo; lịch đích mặc định theo dự án + chọn ngay trên thẻ xem trước; quét vé chạy trên mọi hộp thư, kết quả ghi rõ hộp nào (Lark Mail best-effort, chờ kiểm chứng quyền của tổ chức); cookie Google cũ giữ nguyên — không phải nối lại
+- [ ] Lịch con từng tài khoản + dấu tài khoản trên sự kiện + trạng thái đồng bộ từng dòng; soạn email trả lời từ đúng hộp thư
 - [ ] Sync Google Sheets · ghi âm họp offline + recap
 - [ ] Giai đoạn 2: Lark (bot group, Mail, Calendar) trước, sau đó bot 1:1 WhatsApp/Zalo
 - [ ] Giai đoạn 3: Supabase + RLS, tài khoản cộng sự, giao việc chéo, danh bạ đồng bộ máy chủ

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { GCAL_COOKIE, accessToken, unseal } from "@/lib/googleServer";
+import { accessToken, type GoogleLink } from "@/lib/googleServer";
+import { LEGACY_GOOGLE_ID, findAccount, readAccounts } from "@/lib/accounts";
 
 /**
  * Tải MỘT file đính kèm Gmail (vé PDF) để client lưu vào chuyến
@@ -19,10 +20,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Thiếu messageId/attachmentId" }, { status: 400 });
   }
 
-  const link = await unseal(req.cookies.get(GCAL_COOKIE)?.value);
-  if (!link) return NextResponse.json({ error: "not-connected" }, { status: 401 });
-  if (!link.gm) return NextResponse.json({ error: "no-gmail-scope" }, { status: 403 });
-  const at = await accessToken(link);
+  // ?account= chọn đúng hộp thư chứa email vé (§5.3.4); ref cũ không có
+  // → cookie Google đời đầu.
+  const accounts = await readAccounts(req);
+  const wanted = req.nextUrl.searchParams.get("account");
+  const target =
+    findAccount(accounts, wanted) ??
+    findAccount(accounts, LEGACY_GOOGLE_ID) ??
+    accounts.find((a) => a.provider === "google");
+  if (!target || target.provider !== "google") {
+    return NextResponse.json({ error: "not-connected" }, { status: 401 });
+  }
+  if (!target.gm) return NextResponse.json({ error: "no-gmail-scope" }, { status: 403 });
+  const at = await accessToken(target.link as GoogleLink);
   if (!at) return NextResponse.json({ error: "not-connected" }, { status: 401 });
 
   const r = await fetch(

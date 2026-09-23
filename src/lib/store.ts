@@ -87,6 +87,8 @@ interface LowtechieState {
     /** Màn chi tiết dự án nhớ cách nhóm + bộ lọc lần trước (§5.3.0 v2.9). */
     projectGroupBy: "category" | "client" | "due";
     projectFilter: "all" | "due" | "nodue" | "high" | "others" | "overdue";
+    /** Lịch đích MẶC ĐỊNH theo dự án (§5.3.4): projectId → id tài khoản. */
+    projectCalendar: Record<ProjectId, string>;
   };
 
   addTask: (draft: TaskDraft) => Task;
@@ -151,6 +153,8 @@ interface LowtechieState {
     groupBy?: "category" | "client" | "due";
     filter?: "all" | "due" | "nodue" | "high" | "others" | "overdue";
   }) => void;
+  /** Đặt/xóa lịch đích mặc định của một dự án (§5.3.4). */
+  setProjectCalendar: (projectId: ProjectId, accountId: string | undefined) => void;
 
   addSeries: (
     s: Pick<RecurringSeries, "title" | "intervalUnit" | "intervalCount" | "nextDate"> &
@@ -267,6 +271,7 @@ export const useStore = create<LowtechieState>()(
         calendarView: "week",
         projectGroupBy: "category",
         projectFilter: "all",
+        projectCalendar: {},
       },
 
       addTask: (draft) => {
@@ -633,6 +638,13 @@ export const useStore = create<LowtechieState>()(
             projectFilter: patch.filter ?? s.settings.projectFilter,
           },
         })),
+      setProjectCalendar: (projectId, accountId) =>
+        set((s) => {
+          const next = { ...s.settings.projectCalendar };
+          if (accountId) next[projectId] = accountId;
+          else delete next[projectId];
+          return { settings: { ...s.settings, projectCalendar: next } };
+        }),
 
       addSeries: (sr) =>
         set((s) => ({
@@ -876,7 +888,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 11,
+      version: 12,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -916,6 +928,7 @@ export const useStore = create<LowtechieState>()(
             calendarView: s.settings?.calendarView ?? "week",
             projectGroupBy: s.settings?.projectGroupBy ?? "category",
             projectFilter: s.settings?.projectFilter ?? "all",
+            projectCalendar: s.settings?.projectCalendar ?? {},
           };
         }
         if (version < 5) {
@@ -973,6 +986,7 @@ export const useStore = create<LowtechieState>()(
             calendarView: prev?.calendarView ?? "week",
             projectGroupBy: prev?.projectGroupBy ?? "category",
             projectFilter: prev?.projectFilter ?? "all",
+            projectCalendar: prev?.projectCalendar ?? {},
           };
         }
         if (version < 10) {
@@ -989,6 +1003,20 @@ export const useStore = create<LowtechieState>()(
             calendarView: prev?.calendarView ?? "week",
             projectGroupBy: prev?.projectGroupBy ?? "category",
             projectFilter: prev?.projectFilter ?? "all",
+            projectCalendar: {},
+          };
+        }
+        if (version < 12) {
+          // v12 (§5.3.4): lịch đích mặc định theo dự án.
+          const prev = s.settings;
+          s.settings = {
+            walkToStationMin: prev?.walkToStationMin ?? 12,
+            defaultPrepMinutes: prev?.defaultPrepMinutes ?? 90,
+            homeAddress: prev?.homeAddress ?? "",
+            calendarView: prev?.calendarView ?? "week",
+            projectGroupBy: prev?.projectGroupBy ?? "category",
+            projectFilter: prev?.projectFilter ?? "all",
+            projectCalendar: prev?.projectCalendar ?? {},
           };
         }
         return s as LowtechieState;
