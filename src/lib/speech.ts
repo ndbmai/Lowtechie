@@ -1,6 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useStore } from "@/lib/store";
+
+/**
+ * Từ vựng ưu tiên cho STT (§5.3.2 v2.8): tên khách hàng/đối tác + tên
+ * gọi khác trong danh bạ, để Whisper nghe đúng tên riêng.
+ */
+function clientVocab(): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of useStore.getState().clients) {
+    for (const name of [c.name, ...c.aliases]) {
+      const v = name.trim();
+      const key = v.toLowerCase();
+      if (v.length < 2 || v.length > 40 || seen.has(key)) continue;
+      seen.add(key);
+      out.push(v);
+      if (out.length >= 40) return out;
+    }
+  }
+  return out;
+}
 
 /**
  * Voice input v2.0 (PRD §5.0 — sửa lỗi voice 22/9): KHÔNG dựa vào nhận
@@ -142,7 +163,7 @@ export function useSpeech(onFinal: (text: string) => void) {
       const res = await fetch("/api/stt", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ audio: dataUrl }),
+        body: JSON.stringify({ audio: dataUrl, vocab: clientVocab() }),
       });
       const d = (await res.json().catch(() => null)) as { text?: string; detail?: string } | null;
       if (!res.ok || !d?.text?.trim()) {

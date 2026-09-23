@@ -12,8 +12,10 @@ import {
   clientsFor,
   findClientByName,
   matchClient,
+  matchClientDetail,
   orderClientsForPick,
   sanitizeClientId,
+  withLearnedAlias,
 } from "@/core/clients";
 import { detectProject, parseCommand, parseWhen } from "@/core/parse";
 import {
@@ -307,7 +309,13 @@ export default function CapturePage() {
         let clientId = r.clientId;
         const typed = clientQ[i]?.trim();
         if (!clientId && typed) {
-          clientId = (findClientByName(clients, typed) ?? addClient(typed, r.projectId))?.id;
+          const found = findClientByName(clients, typed);
+          // Cách viết mới của khách đã có → học vào tên gọi khác (v2.8).
+          if (found) {
+            const aliases = withLearnedAlias(found, typed);
+            if (aliases) useStore.getState().updateClient(found.id, { aliases });
+          }
+          clientId = (found ?? addClient(typed, r.projectId))?.id;
         }
         if (clientId) touchClient(clientId);
         const noteBody = noteEdits[i]?.trim();
@@ -740,6 +748,8 @@ export default function CapturePage() {
             const r = resolveTask(a, i);
             const p = projectById(projects, r.projectId);
             const client = clients.find((c) => c.id === r.clientId);
+            // Cho Mai biết ô khách tự điền nhận ra từ đâu (§5.3.2 v2.8).
+            const clientHit = client ? matchClientDetail(a.title, [client]) : undefined;
             const due = i in dueEdits ? dueEdits[i] : { dueAt: a.dueAt, dueType: a.dueType };
             return (
               <div className="parsed" style={{ borderLeftColor: p.color }} key={i}>
@@ -769,6 +779,11 @@ export default function CapturePage() {
                     );
                   })}
                 </div>
+                {clientHit && (
+                  <div className="small muted" style={{ marginTop: 4 }}>
+                    🤝 {client!.name} — nhận từ &ldquo;{clientHit.term}&rdquo;
+                  </div>
+                )}
                 {/* 3 trường riêng + Deadline, sửa và tạo mới tại chỗ (3b, 3c). */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 6 }}>
                   <SearchSelect
@@ -815,7 +830,12 @@ export default function CapturePage() {
                     }
                     onQueryChange={(q) => setClientQ((s) => ({ ...s, [i]: q }))}
                     onCreate={(name) => {
-                      const c = findClientByName(clients, name) ?? addClient(name, r.projectId);
+                      const existing = findClientByName(clients, name);
+                      if (existing) {
+                        const aliases = withLearnedAlias(existing, name);
+                        if (aliases) useStore.getState().updateClient(existing.id, { aliases });
+                      }
+                      const c = existing ?? addClient(name, r.projectId);
                       if (c)
                         applyOverride(
                           i,

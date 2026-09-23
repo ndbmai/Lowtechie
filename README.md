@@ -4,7 +4,7 @@ Trợ lý AI chief-of-staff cá nhân cho Mai — người vận hành song song
 
 Tài liệu gốc:
 
-- [PRD v0.7](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
+- [PRD v2.8](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
 - [Mockup UI & user flow](docs/prototypes/mai-lowtechie-ui.html) — hệ thống thiết kế + 7 màn hình
 - [Checklist bay](docs/prototypes/checklist-bay.html) — nguyên mẫu module Chuyến đi (§5.9)
 
@@ -31,7 +31,7 @@ src/core/        Logic thuần, có unit test — không phụ thuộc UI hay d�
   parse.ts         Tách 1 câu chat/voice thành nhiều hành động (VI, fallback khi không có API key)
   classify.ts      Phân loại 2 tầng Dự án → Category §5.2.1: luật + học từ sửa đổi + bắt trùng
   timeback.ts      Chuỗi tính ngược §5.4.1: chuẩn bị → di chuyển (BTS/ô tô) → hẹn; chuỗi ngày bay
-  priority.ts      Điểm ưu tiên §5.2: deadline, trọng số dự án, đang chặn ai, năng lượng
+  priority.ts      Điểm ưu tiên §5.2: deadline, thứ tự dự án Mai đặt, đang chặn ai, năng lượng
   checklist.ts     Mẫu checklist bay theo điểm đến (Tokyo / HCMC / về Bangkok) + việc trước khi bay
   brief.ts         Brief sáng: top 3, đang chờ người khác, deadline 7 ngày
   slots.ts         Tìm khung giờ trống cho deep work
@@ -50,14 +50,14 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Task engine + triage inbox (nguồn gốc + độ tin cậy trên từng thẻ)
 - [x] Giao việc bằng chat & voice (Web Speech; 1 câu → nhiều hành động; hỏi lại tối đa 1 câu)
 - [x] Phân loại 2 tầng Dự án → Category (§5.2.1) + **học từ sửa đổi** — nhớ cả dự án Mai tự thêm
-- [x] **Dự án & category tự quản** (Dự án → ⚙️ Quản lý): thêm/đổi tên/màu/mục tiêu giờ, thêm-sửa-xóa category; xóa dự án thì việc chuyển về Cá nhân (22/9: đã bỏ Favstay & Edge)
+- [x] **Dự án & category tự quản** (Dự án → ⚙️ Quản lý): thêm/đổi tên/màu/mục tiêu (chữ), thêm-sửa-xóa category; xóa dự án thì việc chuyển về Cá nhân (22/9: đã bỏ Favstay & Edge)
 - [x] Thẻ xác nhận trước khi lưu: tóm tắt nhóm, sửa phân loại một chạm, bắt việc trùng (đề xuất gộp), cảnh báo hạn đã qua
 - [x] Nhập việc từ **ảnh** (§5.1.1): chụp checklist/bảng trắng → Claude vision đọc → nhóm trong Hộp duyệt kèm ảnh nguồn, bỏ qua mục đã tick (cần `ANTHROPIC_API_KEY`)
 - [x] `/api/parse` dùng Claude API khi có key, tự fallback bộ phân tích luật
-- [x] Dự án + trọng số thời gian + cảnh báo dự án bị bỏ đói
+- [x] Ưu tiên theo **thứ tự dự án Mai đặt** (v2.8 — bỏ hẳn trọng số giờ/tuần) + cảnh báo dự án bị bỏ quên
 - [x] Lịch v0: sự kiện local + chuỗi Chuẩn bị → Di chuyển → Hẹn tính ngược (mặc định BTS từ Bang Na)
 - [x] Chuyến đi + checklist bay theo điểm đến, học món tự thêm
-- [x] Brief sáng + weekly review (thời gian vs mục tiêu, việc dời ≥ 3 lần)
+- [x] Brief sáng + weekly review (v2.8: đếm việc xong/trễ theo dự án — không so số giờ vì Mai không bấm giờ; việc dời ≥ 3 lần)
 - [x] Google Calendar thật (OAuth trong app, PRD §5.4): sự kiện Google hiện trong Lịch + brief sáng; chuỗi chuẩn bị/di chuyển ghi vào GCal khi Mai bấm khóa (tick tắt được); token nằm trong cookie mã hóa của từng thiết bị, không có database — cần `GOOGLE_CLIENT_ID/SECRET` (xem `.env.example`)
 - [x] Google Maps Routes (§5.4.1): nút "Tính bằng Google Maps" trong form chuỗi — tàu tính theo *giờ đến*, tách đi bộ → tàu → đi bộ đổ vào phép tính ngược; ô tô ước lượng theo giao thông (cần `GOOGLE_MAPS_API_KEY`)
 - [x] Gmail vé máy bay (§5.9): nút "Quét vé máy bay trong Gmail" ở Chuyến đi — Claude trích chuyến sắp tới, Mai duyệt mới tạo chuyến + checklist (scope gmail.readonly, cần nối lại Google sau khi cập nhật)
@@ -86,9 +86,13 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] Địa điểm đã lưu theo thành phố (§8, trả nợ v2.0): "Nhà ở HCM", "Nhà Bang Na"… kèm địa chỉ + link Mở Maps; chuỗi ngày bay tự chọn đúng nhà 🏠 theo đầu chặng (chặng từ SGN đi từ nhà HCM), ô chọn nhanh ở cả chuỗi bay lẫn chuỗi hẹn
 - [x] Sửa nút "Mở" vé máy bay không hoạt động trên điện thoại: đổi window.open (bị chặn popup) thành link trực tiếp + nút Tải
 - [x] Tạm ngưng dự án + xóa phải chọn nơi chuyển việc (§5.3.1)
-- [ ] Speech-to-text server (voice note VI/TH/EN trộn) — đang dùng Web Speech của trình duyệt
+- [x] Màn Dự án = **lưới ô như thư mục** (§5.3.0 v2.8, sửa lỗi 22–23/9): mỗi dự án một ô chạm được (kể cả Cá nhân/Học tập/Admin), hiện số mở/quá hạn/7 ngày; bỏ danh sách "Việc đang mở" trùng với Hôm nay
+- [x] **Màn chi tiết dự án** (§5.3.0 v2.8): 3 tab Theo category / Theo khách hàng / Theo hạn, "+ Thêm việc" ngay trong từng category, "Đã xong (N)" từng nhóm, lọc nhanh, Book block, lịch sắp tới của dự án
+- [x] "Deadline 7 ngày tới" **đầy đủ** (§5.3.3 v2.8, sửa lỗi thiếu việc 23/9): tiêu đề có số đếm, nhóm theo ngày, "Xem tất cả (N)" thay vì cắt bớt; khoảng tính theo ngày địa phương — có test 20+ việc cùng hạn
+- [x] Danh bạ ↔ voice/ảnh (§5.3.2 v2.8): tên khách làm từ vựng ưu tiên cho Whisper; thẻ duyệt ghi rõ *nhận từ "đô thị"*; cách viết Mai gõ cho khách đã có tự thành tên gọi khác; ô "+ khách hàng" hết bị cắt chữ, chọn loại ngay khi thêm
+- [ ] **Nhiều tài khoản Google/Lark cùng lúc (§5.3.4)** — việc lớn kế tiếp (phải thiết kế lại cookie một-token hiện tại)
 - [ ] Sync Google Sheets · ghi âm họp offline + recap
-- [ ] Giai đoạn 2: bot Telegram/Zalo 1:1, ingest group chat
-- [ ] Giai đoạn 3: Supabase + RLS, tài khoản cộng sự, giao việc chéo
+- [ ] Giai đoạn 2: Lark (bot group, Mail, Calendar) trước, sau đó bot 1:1 WhatsApp/Zalo
+- [ ] Giai đoạn 3: Supabase + RLS, tài khoản cộng sự, giao việc chéo, danh bạ đồng bộ máy chủ
 
 Nguyên tắc không đổi (PRD §6.5): giao việc < 10 giây · **duyệt trước, tự động sau** · mọi việc tự trích đều có nguồn · dễ thương nhưng thật thà.

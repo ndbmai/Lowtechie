@@ -4,7 +4,9 @@ import {
   clientsFor,
   makeClientId,
   matchClient,
+  matchClientDetail,
   sanitizeClientId,
+  withLearnedAlias,
 } from "../clients";
 import { dueWarnings, duePresets } from "../due";
 import type { Client, Project } from "../types";
@@ -67,6 +69,29 @@ describe("danh bạ khách hàng (PRD §5.3.2)", () => {
   it("id khách mới là slug không dấu, không trùng", () => {
     expect(makeClientId("Đô thị", CLIENTS)).toBe("kh:dothi2");
     expect(makeClientId("Anh Tuấn — OKR", [])).toBe("kh:anhtuanokr");
+  });
+
+  it("v2.8: matchClientDetail trả kèm cụm chữ đã khớp cho dòng «nhận từ …»", () => {
+    const hit = matchClientDetail("gửi báo giá cho Do thi laundry nhé", CLIENTS);
+    expect(hit?.client.id).toBe("kh:dothi");
+    expect(hit?.term).toBe("do thi laundry");
+    expect(matchClientDetail("mua quà sinh nhật", CLIENTS)).toBeUndefined();
+  });
+
+  it("v2.8: withLearnedAlias học cách viết mới, bỏ qua trùng tên/tên gọi cũ", () => {
+    // "do thi" (không dấu) chưa có trong tên gọi → đáng học.
+    expect(withLearnedAlias(dothi, "do thi")).toEqual([...dothi.aliases, "do thi"]);
+    // Chỉ khác hoa/thường hoặc khoảng trắng so với tên/alias đã có → không học.
+    expect(withLearnedAlias(dothi, "đô thị")).toBeNull();
+    expect(withLearnedAlias(dothi, "Do Thi   Laundry")).toBeNull();
+    expect(withLearnedAlias(dothi, " ")).toBeNull();
+    expect(withLearnedAlias(dothi, "x")).toBeNull();
+    // Quá 12 tên gọi → bỏ cái cũ nhất.
+    const full: Client = { ...okr, aliases: Array.from({ length: 12 }, (_, i) => `alias${i}`) };
+    const learned = withLearnedAlias(full, "OKR Global")!;
+    expect(learned).toHaveLength(12);
+    expect(learned[11]).toBe("OKR Global");
+    expect(learned).not.toContain("alias0");
   });
 });
 

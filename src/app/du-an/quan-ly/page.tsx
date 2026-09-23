@@ -246,6 +246,7 @@ function ProjectCard({ project }: { project: Project }) {
   } = useStore();
   const [newCat, setNewCat] = useState("");
   const [newClient, setNewClient] = useState("");
+  const [newClientType, setNewClientType] = useState<Client["type"]>("khachhang");
   const [editingCat, setEditingCat] = useState<string | null>(null);
   const [catName, setCatName] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -277,22 +278,6 @@ function ProjectCard({ project }: { project: Project }) {
           aria-label="Tên dự án"
           onChange={(e) => updateProject(project.id, { name: e.target.value })}
         />
-        <label className="small muted" style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <input
-            type="number"
-            min={0}
-            max={60}
-            value={project.targetHoursPerWeek}
-            aria-label="Mục tiêu giờ mỗi tuần"
-            onChange={(e) =>
-              updateProject(project.id, {
-                targetHoursPerWeek: Math.max(0, Number(e.target.value) || 0),
-              })
-            }
-            style={{ width: 52, padding: "5px 7px", borderRadius: 9, border: "1.5px solid var(--line)", background: "var(--surface-2)" }}
-          />
-          h/tuần
-        </label>
         <button
           className="btn ghost small"
           onClick={() =>
@@ -340,6 +325,14 @@ function ProjectCard({ project }: { project: Project }) {
           </button>
         </div>
       )}
+      <input
+        className="transcript"
+        style={{ minHeight: 0, padding: 8 }}
+        placeholder="Mục tiêu (chữ, tùy chọn — ví dụ: 3 buổi tiếng Thái mỗi tuần)"
+        aria-label={`Mục tiêu của ${project.name}`}
+        value={project.goal ?? ""}
+        onChange={(e) => updateProject(project.id, { goal: e.target.value })}
+      />
       <ColorPicker
         value={project.color}
         onChange={(c) => updateProject(project.id, { color: c })}
@@ -459,26 +452,42 @@ function ProjectCard({ project }: { project: Project }) {
         {myClients.map((c) => (
           <ClientChip key={c.id} client={c} projectId={project.id} />
         ))}
+        {/* Chữ gợi ý NGẮN để không bị cắt ("+ khách hàng / đối t" — lỗi 22/9);
+            form giữ nguyên sau khi Thêm để nhập nhiều tên liên tiếp (v2.8). */}
         <form
-          style={{ display: "inline-flex", gap: 4 }}
+          style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}
           onSubmit={(e) => {
             e.preventDefault();
-            if (newClient.trim()) addClient(newClient, project.id);
+            if (newClient.trim()) addClient(newClient, project.id, newClientType);
             setNewClient("");
           }}
         >
           <input
             className="transcript"
-            style={{ minHeight: 0, padding: "4px 8px", width: 160 }}
-            placeholder="+ khách hàng / đối tác"
-            aria-label={`Thêm khách hàng cho ${project.name}`}
+            style={{ minHeight: 0, padding: "4px 8px", width: 150 }}
+            placeholder="+ khách hàng"
+            aria-label={`Thêm khách hàng / đối tác cho ${project.name}`}
             value={newClient}
             onChange={(e) => setNewClient(e.target.value)}
           />
           {newClient.trim() && (
-            <button className="btn primary small" type="submit">
-              Thêm
-            </button>
+            <>
+              <select
+                className="btn small"
+                value={newClientType}
+                aria-label="Loại khách mới"
+                onChange={(e) => setNewClientType(e.target.value as Client["type"])}
+              >
+                {CLIENT_TYPES.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <button className="btn primary small" type="submit">
+                Thêm
+              </button>
+            </>
           )}
         </form>
       </div>

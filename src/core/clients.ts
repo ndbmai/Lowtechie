@@ -62,23 +62,49 @@ export function clientById(clients: Client[], id: string | undefined): Client | 
 }
 
 /**
- * Tìm khách hàng được nhắc trong câu/tiêu đề: so tên + tên gọi tắt,
- * chặn biên bằng khoảng trắng (không dùng \b — hỏng cạnh dấu tiếng Việt).
- * Ưu tiên tên khớp DÀI nhất để "Đô thị Xanh" thắng "Đô thị".
+ * Tìm khách hàng được nhắc trong câu/tiêu đề, TRẢ KÈM cụm chữ đã khớp —
+ * cho dòng «nhận từ "đô thị"» trên thẻ duyệt (§5.3.2 v2.8). So tên +
+ * tên gọi tắt, chặn biên bằng khoảng trắng (không dùng \b — hỏng cạnh
+ * dấu tiếng Việt). Ưu tiên tên khớp DÀI nhất để "Đô thị Xanh" thắng
+ * "Đô thị".
  */
-export function matchClient(text: string, clients: Client[]): Client | undefined {
+export function matchClientDetail(
+  text: string,
+  clients: Client[],
+): { client: Client; term: string } | undefined {
   const t = ` ${norm(text)} `;
-  let best: { client: Client; len: number } | undefined;
+  let best: { client: Client; term: string; len: number } | undefined;
   for (const c of clients) {
     for (const name of [c.name, ...c.aliases]) {
       const n = norm(name);
       if (n.length < 2) continue;
       if (t.includes(` ${n} `) || t.includes(` ${n},`) || t.includes(` ${n}.`)) {
-        if (!best || n.length > best.len) best = { client: c, len: n.length };
+        if (!best || n.length > best.len) best = { client: c, term: n, len: n.length };
       }
     }
   }
-  return best?.client;
+  return best ? { client: best.client, term: best.term } : undefined;
+}
+
+export function matchClient(text: string, clients: Client[]): Client | undefined {
+  return matchClientDetail(text, clients)?.client;
+}
+
+/**
+ * Học cách gọi mới từ lần Mai gõ/sửa ô khách hàng (§5.3.2 v2.8): trả
+ * danh sách tên gọi mới nếu `raw` chưa trùng tên/tên gọi nào đã có
+ * (so không phân biệt hoa/thường + khoảng trắng, NHƯNG phân biệt dấu —
+ * "do thi" không dấu đáng học để lần sau nhận từ voice/ảnh); trả null
+ * khi không có gì mới.
+ */
+export function withLearnedAlias(c: Client, raw: string): string[] | null {
+  const r = raw.replace(/\s+/g, " ").trim();
+  if (r.length < 2 || r.length > 40) return null;
+  const key = (s: string) => norm(s).replace(/\s+/g, " ");
+  const q = key(r);
+  if (key(c.name) === q || c.aliases.some((a) => key(a) === q)) return null;
+  // Giữ tối đa 12 tên gọi, bỏ bớt cái cũ nhất.
+  return [...c.aliases, r].slice(-12);
 }
 
 /**

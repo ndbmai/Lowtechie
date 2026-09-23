@@ -18,9 +18,19 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (!apiKey) return NextResponse.json({ error: "no-key" }, { status: 501 });
 
   let audio = "";
+  let vocab: string[] = [];
   try {
-    const body = (await req.json()) as { audio?: unknown };
+    const body = (await req.json()) as { audio?: unknown; vocab?: unknown };
     if (typeof body.audio === "string") audio = body.audio;
+    // Tên khách hàng/đối tác làm từ vựng ưu tiên (§5.3.2 v2.8) — để tên
+    // riêng ("Đô Thị", "OKR"…) được nghe đúng thay vì phiên âm bừa.
+    if (Array.isArray(body.vocab)) {
+      vocab = body.vocab
+        .filter((v): v is string => typeof v === "string")
+        .map((v) => v.trim())
+        .filter((v) => v.length >= 2 && v.length <= 40)
+        .slice(0, 40);
+    }
   } catch {
     /* 400 bên dưới */
   }
@@ -36,7 +46,11 @@ export async function POST(req: Request): Promise<NextResponse> {
   const form = new FormData();
   form.append("file", new Blob([bytes], { type: mime }), `voice.${ext}`);
   form.append("model", process.env.LOWTECHIE_STT_MODEL || "whisper-1");
-  form.append("prompt", "Ghi chú công việc tiếng Việt, có thể trộn tiếng Anh và tiếng Thái.");
+  form.append(
+    "prompt",
+    "Ghi chú công việc tiếng Việt, có thể trộn tiếng Anh và tiếng Thái." +
+      (vocab.length ? ` Tên riêng cần nghe đúng: ${vocab.join(", ")}.` : ""),
+  );
 
   try {
     const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {

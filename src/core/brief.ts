@@ -1,7 +1,7 @@
 import type { CalEvent, Project, Task } from "./types";
 import { rankTasks } from "./priority";
 import { freeSlotsOnDay } from "./slots";
-import { weekStats, mostStarved } from "./stats";
+import { weekStats, mostStarved, next7DaysRange } from "./stats";
 
 /**
  * Brief sáng (PRD §5.10): lịch hôm nay, top 3 việc, đang chờ người khác,
@@ -38,10 +38,14 @@ export function composeBrief(
   const nearMs = now.getTime() + 14 * 86_400_000;
   const todayWorthy = (t: Task) =>
     !t.dueAt || new Date(t.dueAt).getTime() <= nearMs || t.priority === "high" || Boolean(t.blocksOthers);
-  const in7d = now.getTime() + 7 * 86_400_000;
-  const deadlines7d = ranked.filter(
-    (t) => t.dueAt && new Date(t.dueAt).getTime() <= in7d && !t.waitingOn,
-  );
+  // Deadline 7 ngày tới (§5.3.3): theo NGÀY địa phương, từ hôm nay đến hết
+  // ngày thứ 7 — ĐẦY ĐỦ, không cắt bớt; quá hạn đã nằm ở Ưu tiên hôm nay.
+  const { start, end } = next7DaysRange(now);
+  const deadlines7d = ranked.filter((t) => {
+    if (!t.dueAt || t.waitingOn) return false;
+    const due = new Date(t.dueAt).getTime();
+    return due >= start && due <= end;
+  });
 
   const todayEvents = events
     .filter((e) => new Date(e.startAt).toDateString() === now.toDateString())

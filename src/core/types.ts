@@ -13,10 +13,6 @@ export interface Project {
   id: ProjectId;
   name: string;
   color: string;
-  /** Trọng số thời gian Mai đặt, tổng ≈ 1 (PRD §5.2). */
-  weight: number;
-  /** Mục tiêu giờ mỗi tuần, suy từ weight × quỹ giờ tuần. */
-  targetHoursPerWeek: number;
   goal?: string;
   /** Lưu trữ = ẩn khỏi Hôm nay/Dự án/review, giữ nguyên dữ liệu (§5.3.1). */
   status?: "active" | "archived";

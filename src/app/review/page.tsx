@@ -15,19 +15,28 @@ function isoWeek(d: Date): number {
   return Math.ceil(((t.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
 }
 
+/**
+ * Weekly review (PRD §5.10 v2.8): việc xong và việc trễ THEO SỐ ĐẾM —
+ * không so số giờ vì Mai không bấm giờ; dự án còn việc mà cả tuần không
+ * tiến triển được gọi tên riêng.
+ */
 export default function ReviewPage() {
   const mounted = useMounted();
   const { tasks, projects, dropTask, deferTask, delegateTask } = useStore();
 
   const now = mounted ? new Date() : null;
   const stats = useMemo(
-    () => (now ? weekStats(tasks, activeProjects(projects), now).filter((s) => s.targetHours > 0) : []),
+    () =>
+      now
+        ? weekStats(tasks, activeProjects(projects), now).filter(
+            (s) => s.doneCount > 0 || s.openCount > 0,
+          )
+        : [],
     [now, tasks, projects],
   );
+  const idle = stats.filter((s) => s.openCount > 0 && !s.progressed);
   const summary = now ? weekSummary(tasks, now) : { done: 0, deferred: 0 };
   const stuck = chronicallyDeferred(tasks);
-  const scale = Math.max(1, ...stats.map((s) => Math.max(s.doneHours, s.targetHours))) * 1.15;
-  const savedHours = Math.round(stuck.reduce((h, t) => h + (t.estMinutes ?? 60), 0) / 60);
 
   return (
     <main className="screen-body">
@@ -38,34 +47,37 @@ export default function ReviewPage() {
         </span>
       </div>
 
-      {stats.length > 0 && (
-        <>
-          <div className="bars">
-            {stats.map((s) => (
-              <div className="bar" key={s.project.id}>
-                <span>{s.project.name}</span>
-                <div className="track">
-                  <span
-                    style={{
-                      width: `${Math.min(100, (s.doneHours / scale) * 100)}%`,
-                      background: s.project.color,
-                    }}
-                  />
-                  <em style={{ left: `${Math.min(97, (s.targetHours / scale) * 100)}%` }} />
-                </div>
-                <span>{Math.round(s.doneHours * 10) / 10}h</span>
-              </div>
-            ))}
-          </div>
-          <p className="muted small">Vạch đậm là mục tiêu Mai đặt (trọng số × quỹ giờ tuần).</p>
-        </>
+      {stats.map((s) => (
+        <div className="row" key={s.project.id}>
+          <span className="dot" style={{ background: s.project.color }} />
+          <span className="t">
+            <b>{s.project.name}</b>
+            <span className="small muted">
+              {s.doneCount} xong tuần này
+              {s.lateCount > 0 && (
+                <span style={{ color: "var(--rose, #FF8FA3)", fontWeight: 600 }}>
+                  {" "}
+                  · {s.lateCount} đang trễ hạn
+                </span>
+              )}
+              {s.openCount > 0 && <> · {s.openCount} còn mở</>}
+            </span>
+          </span>
+        </div>
+      ))}
+
+      {idle.length > 0 && (
+        <div className="warn">
+          {idle.map((s) => s.project.name).join(", ")} tuần này chưa xong việc nào dù còn việc
+          đang mở. Muốn mình giữ một block deep work cho {idle[0].project.name} không?
+        </div>
       )}
 
       {stuck.length > 0 ? (
         <>
           <Bubble>
             Nói thẳng nhé: {stuck.length} việc dưới đây đã dời từ 3 lần trở lên. Bỏ hoặc giao đi
-            thì tuần sau nhẹ hơn khoảng {Math.max(1, savedHours)} tiếng.
+            thì tuần sau nhẹ đầu hơn hẳn.
           </Bubble>
           {stuck.map((t) => (
             <div className="row" key={t.id}>

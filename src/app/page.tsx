@@ -7,7 +7,7 @@ import { TaskRow } from "@/components/TaskRow";
 import { Blossom } from "@/components/Blossom";
 import { composeBrief } from "@/core/brief";
 import { activeProjects, projectById } from "@/core/projects";
-import { fmtRange, fmtRelativeDay, todayLabel } from "@/lib/format";
+import { fmtRange, fmtRelativeDay, isSameDay, todayLabel } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
 import { useGoogleEvents, useGoogleStatus } from "@/lib/useGoogle";
@@ -159,23 +159,58 @@ export default function TodayPage() {
         </>
       )}
 
-      {brief && brief.deadlines7d.length > 0 && (
-        <>
-          <div className="group-title">Deadline 7 ngày tới</div>
-          {brief.deadlines7d.slice(0, 5).map((t) => (
-            <div className="row" key={t.id}>
-              <span
-                className="dot"
-                style={{ background: projectById(projects, t.projectId).color }}
-              />
-              <span className="t">
-                <b>{t.title}</b>
-                <span className="small muted">{t.dueAt ? fmtRelativeDay(t.dueAt) : ""}</span>
-              </span>
+      {/* §5.3.3 v2.8: danh sách ĐẦY ĐỦ, tiêu đề có số đếm, nhóm theo ngày;
+          dài quá thì thu gọn phần sau bằng "Xem tất cả" — không âm thầm cắt. */}
+      {brief &&
+        brief.deadlines7d.length > 0 &&
+        (() => {
+          const sorted = [...brief.deadlines7d].sort(
+            (a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime(),
+          );
+          const groups: (typeof sorted)[] = [];
+          for (const t of sorted) {
+            const last = groups[groups.length - 1];
+            if (last && isSameDay(last[0].dueAt!, new Date(t.dueAt!))) last.push(t);
+            else groups.push([t]);
+          }
+          const head: (typeof sorted)[] = [];
+          const rest: (typeof sorted)[] = [];
+          let shown = 0;
+          for (const g of groups) {
+            if (shown < 8) {
+              head.push(g);
+              shown += g.length;
+            } else rest.push(g);
+          }
+          const dayLabel = (iso: string) => {
+            const s = fmtRelativeDay(iso);
+            return s.charAt(0).toUpperCase() + s.slice(1);
+          };
+          const renderGroup = (g: typeof sorted) => (
+            <div key={g[0].id}>
+              <div className="small muted" style={{ fontWeight: 700, marginTop: 4 }}>
+                {dayLabel(g[0].dueAt!)} ({g.length})
+              </div>
+              {g.map((t) => (
+                <TaskRow key={t.id} task={t} />
+              ))}
             </div>
-          ))}
-        </>
-      )}
+          );
+          return (
+            <>
+              <div className="group-title">Deadline 7 ngày tới ({brief.deadlines7d.length})</div>
+              {head.map(renderGroup)}
+              {rest.length > 0 && (
+                <details>
+                  <summary className="small muted" style={{ cursor: "pointer" }}>
+                    Xem tất cả ({brief.deadlines7d.length})
+                  </summary>
+                  {rest.map(renderGroup)}
+                </details>
+              )}
+            </>
+          );
+        })()}
 
       {mounted &&
         (() => {

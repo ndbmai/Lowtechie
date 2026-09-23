@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 2.6 — 22/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng; tạo lịch trong app → xem trước → book Google Calendar; kết nối Lark Mail, Lark Calendar và bot trong group chat Lark; chuỗi ngày bay đầy đủ hai đầu, chỉnh sửa được; sửa lỗi voice; xóa chuyến bay cũ; tự lưu vé PDF vào chuyến mới; sửa cảnh báo nửa đêm sai; cập nhật danh sách phương tiện; màn Lịch xem theo tháng, không giới hạn quá khứ/tương lai; lịch hẹn định kỳ dài hạn (gia hạn giấy tờ); tên khách hàng nhập một lần được lưu và gợi ý lại; mục ghi chú trong từng việc; nhắc đặt lịch trước với spa và các nơi cần booking; chạm để xem chi tiết việc, chỉ tick hoặc "Xong" mới đóng việc, mở lại việc cũ.*
+*Phiên bản 2.8 — 23/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng; tạo lịch trong app → xem trước → book Google Calendar; kết nối Lark Mail, Lark Calendar và bot trong group chat Lark; chuỗi ngày bay đầy đủ hai đầu, chỉnh sửa được; sửa lỗi voice; xóa chuyến bay cũ; tự lưu vé PDF vào chuyến mới; sửa cảnh báo nửa đêm sai; cập nhật danh sách phương tiện; màn Lịch xem theo tháng, không giới hạn quá khứ/tương lai; lịch hẹn định kỳ dài hạn (gia hạn giấy tờ); tên khách hàng nhập một lần được lưu và gợi ý lại; mục ghi chú trong từng việc; nhắc đặt lịch trước với spa và các nơi cần booking; chạm để xem chi tiết việc, chỉ tick hoặc "Xong" mới đóng việc, mở lại việc cũ; màn chi tiết dự án (category, việc, khách hàng); danh bạ khách hàng liên kết với việc nhập bằng voice và ảnh; bỏ mục tiêu giờ/tuần; nhiều tài khoản email và lịch.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -109,7 +109,7 @@ Mai gửi ảnh, Lowtechie tự trích danh sách việc.
 ### 5.2 Task engine
 - Trường dữ liệu: tiêu đề, dự án, người phụ trách, deadline (cứng/mềm), ưu tiên, trạng thái, ước lượng thời gian, nguồn (kênh + link/trích đoạn tin nhắn gốc), độ tin cậy.
 - **Triage inbox**: mọi task trích xuất tự động vào hàng chờ duyệt trước, swipe để nhận/sửa/bỏ. Task do Mai tự giao đi thẳng vào danh sách.
-- Ưu tiên tính theo: deadline, trọng số dự án (Mai đặt, ví dụ Sorene 40%, Circle 30%...), phụ thuộc (đang chặn người khác?), năng lượng cần (deep/shallow).
+- Ưu tiên tính theo: deadline, thứ tự ưu tiên dự án do Mai sắp xếp (5.3.1), phụ thuộc (đang chặn người khác?), năng lượng cần (deep/shallow).
 - Loại đặc biệt: **Waiting-on** (việc đã giao/đang chờ người khác, tự nhắc follow-up), **Routine** (học tiếng Thái hằng ngày, spa định kỳ), **Hard deadline hành chính** (thuế, gia hạn giấy tờ, báo cáo pháp lý), **Hẹn định kỳ dài hạn** (mỗi 3 tháng, mỗi năm; xem 5.4.0).
 
 ### 5.2.1 Kiểm tra trước khi lưu & phân loại thông minh
@@ -159,7 +159,7 @@ flowchart LR
 | Mâu thuẫn với việc/quyết định trước | Nêu rõ mâu thuẫn, để Mai chọn |
 | Việc đã xong (ô đã tick trong ảnh, đã báo xong trong chat) | Đánh dấu xong, không tạo việc mới |
 | Việc phụ thuộc việc khác | Gắn liên kết phụ thuộc |
-| Ưu tiên | Gợi ý theo hạn + trọng số dự án; Mai chỉnh được |
+| Ưu tiên | Gợi ý theo hạn + thứ tự dự án; Mai chỉnh được |
 
 **3b. Sửa phân loại ngay trong thẻ duyệt** (lỗi phát hiện khi thử bản prototype 22/9: thẻ duyệt chỉ có một danh sách cố định "Dự án · Category", không sửa hay tạo mới được, và không có chỗ ghi khách hàng)
 - Thẻ duyệt có **3 trường riêng**, sửa độc lập:
@@ -231,15 +231,49 @@ flowchart LR
 - Việc có hạn còn xa (ví dụ Event 30/10, còn 5 tuần) chỉ lên mục Ưu tiên hôm nay khi Mai đánh dấu ưu tiên cao hoặc khi có việc chuẩn bị cần làm hôm nay; mặc định mục này ưu tiên việc đến hạn sớm và hạn cứng.
 
 ### 5.3 Dự án
-- Mỗi dự án có: mục tiêu quý, trọng số thời gian, thành viên, kênh chat liên kết, file liên kết, decision log.
+- Mỗi dự án có: mục tiêu (dạng chữ, không bắt buộc), thành viên, kênh chat/email liên kết, khách hàng/đối tác, file liên kết, decision log.
+- **Không có mục tiêu giờ/tuần.** Bỏ hoàn toàn trường "h/tuần" và vòng tiến độ theo giờ: Mai không bấm giờ làm việc nên con số đó luôn bằng 0 và gây nhiễu (thấy rõ 22–23/9: mọi dự án hiện "0h / mục tiêu 12h"). Thay bằng số việc đang mở, quá hạn và đến hạn 7 ngày tới.
 - Dự án mặc định (khớp bảng category ở mục 5.2.1): Sorene, The Circle Technology, **Học tập**, Cá nhân, Admin chung. Đây chỉ là bộ khởi tạo; Mai toàn quyền thay đổi (mục 5.3.1).
-- **Học tập** là dự án riêng, có trọng số thời gian và mục tiêu riêng (ví dụ số buổi tiếng Thái mỗi tuần, chuỗi ngày học), hiện riêng trong màn Dự án và Weekly review.
+- **Học tập** là dự án riêng với mục tiêu riêng (ví dụ số buổi tiếng Thái mỗi tuần, chuỗi ngày học), hiện riêng trong màn Dự án và Weekly review.
+
+### 5.3.0 Màn chi tiết dự án
+Chạm vào một dự án trên màn Dự án (ví dụ Circle) → mở **màn chi tiết dự án**.
+
+**Phần đầu**
+- Tên, màu, vòng thời gian tuần này so với mục tiêu, số việc đang mở / quá hạn / đến hạn 7 ngày tới.
+- Nút nhanh: thêm việc vào dự án, book block làm việc cho dự án, mở Quản lý (sửa dự án).
+
+**Ba cách xem (chuyển bằng tab)**
+1. **Theo category** (mặc định): mỗi category là một nhóm thu gọn/mở rộng được, hiện số việc đang mở; bên trong là danh sách việc (tên, khách hàng, hạn, ưu tiên). Cuối mỗi nhóm có dòng "Đã xong (N)" thu gọn. Có ô "+ Thêm việc" ngay trong từng category (tự điền dự án và category).
+2. **Theo khách hàng / đối tác**: mỗi khách là một nhóm với các việc của họ; chạm tên khách → màn chi tiết khách hàng (5.3.2).
+3. **Theo hạn**: quá hạn → hôm nay → tuần này → sau đó → không hạn.
+
+**Trong danh sách việc**
+- Chạm vào việc → màn chi tiết việc (5.2.2); tick ở đầu dòng để đóng việc.
+- Kéo một việc sang category khác để chuyển category.
+- Lọc nhanh: của tôi / của cộng sự, có hạn / không hạn, ưu tiên cao.
+
+**Các phần khác trong màn dự án**
+- Lịch sắp tới của dự án (họp, block làm việc).
+- Decision log và recap họp gần nhất.
+- File liên quan (Drive, Lark).
+
+**Màn Dự án (tổng quan) — chỉ là lưới thư mục**
+- Màn này **chỉ gồm các ô dự án** (như thư mục) và nút Quản lý. **Bỏ danh sách "Việc đang mở (N)" ở phía dưới**, vì trùng với Hôm nay và Deadline 7 ngày tới (lỗi thấy 23/9).
+- Mỗi dự án là **một ô riêng**, kể cả **Cá nhân**, **Học tập**, **Admin chung** — mỗi cái một ô, chạm vào là mở danh sách việc bên trong. Lỗi thấy 22–23/9: ba dự án này bị gộp thành một dòng chữ và không chạm vào được.
+- Mỗi ô hiện: tên, màu, **số việc đang mở**, số việc quá hạn, số việc đến hạn trong 7 ngày. Không hiện giờ hay vòng tiến độ theo giờ.
 
 ### 5.3.1 Mai tự quản lý dự án & sub category
 Danh sách dự án và category không cố định. Mai tự thêm, sửa, sắp xếp bằng **chat, voice** hoặc trong màn **Dự án**.
 
+**Màn Quản lý dự án (sửa)**
+- Mỗi dự án: tên, màu, mục tiêu (chữ), Tạm ngưng, Xóa, danh sách category, **danh sách khách hàng & đối tác**.
+- **Bỏ ô "h/tuần"**.
+- **Khách hàng & đối tác:** ô "+ khách hàng" mở ra cho Mai gõ tên, chọn loại (khách hàng / đối tác / nhà cung cấp), thêm tên gọi khác; tên đã thêm hiện thành thẻ có nút sửa và xóa, giống các thẻ category. Thêm nhiều tên liên tiếp không phải đóng mở lại.
+- Chữ gợi ý trong ô không được cắt ngang ("+ khách hàng / đối t" → "+ khách hàng").
+
 **Với dự án**
-- Thêm mới: tên, màu, biểu tượng, trọng số thời gian/tuần, mục tiêu, thành viên, kênh chat/email liên kết, từ khóa nhận diện (tên khách hàng, đối tác).
+- Thêm mới: tên, màu, biểu tượng, mục tiêu (chữ), thành viên, kênh chat/email liên kết, từ khóa nhận diện.
 - Sửa bất kỳ thuộc tính nào ở trên; đổi tên thì mọi việc, tab Google Sheets và bộ lọc tự cập nhật theo.
 - **Lưu trữ** (tạm ngưng): ẩn khỏi Hôm nay và review, giữ nguyên dữ liệu, mở lại được bất cứ lúc nào.
 - **Xóa:** bắt buộc chọn việc còn mở sẽ chuyển sang dự án nào hoặc lưu trữ cùng; không bao giờ xóa việc âm thầm.
@@ -295,6 +329,16 @@ Ví dụ: *"Ký lại hợp đồng website"* → **Circle · Hợp đồng · K
 - **Tự điền:** nội dung việc có nhắc tên khách đã có trong danh bạ → ô khách hàng tự điền sẵn; Mai chỉ cần kiểm tra.
 - Tên đã lưu sửa hoặc gộp được ở màn Dự án (đổi tên thì mọi việc cũ cập nhật theo).
 
+**Liên kết danh bạ với việc nhập bằng voice và ảnh**
+- Mai thêm khách hàng / đối tác ở màn Quản lý dự án (ô "+ khách hàng / đối tác"), trong thẻ duyệt, hoặc bằng chat/voice ("thêm khách Đô Thị vào Circle").
+- Mỗi khách có thêm **tên gọi khác**: viết tắt, không dấu, tên tiếng Anh/Thái, tên người liên hệ (ví dụ "Đô Thị", "do thi", "ĐT", tên anh/chị phụ trách). Mai thêm được bất cứ lúc nào.
+- **Voice:** danh sách tên khách và tên gọi khác được đưa vào bước chuyển giọng nói thành chữ như từ vựng ưu tiên, để tên riêng được nghe đúng; sau đó so khớp gần đúng (không phân biệt hoa/thường, dấu, lỗi chính tả nhỏ) với danh bạ.
+- **Ảnh (chữ tay, bảng trắng, chụp màn hình):** chữ đọc được từ ảnh cũng so khớp gần đúng với danh bạ, kể cả viết tắt Mai đã khai báo.
+- **Kết quả trên thẻ duyệt:** ô Khách hàng tự điền, kèm dòng nhỏ cho biết nhận ra từ đâu (ví dụ *nhận từ "đô thị" trong câu nói*), để Mai kiểm tra nhanh.
+- **Không chắc** (khớp nhiều khách hoặc độ khớp thấp) → hiện 2 lựa chọn gần nhất để Mai chọn một chạm; **tên lạ trông giống khách hàng** → gợi ý "Tạo khách hàng mới?".
+- Mỗi lần Mai sửa ô khách hàng trên thẻ duyệt, cách viết/cách nói đó được thêm vào tên gọi khác của khách, để lần sau nhận đúng.
+- Lỗi hiển thị thấy 22/9: chữ gợi ý trong ô "+ khách hàng / đối tác" bị cắt thành "+ khách hàng / đối t"; ô phải đủ rộng hoặc dùng chữ ngắn hơn ("+ khách hàng").
+
 **Nhận diện tự động**
 - Khi trích việc, Lowtechie so tên trong nội dung với danh bạ (kể cả tên gọi tắt) để điền khách hàng.
 - Gặp tên chưa có trong danh bạ → đề xuất "Tạo khách hàng mới 'Đô thị' cho Circle?" thay vì bỏ trống hoặc đoán.
@@ -340,6 +384,36 @@ Mai tạo lịch bằng chat, voice hoặc form trong app (ví dụ *"Thứ Năm
 - **Đồng bộ hai chiều:** Mai sửa hay xóa sự kiện trực tiếp trên Google Calendar → app cập nhật theo, và chuỗi block chuẩn bị/di chuyển tự dời hoặc hỏi lại.
 - Sửa sự kiện đã book cũng đi qua thẻ xem trước, chỉ hiện phần thay đổi (trước → sau).
 - **Tự động dần:** Mai có thể bật "book thẳng, báo sau" cho từng loại lịch không mời ai (ví dụ block học tiếng Thái, spa định kỳ). Mặc định luôn hỏi.
+
+### 5.3.3 Danh sách "Deadline 7 ngày tới" và "Ưu tiên hôm nay" phải đầy đủ
+Lỗi thấy 23/9: màn Hôm nay hiện thiếu việc so với danh sách việc trong màn Dự án.
+- **Một nguồn dữ liệu duy nhất:** mọi danh sách (Hôm nay, Deadline 7 ngày tới, Dự án, chi tiết dự án) đọc từ cùng một truy vấn việc đang mở; không màn nào giữ bản sao riêng.
+- **Không giới hạn cứng số dòng.** Nếu danh sách dài, nhóm theo ngày (Hôm nay · Ngày mai · Thứ Năm…) và thu gọn phần sau với dòng "Xem tất cả (N)", chứ không âm thầm cắt bớt.
+- **Tiêu đề có số đếm:** "Deadline 7 ngày tới (N)" để Mai biết ngay khi thiếu.
+- Khoảng thời gian tính theo **ngày địa phương**: từ hôm nay đến hết ngày thứ 7 tính từ hôm nay.
+- Việc không có hạn không lên danh sách này; chúng nằm trong màn Dự án và mục "Không hạn".
+- **Test:** số việc trong "Deadline 7 ngày tới" phải đúng bằng số việc đang mở có hạn trong khoảng đó khi lọc ở màn Dự án; thử với 20+ việc cùng hạn "ngày mai".
+
+### 5.3.4 Kết nối nhiều tài khoản (Google và Lark)
+Mai dùng song song nhiều hộp thư và lịch: Gmail công việc (mai@sorene.ai), Gmail cá nhân, và email The Circle trên Lark. App phải kết nối **nhiều tài khoản cùng lúc**, không phải chọn một.
+
+**Màn Kết nối**
+- Danh sách tài khoản đã kết nối, mỗi dòng: biểu tượng nhà cung cấp (Google / Lark), địa chỉ email, và những gì đang bật: **Lịch · Mail · Drive**.
+- Nút **Thêm tài khoản** → chọn Google hoặc Lark → đăng nhập. Thêm được không giới hạn số tài khoản Google.
+- Mỗi tài khoản: bật/tắt từng phần, **Kết nối lại** khi phiên đăng nhập hết hạn, **Ngắt kết nối** (hỏi rõ dữ liệu đã lưu sẽ giữ hay xóa).
+- Trạng thái đồng bộ: lần đồng bộ gần nhất, lỗi nếu có.
+
+**Lịch**
+- Dưới mỗi tài khoản là danh sách lịch con (lịch chính, lịch nhóm, lịch đã đăng ký) với ô bật/tắt hiển thị.
+- **Tất cả lịch đang bật đều được tính khi kiểm tra bận/rảnh**, kể cả lịch chỉ xem.
+- **Lịch đích mặc định theo dự án:** ví dụ Circle → lịch Lark của The Circle, Sorene → mai@sorene.ai, Cá nhân → Gmail cá nhân. Thẻ xem trước (5.4) luôn hiện lịch đích và cho đổi.
+- Màu sự kiện theo dự án; có thể bật thêm dấu nhỏ cho biết sự kiện thuộc tài khoản nào.
+- Cùng một sự kiện xuất hiện ở hai tài khoản (do được mời chéo) → nhận ra là một, không đếm trùng.
+
+**Mail**
+- Quét vé máy bay, xác nhận đặt chỗ, email khách hàng **trên tất cả hộp thư đã kết nối**; kết quả ghi rõ đến từ hộp thư nào.
+- Soạn thư trả lời: mặc định gửi từ hộp thư đã nhận thư đó; Mai đổi được trước khi gửi.
+- Lọc theo tài khoản ở mọi nơi có kết quả từ email.
 
 ### 5.4.0 Màn Lịch: xem theo ngày, tuần, tháng — không giới hạn thời gian
 - **Chế độ xem:** Ngày · Tuần · **Tháng** · Danh sách (các sự kiện sắp tới, cuộn liên tục). Mai chọn chế độ mặc định; app nhớ chế độ lần trước.
@@ -660,7 +734,7 @@ Chuỗi đầy đủ gồm các block theo đúng thứ tự thời gian:
 ### 5.10 Briefing & review
 - **Brief sáng** (qua app + đẩy sang Zalo/WhatsApp/Telegram): lịch, top 3, chờ người khác, deadline 7 ngày.
 - **Shutdown tối**: việc xong, việc dời, nhắc chuẩn bị cho mai.
-- **Weekly review**: thời gian theo dự án vs trọng số mục tiêu, việc trễ, đề xuất cắt/hoãn, cam kết chưa ai giữ.
+- **Weekly review**: việc đã xong và việc trễ theo dự án, dự án không có tiến triển trong tuần, đề xuất cắt/hoãn, cam kết chưa ai giữ. (Không so sánh số giờ, vì Mai không bấm giờ.)
 
 ## 6. UX/UI
 
@@ -682,7 +756,9 @@ Thanh điều hướng 5 mục: **Hôm nay** · **Dự án** · **Bông mai** (g
 | Hôm nay | Biết ngay nên làm gì | Lời chào + một đề xuất có nút bấm, top 3, việc chờ người khác, lịch trong ngày |
 | Giao việc | Nói một câu thành nhiều việc | Sóng âm, lời chép trực tiếp, thẻ việc đã tách, Lưu cả hai / Sửa |
 | Hộp duyệt | Kiểm soát việc tự trích | Thẻ vuốt (bỏ / sửa / nhận), nguồn, trích dẫn gốc, độ chắc chắn |
-| Dự án | Thấy phân bổ thời gian | Vòng tiến độ thời gian thật so với mục tiêu, cảnh báo dự án bị bỏ đói |
+| Dự án | Thấy phân bổ thời gian | Vòng tiến độ thời gian thật so với mục tiêu, cảnh báo dự án bị bỏ đói; mỗi dự án một ô |
+| Chi tiết dự án | Xem mọi việc bên trong | Tab Theo category / Theo khách hàng / Theo hạn, thêm việc ngay trong category, lịch và decision log của dự án |
+| Kết nối | Quản lý tài khoản | Danh sách tài khoản Google/Lark, bật tắt Lịch · Mail · Drive, chọn lịch đích theo dự án |
 | Lịch | Xem và đặt giờ có kiểm soát | Chế độ Ngày / Tuần / Tháng / Danh sách, cuộn không giới hạn quá khứ và tương lai, tìm kiếm toàn bộ lịch; 3 khung đề xuất kèm lý do khi đặt giờ |
 | Họp | Ghi và recap | Thanh ghi âm, recap 4 phần, Lưu việc / Gửi recap |
 | Chuyến đi | Không quên gì khi bay | Checklist tick được theo điểm đến, việc trước khi bay theo mốc, chuỗi lịch ngày bay |
@@ -733,7 +809,7 @@ flowchart LR
   A[Brief sáng] --> B[Nhắc việc chờ người khác] --> C[Shutdown tối]
   C --> D[Chủ nhật: weekly review]
   D --> E[Mai quyết bỏ / giao / hoãn]
-  E --> F[Khóa lịch tuần mới theo trọng số dự án]
+  E --> F[Khóa lịch tuần mới theo thứ tự ưu tiên dự án]
 ```
 
 ### 6.5 Nguyên tắc UX
@@ -769,7 +845,7 @@ Ghi chú lựa chọn:
 - `projects` (id, name, weight, goal, members, linked_channels)
 - `projects` bổ sung: color, icon, sort_order, keywords, status (active / archived)
 - `categories` (id, project_id, name, sort_order, is_default, status)
-- `clients` (id, sort_order, name, name_normalized, last_used_at, use_count, type: khách hàng/đối tác/nhà cung cấp, aliases, contacts, status, linked_channels, notes)
+- `clients` (id, sort_order, name, name_normalized, aliases (tên gọi khác, học thêm từ các lần Mai sửa), last_used_at, use_count, type: khách hàng/đối tác/nhà cung cấp, aliases, contacts, status, linked_channels, notes)
 - `client_projects` (client_id, project_id)
 - `tasks` bổ sung: client_id, due_date, due_time (tùy chọn), due_type (cứng / mềm / không hạn), due_source (từ nguồn / Mai điền), due_quote
 - `recurring_series` (title, interval: weeks/months/years/days, interval_count, anchor_date, recalc_from_actual, reminder_offsets, prep_checklist_template_id, project_id, category_id, is_hard)
@@ -782,7 +858,8 @@ Ghi chú lựa chọn:
 - `tasks` (id, project_id, category_id, title, owner_id, assignee_id, due_at, due_type, priority, status, est_minutes, energy, source_channel, source_ref, source_quote, confidence, visibility)
 - `waiting_on` (task_id, person_id, follow_up_at)
 - `routines` (title, rrule, project_id)
-- `connected_accounts` (provider: google/lark, scopes, calendars, mailbox)
+- `connected_accounts` (provider: google/lark, email, scopes, enabled_parts: calendar/mail/drive, status, last_sync_at)
+- `calendars` (account_id, calendar_id, name, visible, is_default_for_project_ids)
 - `chat_groups` (provider: lark/zalo/whatsapp, group_id, name, mode: mention_only/read_all, project_id, client_id, consent_noted_at)
 - `events` (calendar_event_id, provider, calendar_id, task_id, project_id, client_id, status: draft/booked/cancelled, invites_sent, chain_block_ids, booked_at)
 - `messages_ingested` (channel, group_id, sender, text, ts, processed)

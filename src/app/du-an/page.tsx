@@ -1,47 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { mostStarved, weekStats } from "@/core/stats";
-import { rankTasks } from "@/core/priority";
+import { projectCounts } from "@/core/stats";
 import { activeProjects } from "@/core/projects";
-import { TaskRow } from "@/components/TaskRow";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
 
-function Ring({ ratio, color }: { ratio: number; color: string }) {
-  const pct = Math.max(0, Math.min(1, ratio)) * 100;
-  return (
-    <svg viewBox="0 0 36 36" width={46} height={46} aria-hidden="true">
-      <circle cx="18" cy="18" r="15" fill="none" stroke="var(--line)" strokeWidth="5" />
-      <circle
-        cx="18"
-        cy="18"
-        r="15"
-        fill="none"
-        stroke={color}
-        strokeWidth="5"
-        strokeDasharray={`${pct} 100`}
-        pathLength={100}
-        transform="rotate(-90 18 18)"
-        strokeLinecap={pct > 0 && pct < 100 ? "round" : undefined}
-      />
-    </svg>
-  );
-}
-
+/**
+ * Màn Dự án (§5.3.0 v2.8): CHỈ là lưới ô dự án như thư mục — mỗi dự án
+ * một ô chạm được (kể cả Cá nhân, Học tập, Admin chung), mở màn chi
+ * tiết bên trong. Không vòng giờ, không danh sách việc ở đây (trùng
+ * với Hôm nay — lỗi thấy 23/9).
+ */
 export default function ProjectsPage() {
   const mounted = useMounted();
   const { tasks, projects } = useStore();
-
-  const stats = useMemo(
-    () => (mounted ? weekStats(tasks, activeProjects(projects), new Date()) : []),
-    [mounted, tasks, projects],
-  );
-  const starved = mostStarved(stats);
-  const weighted = stats.filter((s) => s.targetHours > 0);
-  const personal = stats.filter((s) => s.targetHours === 0);
-  const openTasks = mounted ? rankTasks(tasks, projects, new Date()) : [];
+  const live = activeProjects(projects);
+  const now = mounted ? new Date() : null;
 
   return (
     <main className="screen-body">
@@ -53,88 +28,37 @@ export default function ProjectsPage() {
       </div>
 
       <div className="pgrid">
-        {weighted.map((s) => (
-          <div className="proj" key={s.project.id}>
-            <Ring ratio={s.ratio} color={s.project.color} />
-            <b>{s.project.name}</b>
-            <span className="small muted">
-              {Math.round(s.doneHours * 10) / 10}h / mục tiêu {s.targetHours}h
-            </span>
-          </div>
-        ))}
+        {live.map((p) => {
+          const c = now ? projectCounts(tasks, p.id, now) : { open: 0, overdue: 0, due7d: 0 };
+          return (
+            <Link
+              key={p.id}
+              href={`/du-an/${p.id}`}
+              className="proj"
+              style={{
+                textDecoration: "none",
+                color: "inherit",
+                borderTop: `4px solid ${p.color}`,
+                display: "block",
+              }}
+            >
+              <b>{p.name}</b>
+              <span className="small muted" style={{ display: "block" }}>
+                {c.open} việc đang mở
+              </span>
+              <span className="small" style={{ display: "block", minHeight: 18 }}>
+                {c.overdue > 0 && (
+                  <span style={{ color: "var(--rose, #FF8FA3)", fontWeight: 600 }}>
+                    {c.overdue} quá hạn
+                  </span>
+                )}
+                {c.overdue > 0 && c.due7d > 0 && <span className="muted"> · </span>}
+                {c.due7d > 0 && <span className="muted">{c.due7d} hạn 7 ngày</span>}
+              </span>
+            </Link>
+          );
+        })}
       </div>
-
-      {starved && starved.ratio < 0.5 && (
-        <div className="warn">
-          {starved.project.name} mới được {Math.round(starved.doneHours * 10) / 10}h trên mục tiêu{" "}
-          {starved.targetHours}h tuần này. Muốn mình giữ một block deep work cho{" "}
-          {starved.project.name} không? Bấm bông mai và nói &ldquo;book 2 tiếng cho{" "}
-          {starved.project.name}&rdquo; là xong.
-        </div>
-      )}
-
-      {personal.length > 0 && (
-        <div className="row">
-          <span className="dot" style={{ background: "var(--p-me)" }} />
-          <span className="t">
-            <b>Cá nhân · Học tập · Admin chung</b>
-            <span className="muted small">
-              không tính trọng số — tiếng Thái, spa, thuế, hóa đơn nằm ở đây
-            </span>
-          </span>
-        </div>
-      )}
-
-      {openTasks.length > 0 && (
-        <>
-          <div className="group-title">Việc đang mở ({openTasks.length})</div>
-          {openTasks.slice(0, 12).map((t) => (
-            <TaskRow key={t.id} task={t} />
-          ))}
-        </>
-      )}
-
-      {mounted && <DoneSection />}
     </main>
-  );
-}
-
-/** Việc đã xong không mất — xem lại, lọc theo thời gian, mở lại (5.2.2). */
-function DoneSection() {
-  const tasks = useStore((s) => s.tasks);
-  const [range, setRange] = useState<"week" | "month" | "all">("week");
-  const done = useMemo(() => {
-    const cutoff =
-      range === "all"
-        ? 0
-        : Date.now() - (range === "week" ? 7 : 31) * 86_400_000;
-    return tasks
-      .filter((t) => t.status === "done" && (t.completedAt ? Date.parse(t.completedAt) >= cutoff : range === "all"))
-      .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
-  }, [tasks, range]);
-
-  if (!tasks.some((t) => t.status === "done")) return null;
-  return (
-    <details style={{ marginTop: 8 }}>
-      <summary className="group-title" style={{ cursor: "pointer" }}>
-        Đã xong ({done.length})
-      </summary>
-      <div style={{ display: "flex", gap: 6, margin: "6px 0" }}>
-        {(
-          [
-            ["week", "Tuần này"],
-            ["month", "Tháng này"],
-            ["all", "Tất cả"],
-          ] as const
-        ).map(([id, label]) => (
-          <button key={id} className="btn small" aria-pressed={range === id} onClick={() => setRange(id)}>
-            {label}
-          </button>
-        ))}
-      </div>
-      {done.slice(0, 30).map((t) => (
-        <TaskRow key={t.id} task={t} showDue={false} />
-      ))}
-    </details>
   );
 }

@@ -28,7 +28,6 @@ import {
 import {
   DEFAULT_CATEGORIES,
   DEFAULT_PROJECTS,
-  WEEKLY_CAPACITY_HOURS,
   fallbackProjectId,
   makeCategoryId,
   makeProjectId,
@@ -170,7 +169,7 @@ interface LowtechieState {
   addProject: (name: string, color: string) => Project | null;
   updateProject: (
     id: ProjectId,
-    patch: Partial<Pick<Project, "name" | "color" | "targetHoursPerWeek" | "goal" | "status">>,
+    patch: Partial<Pick<Project, "name" | "color" | "goal" | "status">>,
   ) => void;
   /** Xóa dự án: Mai CHỌN việc còn mở chuyển sang dự án nào (§5.3.1). */
   deleteProject: (id: ProjectId, moveTo: ProjectId) => void;
@@ -680,8 +679,6 @@ export const useStore = create<LowtechieState>()(
           id: makeProjectId(trimmed, get().projects),
           name: trimmed,
           color,
-          weight: 0,
-          targetHoursPerWeek: 0,
         };
         // Mục mới vào CUỐI danh sách — Mai kéo lên nếu muốn (§5.3.1).
         set((s) => ({ projects: [...s.projects, p] }));
@@ -695,10 +692,6 @@ export const useStore = create<LowtechieState>()(
                   ...p,
                   ...patch,
                   name: (patch.name ?? p.name).trim().slice(0, 40) || p.name,
-                  weight:
-                    patch.targetHoursPerWeek !== undefined
-                      ? patch.targetHoursPerWeek / WEEKLY_CAPACITY_HOURS
-                      : p.weight,
                 }
               : p,
           ),

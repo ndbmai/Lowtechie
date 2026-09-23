@@ -5,9 +5,15 @@ import { Blossom } from "@/components/Blossom";
 import { DueEditor } from "@/components/DueEditor";
 import { SearchSelect, type PickOption } from "@/components/SearchSelect";
 import { CONFIDENCE_THRESHOLD, learnableTerms } from "@/core/classify";
-import { clientsFor, findClientByName, orderClientsForPick } from "@/core/clients";
+import {
+  clientsFor,
+  findClientByName,
+  matchClientDetail,
+  orderClientsForPick,
+  withLearnedAlias,
+} from "@/core/clients";
 import { activeProjects, categoriesFor, categoryName, projectById, PROJECT_COLORS } from "@/core/projects";
-import type { DueType, ProjectId, SourceChannel } from "@/core/types";
+import type { Client, DueType, ProjectId, SourceChannel } from "@/core/types";
 import { fmtDayFull, fmtDayTime } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
 import { useStore } from "@/lib/store";
@@ -24,6 +30,15 @@ const CHANNEL_LABELS: Record<SourceChannel, string> = {
 };
 
 const CLIENT_TYPE_LABELS = { khachhang: "khách hàng", doitac: "đối tác", nhacungcap: "nhà cung cấp" };
+
+/**
+ * Cách viết/cách nói Mai vừa dùng cho một khách ĐÃ CÓ → thêm vào tên gọi
+ * khác để lần sau voice/ảnh nhận đúng (§5.3.2 v2.8).
+ */
+function learnAlias(c: Client, typed: string) {
+  const aliases = withLearnedAlias(c, typed);
+  if (aliases) useStore.getState().updateClient(c.id, { aliases });
+}
 
 export default function TriagePage() {
   const mounted = useMounted();
@@ -118,6 +133,7 @@ export default function TriagePage() {
     let finalClient = clientId;
     if (!finalClient && clientQuery.trim()) {
       const found = findClientByName(clients, clientQuery);
+      if (found) learnAlias(found, clientQuery);
       finalClient = found?.id ?? useStore.getState().addClient(clientQuery, projectId)?.id;
     }
     if (finalClient) useStore.getState().touchClient(finalClient);
@@ -202,6 +218,11 @@ export default function TriagePage() {
   const topClient = top?.draft.clientId
     ? clients.find((c) => c.id === top.draft.clientId)
     : undefined;
+  // Dòng nhỏ cho biết nhận ra khách từ đâu (§5.3.2 v2.8) — Mai soát nhanh.
+  const clientHit =
+    top && topClient
+      ? matchClientDetail(`${top.draft.title} ${top.draft.source.quote ?? ""}`, [topClient])
+      : undefined;
 
   return (
     <main className="screen-body">
@@ -286,7 +307,9 @@ export default function TriagePage() {
                     emptyLabel="Giữ như từng thẻ"
                     onPick={setGClient}
                     onCreate={(name) => {
-                      const c = addClient(name, gProject ?? top.draft.projectId);
+                      const existing = findClientByName(clients, name);
+                      if (existing) learnAlias(existing, name);
+                      const c = existing ?? addClient(name, gProject ?? top.draft.projectId);
                       if (c) setGClient(c.id);
                     }}
                   />
@@ -370,7 +393,9 @@ export default function TriagePage() {
                   onPick={setClientId}
                   onQueryChange={setClientQuery}
                   onCreate={(name) => {
-                    const c = findClientByName(clients, name) ?? addClient(name, projectId);
+                    const existing = findClientByName(clients, name);
+                    if (existing) learnAlias(existing, name);
+                    const c = existing ?? addClient(name, projectId);
                     if (c) setClientId(c.id);
                   }}
                 />
@@ -426,7 +451,11 @@ export default function TriagePage() {
                     <span className="muted"> · {categoryName(categories, top.draft.categoryId)}</span>
                   )}
                   {topClient && (
-                    <span className="muted"> · {topClient.name}</span>
+                    <span className="muted">
+                      {" "}
+                      · {topClient.name}
+                      {clientHit && <> (nhận từ &ldquo;{clientHit.term}&rdquo;)</>}
+                    </span>
                   )}
                   {top.draft.assignee && top.draft.assignee !== "mai" && (
                     <>
