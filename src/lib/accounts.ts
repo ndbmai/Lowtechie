@@ -31,6 +31,8 @@ export interface LarkLink {
   /** Refresh token của Lark — MỖI LẦN refresh Lark cấp cái mới (xoay vòng). */
   rt: string;
   email?: string;
+  /** open_id của người dùng trong app — bot nhận ra Mai (chủ bot) nhờ id này. */
+  openId?: string;
   parts?: AccountParts;
 }
 

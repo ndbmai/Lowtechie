@@ -59,6 +59,17 @@ export interface GcalEvent extends Omit<CalEvent, "id" | "kind"> {
   account?: string;
   accountEmail?: string;
   provider?: "google" | "lark";
+  /** Màn chi tiết sự kiện (§5.4.0 v3.7). */
+  calendarId?: string;
+  calendarName?: string;
+  /** Lịch chỉ xem / Mai chỉ là khách mời → không cho sửa/xóa. */
+  readOnly?: boolean;
+  /** Sự kiện lặp: id của cả chuỗi. */
+  seriesId?: string;
+  attendees?: string[];
+  meetUrl?: string;
+  openUrl?: string;
+  description?: string;
 }
 
 // ── Nhiều tài khoản (§5.3.4) ────────────────────────────────────────────
@@ -218,7 +229,7 @@ export function useGoogleEvents(fromMs: number, toMs: number, enabled: boolean) 
  * Trả về id sự kiện + tài khoản đã ghi để lưu kèm block (xóa đúng nơi).
  */
 export async function createGcalEvent(
-  ev: { title: string; startAt: string; endAt: string; description?: string },
+  ev: { title: string; startAt: string; endAt: string; description?: string; location?: string },
   accountId?: string,
 ): Promise<{ gcalId: string; accountId?: string } | null> {
   try {
@@ -235,12 +246,51 @@ export async function createGcalEvent(
   }
 }
 
-export async function deleteGcalEvent(gcalId: string, account?: string): Promise<void> {
+export async function deleteGcalEvent(
+  gcalId: string,
+  account?: string,
+  opts: { calendar?: string; notify?: boolean } = {},
+): Promise<boolean> {
   try {
-    const q = account ? `?account=${encodeURIComponent(account)}` : "";
-    await fetch(`/api/calendar/events/${encodeURIComponent(gcalId)}${q}`, { method: "DELETE" });
+    const p = new URLSearchParams();
+    if (account) p.set("account", account);
+    if (opts.calendar) p.set("calendar", opts.calendar);
+    if (opts.notify) p.set("notify", "1");
+    const q = p.toString() ? `?${p}` : "";
+    const res = await fetch(`/api/calendar/events/${encodeURIComponent(gcalId)}${q}`, { method: "DELETE" });
+    return res.ok;
   } catch {
     /* xóa lỗi thì Mai xóa tay trên lịch, block local vẫn gỡ */
+    return false;
+  }
+}
+
+/**
+ * Sửa/dời sự kiện trên lịch ngoài (§5.4.0 v3.7) — gọi SAU khi Mai xem thẻ
+ * trước → sau và bấm Lưu. `notify` chỉ bật khi Mai đã xác nhận riêng.
+ */
+export async function patchGcalEvent(
+  gcalId: string,
+  patch: {
+    account?: string;
+    calendarId?: string;
+    title?: string;
+    startAt?: string;
+    endAt?: string;
+    location?: string;
+    description?: string;
+    notify?: boolean;
+  },
+): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/calendar/events/${encodeURIComponent(gcalId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -357,7 +407,9 @@ export interface RouteResult {
 }
 
 export async function fetchRoute(params: {
-  origin: string;
+  origin?: string;
+  /** Vị trí hiện tại (§5.4.3) — chỉ gửi cho lần tính này. */
+  originLatLng?: { lat: number; lng: number };
   destination: string;
   /** "bike" = xe máy: server dùng chế độ hai bánh, không có thì lái xe. */
   mode: "transit" | "drive" | "bike";

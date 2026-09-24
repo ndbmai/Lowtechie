@@ -24,12 +24,38 @@ const TOOL_SCHEMA = {
         items: {
           type: "object",
           properties: {
-            kind: { type: "string", enum: ["task", "event", "reschedule", "note", "complete"] },
+            kind: {
+              type: "string",
+              enum: [
+                "task",
+                "event",
+                "reschedule",
+                "note",
+                "complete",
+                "book_task",
+                "delete_event",
+                "booked",
+                "location",
+                "research",
+              ],
+            },
             title: { type: "string", description: "Tiêu đề việc/sự kiện (kind=task|event)" },
             what: {
               type: "string",
-              description: "Tên việc/lịch nhắm tới (kind=reschedule|note|complete)",
+              description:
+                "Tên việc/lịch nhắm tới (kind=reschedule|note|complete|book_task|delete_event|booked) — KHÔNG kèm ngày giờ",
             },
+            day: {
+              type: "string",
+              description:
+                "ISO ngày Mai dùng để chỉ ĐÚNG lịch/việc ('cắt tóc thứ Sáu' → thứ Sáu) hoặc ngày muốn book (book_task)",
+            },
+            keepDate: {
+              type: "boolean",
+              description: "reschedule: Mai chỉ nói GIỜ mới, không nói ngày → true (giữ ngày của lịch cũ)",
+            },
+            city: { type: "string", enum: ["bkk", "hcmc", "tokyo"], description: "kind=location" },
+            query: { type: "string", description: "kind=research: câu cần tìm hiểu, bỏ phần 'lưu vào…'" },
             text: { type: "string", description: "Nội dung ghi chú (kind=note)" },
             projectId: {
               type: "string",
@@ -69,7 +95,7 @@ const TOOL_SCHEMA = {
 function systemPrompt(localNow: string, tzName: string, taxonomy: TaxonomyPayload): string {
   return `Bạn là bộ tách lệnh của Mai Lowtechie — trợ lý của Mai (founder ở Bangkok, nói tiếng Việt/Thái/Anh trộn).
 Bây giờ ở chỗ Mai là ${localNow} (múi giờ ${tzName}). Dùng mốc này cho "ngày mai", "thứ Ba tuần sau"…; mọi ISO trả về phải kèm đúng offset múi giờ này.
-Tách câu của Mai thành các hành động: task (việc, có projectId + categoryId + dueAt nếu nói), event (hẹn/họp/bay/block deep work; kèm startAt hoặc durationMinutes, location, mode nếu Mai nói "đi tàu"/"ô tô"), reschedule (dời lịch; keepTime=true khi chỉ nói ngày mới), note ("ghi chú cho việc X: …" → what=tên việc ĐÃ CÓ, text=nội dung — không tạo việc mới), complete ("xong việc X rồi" → what=tên việc; app sẽ hiện thẻ xác nhận trước khi đóng).
+Tách câu của Mai thành các hành động: task (việc, có projectId + categoryId + dueAt nếu nói), event (hẹn/họp/bay/block deep work; kèm startAt hoặc durationMinutes, location, mode nếu Mai nói "đi tàu"/"ô tô"), reschedule (dời lịch/việc ĐÃ CÓ; what=tên KHÔNG kèm ngày; ngày dùng để chỉ đúng lịch → day; keepTime=true khi chỉ nói ngày mới; keepDate=true khi chỉ nói giờ mới — "dời cắt tóc thứ Sáu sang 17:00" → what="cắt tóc", day=thứ Sáu, toWhen=thứ Sáu 17:00), note ("ghi chú cho việc X: …" → what=tên việc ĐÃ CÓ, text=nội dung — không tạo việc mới), complete ("xong việc X rồi" → what=tên việc; app sẽ hiện thẻ xác nhận trước khi đóng), book_task ("book 2 tiếng cho việc pitch deck thứ Năm" → what=tên việc ĐÃ CÓ, durationMinutes, day — app đề xuất khung giờ), delete_event ("xóa lịch tarot" → what, day nếu nói; app luôn hỏi xác nhận), booked ("spa thứ Năm đặt rồi" → what, day — đánh dấu đã đặt chỗ), location ("chị đang ở HCMC" → city bkk|hcmc|tokyo), research ("tìm giúp chị…", "so sánh…", "chuẩn bị hồ sơ về…" → query + projectId nếu Mai nói "lưu vào dự án X").
 Tiêu đề việc bắt đầu bằng động từ rõ ràng ("Gửi báo giá cho OKR", không phải "báo giá OKR").
 Dự án, category và danh bạ khách CỦA MAI (chỉ dùng đúng các id này, Mai tự quản danh sách):
 ${taxonomyText(taxonomy)}

@@ -461,7 +461,7 @@ export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const id = decodeURIComponent(typeof params.id === "string" ? params.id : "");
   const router = useRouter();
-  const { tasks, projects, categories, clients, events, setPendingBlock, setProjectView } =
+  const { tasks, projects, categories, clients, events, research, setPendingBlock, setProjectView, deleteResearch } =
     useStore();
   const groupBy = useStore((s) => s.settings.projectGroupBy);
   const filter = useStore((s) => s.settings.projectFilter);
@@ -675,6 +675,47 @@ export default function ProjectDetailPage() {
           })}
         </>
       )}
+
+      {/* §5.9.1 v3.7: nghiên cứu đã lưu vào dự án (hoặc khách của dự án) — luôn kèm nguồn. */}
+      {(() => {
+        const mine = research.filter(
+          (r) =>
+            r.projectId === project.id ||
+            (r.clientId && clients.find((c) => c.id === r.clientId)?.projectIds.includes(project.id)),
+        );
+        if (mine.length === 0) return null;
+        return (
+          <details>
+            <summary className="group-title" style={{ cursor: "pointer" }}>
+              🔎 Nghiên cứu đã lưu ({mine.length})
+            </summary>
+            {mine.map((r) => (
+              <div key={r.id} className="card small" style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <b>{r.query}</b>
+                <span>{r.summary}</span>
+                {r.uncertain && <span className="muted">⚠ Chưa chắc: {r.uncertain}</span>}
+                <span className="muted">
+                  Nguồn (truy cập {new Date(r.accessedAt).toLocaleDateString("vi-VN")}):{" "}
+                  {r.sources.slice(0, 5).map((src, i) => (
+                    <a key={src.url} href={src.url} target="_blank" rel="noreferrer" style={{ marginRight: 6 }}>
+                      [{i + 1}]
+                    </a>
+                  ))}
+                </span>
+                <button
+                  className="btn ghost small"
+                  style={{ alignSelf: "flex-start" }}
+                  onClick={() => {
+                    if (window.confirm(`Xóa nghiên cứu “${r.query}”?`)) deleteResearch(r.id);
+                  }}
+                >
+                  Xóa
+                </button>
+              </div>
+            ))}
+          </details>
+        );
+      })()}
     </main>
   );
 }

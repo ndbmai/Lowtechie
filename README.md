@@ -4,7 +4,7 @@ Trợ lý AI chief-of-staff cá nhân cho Mai — người vận hành song song
 
 Tài liệu gốc:
 
-- [PRD v3.2](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
+- [PRD v3.7](docs/PRD.md) — yêu cầu sản phẩm đầy đủ
 - [Mockup UI & user flow](docs/prototypes/mai-lowtechie-ui.html) — hệ thống thiết kế + 7 màn hình
 - [Checklist bay](docs/prototypes/checklist-bay.html) — nguyên mẫu module Chuyến đi (§5.9)
 
@@ -97,9 +97,15 @@ Giai đoạn 1 — MVP cá nhân, phần chạy offline được trước:
 - [x] **Phân loại ảnh trước khi trích** (§5.1.1 v3.1, sửa lỗi "không đọc được dòng việc nào" 23/9): checklist · banner sự kiện · screenshot chat/email · tài liệu · **danh thiếp** (→ thẻ thêm vào danh bạ khách) · khác; không chắc thì hiện những gì đọc được + hỏi một câu + nút tạo thủ công; ảnh mờ/chữ nhỏ báo rõ lý do
 - [x] **Lịch đích hiện sẵn theo dự án** trên thẻ banner + **tùy chọn ⚡ book thẳng từng dự án** (đủ giờ + địa điểm + không trùng mới book, luôn có Hoàn tác; việc "Đăng ký / mua vé" vẫn qua Hộp duyệt)
 - [x] **Lịch Lark đọc VỀ app** (v3.2, sửa lỗi "nối Lark mà sự kiện không hiện" 23/9): đọc MỌI lịch con theo phân trang, lỗi quyền/token không còn bị nuốt (Lark trả 200 kèm code lỗi — giờ bắt đúng); màn Kết nối có **Trạng thái đồng bộ** từng tài khoản (lần gần nhất · số lịch con · số sự kiện tháng này) + nút **Đồng bộ ngay**, 0 sự kiện có cảnh báo rõ; màn Lịch hiện lỗi kèm việc-phải-làm ("admin duyệt quyền", "Kết nối lại") + dấu tài khoản trên sự kiện khi có từ 2 tài khoản; lịch tự làm mới ~15 phút khi đang mở
-- [ ] Ô bật/tắt riêng từng lịch con (Google vẫn đọc lịch chính); webhook Lark + nhập sẵn 12 tháng (cần server lưu — Giai đoạn 3); soạn email trả lời từ đúng hộp thư
+- [x] **Chi tiết sự kiện** (§5.4.0 v3.7): chạm sự kiện → Sửa · Dời · Xóa · Chuỗi · Nhân bản, luôn qua thẻ xem trước chỉ phần thay đổi (cả sự kiện Google/Lark); sự kiện trùng giờ có dấu ⚠ + gợi ý giờ trống để dời; xóa có Hoàn tác; chat "dời cắt tóc thứ Sáu sang 17:00", "xóa lịch tarot"
+- [x] **Book lịch ngay từ một việc** (§5.2.2 v3.7): nút ⋯ trên dòng việc / 📅 trong chi tiết → chọn thời lượng → 3 khung trống trước hạn → xem trước → book (có Hoàn tác); chat "book 2 tiếng cho việc pitch deck thứ Năm"
+- [x] **Việc đặt chỗ nằm trong danh sách việc** (§5.4.2 v3.7): spa/salon/phòng khám… (theo nơi đã lưu hoặc từ khóa) → tự có việc "Đặt lịch … cho …", hỏi một câu "cần đặt trước bao lâu?"; tick việc = sự kiện "Đã đặt"; brief sáng "N lịch tuần này chưa đặt chỗ"; "Spa thứ Năm đặt rồi"
+- [x] **Biết Mai đang ở đâu** (§5.4.3 v3.7): 3 mức vị trí ở Kết nối (chỉ lưu thành phố + nơi đã lưu, xóa sau 30 ngày); điểm xuất phát + phương tiện mặc định theo thành phố; "Đi ngay" trước giờ hẹn theo giao thông lúc đó; "chị đang ở HCMC"
+- [x] **Trợ lý nghiên cứu mức Nhanh** (§5.9.1 v3.7): "tìm giúp chị …" → tóm tắt + chi tiết + nguồn + chỗ chưa chắc, lưu vào dự án/khách, hạn mức mỗi tháng (cần `ANTHROPIC_API_KEY`)
+- [x] **Nền móng bot Lark trong group** (§5.5.1–5.5.3 v3.7): webhook `/api/lark/events` (xác minh URL, mã hóa, chữ ký); "@Lowtechie ghi việc / giao việc … cho Linh / nhắc / ghi quyết định" → Hộp duyệt kèm link về group; "tóm tắt 2 ngày qua" ở group đọc-toàn-bộ; câu hỏi riêng tư chỉ trả lời riêng với Mai; màn Kết nối có checklist "bot không nhận được tin nhắn" + gắn group ↔ dự án · khách + nhật ký truy vấn (cần `LARK_VERIFICATION_TOKEN` + Upstash Redis)
+- [ ] Ô bật/tắt riêng từng lịch con (Google vẫn đọc lịch chính); webhook Lark báo lịch đổi + nhập sẵn 12 tháng (cần server lưu — Giai đoạn 3); soạn email trả lời từ đúng hộp thư
 - [ ] Sync Google Sheets · ghi âm họp offline + recap
-- [ ] Giai đoạn 2: Lark (bot group, Mail, Calendar) trước, sau đó bot 1:1 WhatsApp/Zalo
+- [ ] Giai đoạn 2: bot Lark đầy đủ (gói tổng hợp cuối ngày + thẻ tương tác, tự trích ở group đọc-toàn-bộ, việc cho cộng sự), sau đó bot 1:1 WhatsApp/Zalo
 - [ ] Giai đoạn 3: Supabase + RLS, tài khoản cộng sự, giao việc chéo, danh bạ đồng bộ máy chủ
 
 Nguyên tắc không đổi (PRD §6.5): giao việc < 10 giây · **duyệt trước, tự động sau** · mọi việc tự trích đều có nguồn · dễ thương nhưng thật thà.

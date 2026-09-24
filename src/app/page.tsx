@@ -1,21 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bubble } from "@/components/Bubble";
+import { EventDetail } from "@/components/EventDetail";
+import { LeaveCheck } from "@/components/LeaveCheck";
+import { TaskDetail } from "@/components/TaskDetail";
 import { TaskRow } from "@/components/TaskRow";
 import { Blossom } from "@/components/Blossom";
 import { composeBrief } from "@/core/brief";
 import { activeProjects, projectById } from "@/core/projects";
-import { fmtRange, fmtRelativeDay, isSameDay, todayLabel } from "@/lib/format";
+import { gcalToCal, remoteMetaOf } from "@/lib/calendarActions";
+import { fmtDay, fmtRange, fmtRelativeDay, fmtTime, isSameDay, todayLabel } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
+import { useDeviceLocation } from "@/lib/location";
 import { useStore } from "@/lib/store";
 import { useGoogleEvents, useGoogleStatus } from "@/lib/useGoogle";
-import type { CalEvent } from "@/core/types";
 
 export default function TodayPage() {
   const mounted = useMounted();
-  const { tasks, projects, events } = useStore();
+  const { tasks, projects, events, eventMarks, settings } = useStore();
+  /** Link "Mở trong Lowtechie" đính trong sự kiện book từ việc (§5.2.2 v3.7). */
+  const [openTask, setOpenTask] = useState<string | null>(null);
+  const [openEvent, setOpenEvent] = useState<string | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("task");
+    if (id) {
+      setOpenTask(id);
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
   const addEvent = useStore((s) => s.addEvent);
   const [suggestionGone, setSuggestionGone] = useState(false);
   const [held, setHeld] = useState(false);
@@ -25,7 +39,8 @@ export default function TodayPage() {
   const [range] = useState(() => {
     const d = new Date();
     const from = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    return { from, to: from + 86_400_000 };
+    // 8 ngày: lịch hôm nay + lịch tuần này chưa đặt chỗ (brief §5.4.2 v3.7).
+    return { from, to: from + 8 * 86_400_000 };
   });
   const gcal = useGoogleEvents(range.from, range.to, mounted && gs.connected);
   const allEvents = useMemo(() => {
@@ -34,19 +49,26 @@ export default function TodayPage() {
       ...events,
       ...gcal.events
         .filter((g) => !localIds.has(g.gcalId))
-        .map(
-          (g): CalEvent => ({
-            id: `g:${g.gcalId}`,
-            title: g.title,
-            startAt: g.startAt,
-            endAt: g.endAt,
-            location: g.location,
-            kind: "event",
-            gcalId: g.gcalId,
-          }),
-        ),
+        .map((g) => gcalToCal(g, eventMarks[`g:${g.gcalId}`]?.booking)),
     ];
-  }, [events, gcal.events]);
+  }, [events, gcal.events, eventMarks]);
+
+  // Mức "khi app mở" (§5.4.3): theo dõi nhẹ để xác nhận đã đến nơi hẹn.
+  useDeviceLocation(mounted && settings.locationMode === "light");
+  /** Lịch có địa điểm trong 3 giờ tới → kiểm tra lại giờ đi (§5.4.3 v3.7). */
+  const nextOut = useMemo(() => {
+    if (!mounted) return undefined;
+    const now = Date.now();
+    return allEvents
+      .filter(
+        (e) =>
+          e.kind === "event" &&
+          e.location &&
+          Date.parse(e.startAt) > now - 5 * 60_000 &&
+          Date.parse(e.startAt) < now + 3 * 3_600_000,
+      )
+      .sort((a, b) => a.startAt.localeCompare(b.startAt))[0];
+  }, [mounted, allEvents]);
 
   const brief = useMemo(
     () => (mounted ? composeBrief(tasks, activeProjects(projects), allEvents, new Date()) : null),
@@ -99,6 +121,25 @@ export default function TodayPage() {
         </Bubble>
       )}
 
+      {nextOut && gs.maps && settings.locationMode !== "off" && (
+        <LeaveCheck
+          event={nextOut}
+          auto={settings.locationMode === "light" && Date.parse(nextOut.startAt) - Date.now() < 90 * 60_000}
+        />
+      )}
+
+      {/* §5.4.2 v3.7: lịch tuần này chưa đặt chỗ — dấu riêng trong brief sáng. */}
+      {brief && brief.unbooked.length > 0 && (
+        <Link href="/lich" className="note-box small" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+          🔖 <b>{brief.unbooked.length} lịch tuần này chưa đặt chỗ</b>:{" "}
+          {brief.unbooked
+            .slice(0, 3)
+            .map((e) => `${e.title} (${fmtDay(e.startAt)} ${fmtTime(e.startAt)})`)
+            .join(" · ")}
+          {brief.unbooked.length > 3 ? "…" : ""}
+        </Link>
+      )}
+
       {mounted && !hasAnything && (
         <div className="empty card">
           <Blossom size={64} />
@@ -148,7 +189,15 @@ export default function TodayPage() {
         <>
           <div className="group-title">Lịch hôm nay</div>
           {brief.todayEvents.map((e) => (
-            <div className={`block-line${e.kind !== "event" ? " faded" : ""}`} key={e.id}>
+            <div
+              className={`block-line${e.kind !== "event" ? " faded" : ""}`}
+              key={e.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Mở sự kiện: ${e.title}`}
+              style={{ cursor: "pointer" }}
+              onClick={() => setOpenEvent(e.id)}
+            >
               <span className="time">{fmtRange(e.startAt, e.endAt)}</span>
               <span style={{ minWidth: 0 }}>
                 {e.title}
@@ -226,6 +275,24 @@ export default function TodayPage() {
                 <TaskRow key={t.id} task={t} showDue={false} />
               ))}
             </details>
+          ) : null;
+        })()}
+
+      {openTask && tasks.some((t) => t.id === openTask) && (
+        <TaskDetail taskId={openTask} onClose={() => setOpenTask(null)} />
+      )}
+      {openEvent &&
+        (() => {
+          const ev = allEvents.find((x) => x.id === openEvent);
+          const g = gcal.events.find((x) => `g:${x.gcalId}` === openEvent);
+          return ev ? (
+            <EventDetail
+              event={ev}
+              remote={g ? remoteMetaOf(g) : undefined}
+              context={allEvents}
+              onClose={() => setOpenEvent(null)}
+              onChanged={() => void gcal.reload()}
+            />
           ) : null;
         })()}
 

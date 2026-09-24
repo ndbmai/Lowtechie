@@ -9,9 +9,11 @@ import type {
   Destination,
   DueType,
   FeedbackEntry,
+  LocationState,
   Project,
   ProjectId,
   Place,
+  ResearchNote,
   Task,
   TaskNote,
   TriageItem,
@@ -19,6 +21,7 @@ import type {
   TripAttachment,
 } from "@/core/types";
 import { makeClientId } from "@/core/clients";
+import type { LarkGroupSetting } from "@/core/larkInbox";
 import {
   DEFAULT_PREP_TEMPLATE,
   DEFAULT_REMINDER_OFFSETS,
@@ -51,6 +54,18 @@ export interface PendingBlock {
 /** Hướng di chuyển khi Mai sắp xếp thứ tự (§5.3.1). */
 export type MoveDir = "up" | "down" | "top" | "bottom";
 
+export type LocationMode = "ondemand" | "light" | "off";
+
+/** Một lần xóa sự kiện — giữ để Hoàn tác (§5.4.0 v3.7). */
+export interface EventTrashEntry {
+  id: string;
+  /** Sự kiện chính + các block chuỗi đi kèm. */
+  events: CalEvent[];
+  /** Việc đặt chỗ đã bỏ theo (Hoàn tác thì mở lại). */
+  droppedTaskIds: string[];
+  deletedAt: string;
+}
+
 /** Kết quả đồng bộ lịch một tài khoản (PRD v3.2 — màn Kết nối hiển thị). */
 export interface SyncStatus {
   /** ISO thời điểm đồng bộ gần nhất. */
@@ -77,6 +92,23 @@ interface LowtechieState {
   dueChanges: { taskId: string; oldDue?: string; newDue?: string; changedAt: string }[];
   /** Chuyến vừa xóa, giữ vài phút để Hoàn tác (§5.9 6a — xóa mềm). */
   tripTrash: { trip: Trip; events: CalEvent[]; deletedAt: string }[];
+  /** Sự kiện vừa xóa (kèm chuỗi block) — Hoàn tác trong vài phút (§5.4.0 v3.7). */
+  eventTrash: EventTrashEntry[];
+  /**
+   * Trạng thái app GẮN THÊM cho sự kiện chỉ có trên Google/Lark (id "g:…"):
+   * hiện chỉ có đặt chỗ — tick việc "Đặt lịch…" là sự kiện đó "Đã đặt".
+   */
+  eventMarks: Record<string, { booking?: "pending" | "booked" }>;
+  /** Mai đang ở đâu (§5.4.3) — chỉ thành phố + nơi đã lưu, tự xóa sau 30 ngày. */
+  locationState?: LocationState;
+  /** Kết quả nghiên cứu đã lưu (§5.9.1). */
+  research: ResearchNote[];
+  /** Số lần nghiên cứu theo tháng "YYYY-MM" — hạn mức Mai đặt. */
+  researchUsage: Record<string, number>;
+  /** Group Lark ↔ dự án · khách + chế độ đọc (§5.5.1 v3.7), khóa = chat_id. */
+  larkGroups: Record<string, LarkGroupSetting>;
+  /** id tin Lark đã dựng thẻ Hộp duyệt — chống nhận trùng khi hai tab cùng kéo. */
+  larkImported: string[];
   /** Hẹn định kỳ dài hạn — gia hạn visa 3 tháng, mỗi năm (§5.4.0 v2.3). */
   series: RecurringSeries[];
   /** Nơi hay đến cần đặt chỗ trước (§5.4.2 v2.6). */
@@ -107,6 +139,10 @@ interface LowtechieState {
     autoBookBanner: Record<ProjectId, boolean>;
     /** Trạng thái đồng bộ lịch TỪNG tài khoản (v3.2): id → lần gần nhất. */
     syncStatus: Record<string, SyncStatus>;
+    /** Ba mức vị trí Mai chọn (§5.4.3): chỉ khi cần (mặc định) · khi app mở · không dùng. */
+    locationMode: LocationMode;
+    /** Hạn mức nghiên cứu mỗi tháng (§5.9.1 — tốn API, Mai tự đặt). */
+    researchMonthlyLimit: number;
   };
 
   addTask: (draft: TaskDraft) => Task;
@@ -144,7 +180,21 @@ interface LowtechieState {
   updateEvent: (id: string, patch: Partial<Omit<CalEvent, "id">>) => void;
   removeEvent: (id: string) => void;
   removeChain: (eventId: string) => void;
-  reschedule: (what: string, toWhenIso: string, keepTime: boolean) => "event" | "task" | null;
+  /**
+   * Xóa sự kiện + chuỗi block vào thùng rác (Hoàn tác vài phút, §5.4.0
+   * v3.7); `dropBookingTasks` = bỏ luôn việc "Đặt lịch…" gắn với nó.
+   */
+  trashEvent: (id: string, opts?: { dropBookingTasks?: boolean }) => EventTrashEntry | null;
+  /** Hoàn tác xóa: trả sự kiện + chuỗi về, mở lại việc đặt chỗ đã bỏ. */
+  restoreTrash: (trashId: string) => CalEvent[] | null;
+  /** Dấu app gắn cho sự kiện chỉ có trên Google/Lark (id "g:…"). */
+  setEventMark: (id: string, mark: { booking?: "pending" | "booked" } | undefined) => void;
+  /**
+   * Dời hạn MỘT việc (chat "dời X sang…") — ghi lịch sử đổi hạn + đếm số lần
+   * dời. Dời SỰ KIỆN đi qua saveEventEdit (lib/calendarActions) để lịch
+   * ngoài + chuỗi block đi theo (v3.7).
+   */
+  rescheduleTask: (taskId: string, toWhenIso: string) => void;
 
   setPendingBlock: (b?: PendingBlock) => void;
 
@@ -179,6 +229,17 @@ interface LowtechieState {
   setAutoBookBanner: (projectId: ProjectId, on: boolean) => void;
   /** Ghi kết quả đồng bộ lịch một tài khoản (v3.2 — màn Kết nối). */
   setSyncStatus: (accountId: string, status: SyncStatus | undefined) => void;
+  setLocationMode: (mode: LocationMode) => void;
+  /** Ghi "Mai đang ở đâu" — chỉ thành phố + nơi đã lưu (§5.4.3). */
+  setLocationState: (state: LocationState | undefined) => void;
+  addResearch: (note: Omit<ResearchNote, "id">) => ResearchNote;
+  updateResearch: (id: string, patch: Partial<Pick<ResearchNote, "projectId" | "clientId">>) => void;
+  deleteResearch: (id: string) => void;
+  /** Đếm một lần nghiên cứu vào tháng hiện tại (hạn mức). */
+  countResearch: () => void;
+  setResearchLimit: (n: number) => void;
+  setLarkGroup: (chatId: string, patch: Partial<LarkGroupSetting> & { name: string }) => void;
+  markLarkImported: (ids: string[]) => void;
 
   addSeries: (
     s: Pick<RecurringSeries, "title" | "intervalUnit" | "intervalCount" | "nextDate"> &
@@ -256,6 +317,26 @@ function uid(): string {
     : `id-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Đổi trạng thái đặt chỗ của sự kiện gắn với việc "Đặt lịch…": sự kiện
+ * trong app sửa thẳng, sự kiện chỉ có trên Google/Lark ("g:…") ghi vào
+ * eventMarks. Không có sự kiện nào → không đổi gì.
+ */
+function bookingPatch(
+  s: Pick<LowtechieState, "events" | "eventMarks">,
+  eventId: string | undefined,
+  status: "pending" | "booked",
+): Partial<Pick<LowtechieState, "events" | "eventMarks">> {
+  if (!eventId) return {};
+  if (eventId.startsWith("g:")) {
+    return { eventMarks: { ...s.eventMarks, [eventId]: { ...s.eventMarks[eventId], booking: status } } };
+  }
+  if (!s.events.some((e) => e.id === eventId)) return {};
+  return {
+    events: s.events.map((e) => (e.id === eventId ? { ...e, bookingStatus: status } : e)),
+  };
+}
+
 /** Gỡ thẻ triage; nhóm nào hết thẻ thì xóa luôn ảnh nguồn (đỡ đầy localStorage). */
 function removeTriage(
   s: Pick<LowtechieState, "triage" | "triageImages">,
@@ -298,7 +379,16 @@ export const useStore = create<LowtechieState>()(
         projectCalendar: {},
         autoBookBanner: {},
         syncStatus: {},
+        locationMode: "ondemand",
+        researchMonthlyLimit: 30,
       },
+      eventTrash: [],
+      eventMarks: {},
+      locationState: undefined,
+      research: [],
+      researchUsage: {},
+      larkGroups: {},
+      larkImported: [],
 
       addTask: (draft) => {
         const t: Task = {
@@ -346,27 +436,36 @@ export const useStore = create<LowtechieState>()(
           ),
         })),
       completeTask: (id, via) =>
-        set((s) => ({
-          tasks: s.tasks.map((t) =>
-            t.id === id
-              ? { ...t, status: "done", completedAt: new Date().toISOString(), completedVia: via }
-              : t,
-          ),
-        })),
+        set((s) => {
+          const task = s.tasks.find((t) => t.id === id);
+          return {
+            tasks: s.tasks.map((t) =>
+              t.id === id
+                ? { ...t, status: "done", completedAt: new Date().toISOString(), completedVia: via }
+                : t,
+            ),
+            // Tick xong việc "Đặt lịch…" → sự kiện gắn với nó "Đã đặt" (§5.4.2 v3.7).
+            ...bookingPatch(s, task?.bookingEventId, "booked"),
+          };
+        }),
       reopenTask: (id) =>
-        set((s) => ({
-          tasks: s.tasks.map((t) =>
-            t.id === id
-              ? {
-                  ...t,
-                  status: "todo",
-                  completedAt: undefined,
-                  completedVia: undefined,
-                  reopenedAt: new Date().toISOString(),
-                }
-              : t,
-          ),
-        })),
+        set((s) => {
+          const task = s.tasks.find((t) => t.id === id);
+          return {
+            tasks: s.tasks.map((t) =>
+              t.id === id
+                ? {
+                    ...t,
+                    status: "todo",
+                    completedAt: undefined,
+                    completedVia: undefined,
+                    reopenedAt: new Date().toISOString(),
+                  }
+                : t,
+            ),
+            ...bookingPatch(s, task?.bookingEventId, "pending"),
+          };
+        }),
       updateTaskTitle: (id, title) =>
         set((s) => ({
           tasks: s.tasks.map((t) =>
@@ -486,57 +585,76 @@ export const useStore = create<LowtechieState>()(
         set((s) => ({ events: s.events.filter((e) => e.id !== id) })),
       removeChain: (eventId) =>
         set((s) => ({ events: s.events.filter((e) => e.chainOf !== eventId) })),
-
-      reschedule: (what, toWhenIso, keepTime) => {
-        const q = what.trim().toLowerCase();
-        const to = new Date(toWhenIso);
+      trashEvent: (id, opts) => {
         const s = get();
+        const gone = s.events.filter((e) => e.id === id || e.chainOf === id);
+        const isRemote = id.startsWith("g:");
+        if (gone.length === 0 && !isRemote) return null;
+        const dropped = opts?.dropBookingTasks
+          ? s.tasks
+              .filter((t) => t.bookingEventId === id && (t.status === "todo" || t.status === "doing"))
+              .map((t) => t.id)
+          : [];
+        const now = Date.now();
+        const entry: EventTrashEntry = {
+          id: uid(),
+          events: gone,
+          droppedTaskIds: dropped,
+          deletedAt: new Date(now).toISOString(),
+        };
+        set((st) => {
+          const marks = { ...st.eventMarks };
+          delete marks[id];
+          return {
+            events: st.events.filter((e) => e.id !== id && e.chainOf !== id),
+            tasks: dropped.length
+              ? st.tasks.map((t) => (dropped.includes(t.id) ? { ...t, status: "dropped" as const } : t))
+              : st.tasks,
+            eventMarks: marks,
+            // Thùng rác chỉ giữ 10 phút / tối đa 5 lần xóa.
+            eventTrash: [
+              ...st.eventTrash.filter((x) => now - Date.parse(x.deletedAt) < 10 * 60_000).slice(-4),
+              entry,
+            ],
+          };
+        });
+        return entry;
+      },
+      restoreTrash: (trashId) => {
+        const entry = get().eventTrash.find((x) => x.id === trashId);
+        if (!entry) return null;
+        set((s) => ({
+          events: [...s.events, ...entry.events.filter((e) => !s.events.some((x) => x.id === e.id))],
+          tasks: s.tasks.map((t) =>
+            entry.droppedTaskIds.includes(t.id) ? { ...t, status: "todo" as const } : t,
+          ),
+          eventTrash: s.eventTrash.filter((x) => x.id !== trashId),
+        }));
+        return entry.events;
+      },
+      setEventMark: (id, mark) =>
+        set((s) => {
+          const next = { ...s.eventMarks };
+          if (mark) next[id] = mark;
+          else delete next[id];
+          return { eventMarks: next };
+        }),
 
-        const ev = s.events.find(
-          (e) => e.kind === "event" && e.title.toLowerCase().includes(q),
-        );
-        if (ev) {
-          const oldStart = new Date(ev.startAt);
-          const dur = new Date(ev.endAt).getTime() - oldStart.getTime();
-          const next = new Date(to);
-          if (keepTime) next.setHours(oldStart.getHours(), oldStart.getMinutes(), 0, 0);
-          set((st) => ({
-            events: st.events
-              // Block chuẩn bị/di chuyển cũ không còn đúng → bỏ, tạo lại sau.
-              .filter((e) => e.chainOf !== ev.id)
-              .map((e) =>
-                e.id === ev.id
-                  ? {
-                      ...e,
-                      startAt: next.toISOString(),
-                      endAt: new Date(next.getTime() + dur).toISOString(),
-                    }
-                  : e,
-              ),
-          }));
-          return "event";
-        }
-
-        const task = s.tasks.find(
-          (t) => t.status !== "done" && t.title.toLowerCase().includes(q),
-        );
-        if (task) {
-          set((st) => ({
+      rescheduleTask: (taskId, toWhenIso) =>
+        set((st) => {
+          const task = st.tasks.find((t) => t.id === taskId);
+          if (!task) return st;
+          return {
             tasks: st.tasks.map((t) =>
-              t.id === task.id
-                ? { ...t, dueAt: to.toISOString(), deferCount: t.deferCount + 1 }
-                : t,
+              t.id === taskId ? { ...t, dueAt: toWhenIso, deferCount: t.deferCount + 1 } : t,
             ),
             // Lịch sử đổi hạn (due_changes §8) cho weekly review.
             dueChanges: [
               ...st.dueChanges.slice(-199),
-              { taskId: task.id, oldDue: task.dueAt, newDue: to.toISOString(), changedAt: new Date().toISOString() },
+              { taskId, oldDue: task.dueAt, newDue: toWhenIso, changedAt: new Date().toISOString() },
             ],
-          }));
-          return "task";
-        }
-        return null;
-      },
+          };
+        }),
 
       setPendingBlock: (b) => set({ pendingBlock: b }),
 
@@ -750,11 +868,66 @@ export const useStore = create<LowtechieState>()(
           ),
         })),
       setEventBooking: (eventId, status) =>
+        set((s) => {
+          const now = new Date().toISOString();
+          // Hai chiều (§5.4.2 v3.7): đánh dấu "Đã đặt" ở lịch → việc
+          // "Đặt lịch…" gắn với nó cũng xong; về "Chưa đặt" → mở lại.
+          const tasks = s.tasks.map((t) => {
+            if (t.bookingEventId !== eventId) return t;
+            if (status === "booked" && (t.status === "todo" || t.status === "doing"))
+              return { ...t, status: "done" as const, completedAt: now, completedVia: "button" as const };
+            if (status === "pending" && t.status === "done")
+              return { ...t, status: "todo" as const, completedAt: undefined, completedVia: undefined };
+            return t;
+          });
+          if (eventId.startsWith("g:")) {
+            const marks = { ...s.eventMarks };
+            if (status) marks[eventId] = { ...marks[eventId], booking: status };
+            else delete marks[eventId];
+            return { tasks, eventMarks: marks };
+          }
+          return {
+            tasks,
+            events: s.events.map((e) => (e.id === eventId ? { ...e, bookingStatus: status } : e)),
+          };
+        }),
+      setLocationMode: (mode) =>
         set((s) => ({
-          events: s.events.map((e) =>
-            e.id === eventId ? { ...e, bookingStatus: status } : e,
-          ),
+          settings: { ...s.settings, locationMode: mode },
+          // Tắt vị trí → không giữ vị trí GPS cũ (ranh giới §5.4.3).
+          locationState: mode === "off" && s.locationState?.source === "gps" ? undefined : s.locationState,
         })),
+      setLocationState: (state) => set({ locationState: state }),
+      addResearch: (note) => {
+        const n: ResearchNote = { ...note, id: uid() };
+        set((s) => ({ research: [n, ...s.research].slice(0, 200) }));
+        return n;
+      },
+      updateResearch: (id, patch) =>
+        set((s) => ({ research: s.research.map((r) => (r.id === id ? { ...r, ...patch } : r)) })),
+      deleteResearch: (id) => set((s) => ({ research: s.research.filter((r) => r.id !== id) })),
+      countResearch: () =>
+        set((s) => {
+          const d = new Date();
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          return { researchUsage: { ...s.researchUsage, [key]: (s.researchUsage[key] ?? 0) + 1 } };
+        }),
+      setResearchLimit: (n) =>
+        set((s) => ({
+          settings: { ...s.settings, researchMonthlyLimit: Math.max(0, Math.min(500, Math.round(n))) },
+        })),
+      setLarkGroup: (chatId, patch) =>
+        set((s) => {
+          const prev = s.larkGroups[chatId];
+          return {
+            larkGroups: {
+              ...s.larkGroups,
+              [chatId]: { ...prev, ...patch, mode: patch.mode ?? prev?.mode ?? "mention" },
+            },
+          };
+        }),
+      markLarkImported: (ids) =>
+        set((s) => ({ larkImported: [...s.larkImported, ...ids.filter((id) => !s.larkImported.includes(id))].slice(-300) })),
 
       addProject: (name, color) => {
         const trimmed = name.trim().slice(0, 40);
@@ -932,7 +1105,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 14,
+      version: 15,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -975,6 +1148,8 @@ export const useStore = create<LowtechieState>()(
             projectCalendar: s.settings?.projectCalendar ?? {},
             autoBookBanner: s.settings?.autoBookBanner ?? {},
             syncStatus: s.settings?.syncStatus ?? {},
+            locationMode: s.settings?.locationMode ?? "ondemand",
+            researchMonthlyLimit: s.settings?.researchMonthlyLimit ?? 30,
           };
         }
         if (version < 5) {
@@ -1035,6 +1210,8 @@ export const useStore = create<LowtechieState>()(
             projectCalendar: prev?.projectCalendar ?? {},
             autoBookBanner: prev?.autoBookBanner ?? {},
             syncStatus: prev?.syncStatus ?? {},
+            locationMode: prev?.locationMode ?? "ondemand",
+            researchMonthlyLimit: prev?.researchMonthlyLimit ?? 30,
           };
         }
         if (version < 10) {
@@ -1054,6 +1231,8 @@ export const useStore = create<LowtechieState>()(
             projectCalendar: {},
             autoBookBanner: {},
             syncStatus: {},
+            locationMode: "ondemand",
+            researchMonthlyLimit: 30,
           };
         }
         if (version < 12) {
@@ -1069,6 +1248,8 @@ export const useStore = create<LowtechieState>()(
             projectCalendar: prev?.projectCalendar ?? {},
             autoBookBanner: prev?.autoBookBanner ?? {},
             syncStatus: prev?.syncStatus ?? {},
+            locationMode: prev?.locationMode ?? "ondemand",
+            researchMonthlyLimit: prev?.researchMonthlyLimit ?? 30,
           };
         }
         if (version < 13) {
@@ -1078,6 +1259,20 @@ export const useStore = create<LowtechieState>()(
         if (version < 14) {
           // v14 (PRD v3.2): trạng thái đồng bộ lịch từng tài khoản.
           if (s.settings && !s.settings.syncStatus) s.settings.syncStatus = {};
+        }
+        if (version < 15) {
+          // v15 (PRD v3.7): thùng rác sự kiện, dấu sự kiện Google/Lark, vị
+          // trí hiện tại, nghiên cứu + hạn mức.
+          s.eventTrash = s.eventTrash ?? [];
+          s.eventMarks = s.eventMarks ?? {};
+          s.research = s.research ?? [];
+          s.researchUsage = s.researchUsage ?? {};
+          s.larkGroups = s.larkGroups ?? {};
+          s.larkImported = s.larkImported ?? [];
+          if (s.settings) {
+            if (!s.settings.locationMode) s.settings.locationMode = "ondemand";
+            if (typeof s.settings.researchMonthlyLimit !== "number") s.settings.researchMonthlyLimit = 30;
+          }
         }
         return s as LowtechieState;
       },

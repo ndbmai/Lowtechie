@@ -29,12 +29,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!key) return NextResponse.json({ error: "no-maps-key" }, { status: 501 });
 
   let origin = "";
+  // Vị trí hiện tại của Mai (§5.4.3) — chỉ dùng cho lần tính này, không lưu.
+  let originLatLng: { latitude: number; longitude: number } | null = null;
   let destination = "";
   let mode: "transit" | "drive" | "bike" = "transit";
   let arriveByMs = 0;
   try {
     const body = (await req.json()) as Record<string, unknown>;
     if (typeof body.origin === "string") origin = body.origin.slice(0, 300);
+    const ll = body.originLatLng as { lat?: unknown; lng?: unknown } | undefined;
+    if (ll && typeof ll.lat === "number" && typeof ll.lng === "number" && Number.isFinite(ll.lat) && Number.isFinite(ll.lng))
+      originLatLng = { latitude: ll.lat, longitude: ll.lng };
     if (typeof body.destination === "string") destination = body.destination.slice(0, 300);
     if (body.mode === "drive") mode = "drive";
     if (body.mode === "bike") mode = "bike";
@@ -43,13 +48,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch {
     /* 400 bên dưới */
   }
-  if (!origin || !destination) {
+  if ((!origin && !originLatLng) || !destination) {
     return NextResponse.json({ error: "Thiếu origin/destination" }, { status: 400 });
   }
 
   const buildPayload = (travelMode: string): Record<string, unknown> => {
     const payload: Record<string, unknown> = {
-      origin: { address: origin },
+      origin: originLatLng ? { location: { latLng: originLatLng } } : { address: origin },
       destination: { address: destination },
       travelMode,
       computeAlternativeRoutes: false,

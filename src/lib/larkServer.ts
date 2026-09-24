@@ -12,7 +12,7 @@
  */
 
 const ACCOUNTS_BASE = "https://accounts.larksuite.com";
-const OPEN_BASE = "https://open.larksuite.com";
+export const OPEN_BASE = "https://open.larksuite.com";
 
 export function isLarkConfigured(): boolean {
   return Boolean(process.env.LARK_APP_ID && process.env.LARK_APP_SECRET);
@@ -130,19 +130,35 @@ export async function larkAccessToken(
   return { at: tokens.at, rt: tokens.rt ?? refreshToken };
 }
 
-/** Email hiển thị của người dùng (ưu tiên email doanh nghiệp The Circle). */
-export async function larkUserEmail(at: string): Promise<string | undefined> {
+/**
+ * Người dùng của token: email hiển thị (ưu tiên email doanh nghiệp The
+ * Circle) + open_id — open_id tính THEO APP, bot dùng chung app nên đây
+ * cũng là id bot thấy khi Mai nhắn trong group (§5.5.2 "chỉ Mai hỏi được").
+ */
+export async function larkUserInfo(
+  at: string,
+): Promise<{ email?: string; openId?: string; name?: string } | undefined> {
   try {
     const res = await fetch(`${OPEN_BASE}/open-apis/authen/v1/user_info`, {
       headers: { authorization: `Bearer ${at}` },
     });
     const d = (await res.json().catch(() => ({}))) as {
-      data?: { enterprise_email?: string; email?: string; name?: string };
+      data?: { enterprise_email?: string; email?: string; name?: string; open_id?: string };
     };
-    return d.data?.enterprise_email || d.data?.email || d.data?.name;
+    if (!d.data) return undefined;
+    return {
+      email: d.data.enterprise_email || d.data.email || d.data.name,
+      openId: d.data.open_id,
+      name: d.data.name,
+    };
   } catch {
     return undefined;
   }
+}
+
+/** Email hiển thị của người dùng (ưu tiên email doanh nghiệp The Circle). */
+export async function larkUserEmail(at: string): Promise<string | undefined> {
+  return (await larkUserInfo(at))?.email;
 }
 
 // ── Lark Calendar v4 (đọc/ghi như Google — §5.5.1) ───────────────────────
@@ -223,10 +239,17 @@ export async function larkPrimaryCalendarId(at: string): Promise<string | null> 
 interface LarkEvent {
   event_id?: string;
   summary?: string;
+  description?: string;
   status?: string;
   start_time?: { timestamp?: string; date?: string };
   end_time?: { timestamp?: string; date?: string };
-  location?: { name?: string };
+  location?: { name?: string; address?: string };
+  vchat?: { meeting_url?: string };
+  app_link?: string;
+  recurrence?: string;
+  recurring_event_id?: string;
+  organizer_calendar_id?: string;
+  attendee_ability?: string;
 }
 
 export interface RemoteEventDto {
@@ -236,6 +259,22 @@ export interface RemoteEventDto {
   endAt: string;
   location?: string;
   allDay?: boolean;
+  /** Lịch con chứa sự kiện — cần để sửa/xóa đúng chỗ (v3.7). */
+  calendarId?: string;
+  calendarName?: string;
+  /** Lịch chỉ xem / Mai không phải người tạo → app không cho sửa/xóa. */
+  readOnly?: boolean;
+  /** Sự kiện lặp: id của CẢ CHUỖI (xóa cả chuỗi dùng id này). */
+  seriesId?: string;
+  meetUrl?: string;
+  /** Mở sự kiện trong app Lark/Google. */
+  openUrl?: string;
+  description?: string;
+}
+
+/** Vai trò trên lịch con cho phép ghi (owner/writer) — còn lại là chỉ xem. */
+function larkWritable(role?: string): boolean {
+  return role === "owner" || role === "writer";
 }
 
 function larkTime(t: LarkEvent["start_time"]): { iso: string; allDay: boolean } | null {
@@ -248,18 +287,30 @@ function larkTime(t: LarkEvent["start_time"]): { iso: string; allDay: boolean } 
   return null;
 }
 
-function larkEventToDto(e: LarkEvent): RemoteEventDto | null {
+function larkEventToDto(e: LarkEvent, cal?: LarkCalendarInfo): RemoteEventDto | null {
   if (!e.event_id || e.status === "cancelled") return null;
   const s = larkTime(e.start_time);
   const en = larkTime(e.end_time);
   if (!s || !en) return null;
+  // Mai là khách mời (lịch người khác tổ chức) mà không được phép sửa → chỉ xem.
+  const guestOnly =
+    Boolean(cal && e.organizer_calendar_id && e.organizer_calendar_id !== cal.id) &&
+    e.attendee_ability !== "can_modify_event";
+  const recurring = Boolean(e.recurring_event_id || e.recurrence);
   return {
     gcalId: e.event_id,
     title: e.summary || "(không tên)",
     startAt: s.iso,
     endAt: en.iso,
-    location: e.location?.name,
+    location: e.location?.name || e.location?.address,
     allDay: s.allDay,
+    calendarId: cal?.id,
+    calendarName: cal?.name,
+    readOnly: cal ? !larkWritable(cal.role) || guestOnly : undefined,
+    seriesId: recurring ? (e.recurring_event_id ?? e.event_id) : undefined,
+    meetUrl: e.vchat?.meeting_url,
+    openUrl: e.app_link,
+    description: e.description?.slice(0, 600),
   };
 }
 
@@ -269,6 +320,7 @@ export async function larkListEvents(
   calendarId: string,
   fromMs: number,
   toMs: number,
+  cal?: LarkCalendarInfo,
 ): Promise<RemoteEventDto[]> {
   const out: RemoteEventDto[] = [];
   let pageToken = "";
@@ -285,7 +337,7 @@ export async function larkListEvents(
     );
     const d = await larkJson<{ items?: LarkEvent[]; page_token?: string; has_more?: boolean }>(res);
     for (const e of d.items ?? []) {
-      const dto = larkEventToDto(e);
+      const dto = larkEventToDto(e, cal);
       if (dto) out.push(dto);
     }
     if (!d.has_more || !d.page_token) break;
@@ -313,6 +365,7 @@ async function larkInstanceView(
   calendarId: string,
   fromMs: number,
   toMs: number,
+  cal?: LarkCalendarInfo,
 ): Promise<RemoteEventDto[]> {
   const out: RemoteEventDto[] = [];
   for (const [a, b] of chunkRange(fromMs, toMs)) {
@@ -326,7 +379,7 @@ async function larkInstanceView(
     );
     const d = await larkJson<{ items?: LarkEvent[] }>(res);
     for (const e of d.items ?? []) {
-      const dto = larkEventToDto(e);
+      const dto = larkEventToDto(e, cal);
       if (dto) out.push(dto);
     }
   }
@@ -361,8 +414,8 @@ export async function larkEventsAllCalendars(
   let ok = 0;
   for (const c of calendars) {
     try {
-      const got = await larkInstanceView(at, c.id, fromMs, toMs).catch(() =>
-        larkListEvents(at, c.id, fromMs, toMs),
+      const got = await larkInstanceView(at, c.id, fromMs, toMs, c).catch(() =>
+        larkListEvents(at, c.id, fromMs, toMs, c),
       );
       let added = 0;
       for (const ev of got) {
@@ -393,6 +446,7 @@ async function larkSearchOne(
   at: string,
   calendarId: string,
   query: string,
+  cal?: LarkCalendarInfo,
 ): Promise<RemoteEventDto[]> {
   const res = await fetch(
     `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events/search?page_size=50`,
@@ -404,7 +458,7 @@ async function larkSearchOne(
   );
   const d = await larkJson<{ items?: LarkEvent[] }>(res);
   return (d.items ?? []).flatMap((e) => {
-    const dto = larkEventToDto(e);
+    const dto = larkEventToDto(e, cal);
     return dto ? [dto] : [];
   });
 }
@@ -416,7 +470,7 @@ export async function larkSearchEvents(at: string, query: string): Promise<Remot
     const seen = new Set<string>();
     const out: RemoteEventDto[] = [];
     for (const c of calendars) {
-      for (const ev of await larkSearchOne(at, c.id, query).catch(() => [] as RemoteEventDto[])) {
+      for (const ev of await larkSearchOne(at, c.id, query, c).catch(() => [] as RemoteEventDto[])) {
         if (seen.has(ev.gcalId)) continue;
         seen.add(ev.gcalId);
         out.push(ev);
@@ -432,7 +486,7 @@ export async function larkSearchEvents(at: string, query: string): Promise<Remot
 export async function larkCreateEvent(
   at: string,
   calendarId: string,
-  ev: { title: string; startAt: string; endAt: string; description?: string },
+  ev: { title: string; startAt: string; endAt: string; description?: string; location?: string },
 ): Promise<string | null> {
   const res = await fetch(
     `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events`,
@@ -444,24 +498,61 @@ export async function larkCreateEvent(
         description: ev.description || "Tạo bởi Mai Lowtechie 🌼",
         start_time: { timestamp: String(Math.floor(Date.parse(ev.startAt) / 1000)) },
         end_time: { timestamp: String(Math.floor(Date.parse(ev.endAt) / 1000)) },
+        ...(ev.location ? { location: { name: ev.location } } : {}),
       }),
     },
   );
-  const d = (await res.json().catch(() => ({}))) as { data?: { event?: { event_id?: string } } };
-  return res.ok ? (d.data?.event?.event_id ?? null) : null;
+  const d = (await res.json().catch(() => ({}))) as {
+    code?: number;
+    data?: { event?: { event_id?: string } };
+  };
+  // 200 kèm code != 0 = lỗi (bài học v3.2), không có event_id.
+  return res.ok && (d.code ?? 0) === 0 ? (d.data?.event?.event_id ?? null) : null;
 }
 
 export async function larkDeleteEvent(
   at: string,
   calendarId: string,
   eventId: string,
+  notify = false,
 ): Promise<boolean> {
   const res = await fetch(
-    `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?need_notification=${notify ? "true" : "false"}`,
     { method: "DELETE", headers: { authorization: `Bearer ${at}` } },
   );
   // 404: đã bị xóa tay trên Lark — với ta coi như xong.
-  return res.ok || res.status === 404;
+  if (res.status === 404) return true;
+  const d = (await res.json().catch(() => ({}))) as { code?: number };
+  return res.ok && (typeof d.code !== "number" || d.code === 0);
+}
+
+/**
+ * Sửa sự kiện (§5.4.0 v3.7) — CHỈ sau khi Mai xem thẻ trước → sau và bấm
+ * Lưu. `notify` = báo người được mời (Mai đã xác nhận riêng).
+ */
+export async function larkPatchEvent(
+  at: string,
+  calendarId: string,
+  eventId: string,
+  patch: { title?: string; startAt?: string; endAt?: string; location?: string; description?: string },
+  notify = false,
+): Promise<boolean> {
+  const body: Record<string, unknown> = { need_notification: notify };
+  if (patch.title !== undefined) body.summary = patch.title;
+  if (patch.description !== undefined) body.description = patch.description;
+  if (patch.startAt) body.start_time = { timestamp: String(Math.floor(Date.parse(patch.startAt) / 1000)) };
+  if (patch.endAt) body.end_time = { timestamp: String(Math.floor(Date.parse(patch.endAt) / 1000)) };
+  if (patch.location !== undefined) body.location = { name: patch.location };
+  const res = await fetch(
+    `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  const d = (await res.json().catch(() => ({}))) as { code?: number };
+  return res.ok && (typeof d.code !== "number" || d.code === 0);
 }
 
 /**

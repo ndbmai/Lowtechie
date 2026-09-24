@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { TabBar } from "@/components/TabBar";
 import { StoreHydrator } from "@/components/StoreHydrator";
+import { LarkInboxSync } from "@/components/LarkInboxSync";
+import { Toasts } from "@/components/Toasts";
 
 export const metadata: Metadata = {
   title: "Mai Lowtechie",
@@ -34,6 +36,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <StoreHydrator />
         <div className="shell">
           {children}
+          <Toasts />
+          <LarkInboxSync />
           <TabBar />
         </div>
       </body>

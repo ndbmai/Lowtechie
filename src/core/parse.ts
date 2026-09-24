@@ -1,4 +1,6 @@
+import { BOOKING_KEYWORDS } from "./booking";
 import { classify } from "./classify";
+import { cityFromText } from "./location";
 import type { DueType, ParseResult, ParsedAction, ProjectId } from "./types";
 
 /**
@@ -11,16 +13,26 @@ import type { DueType, ParseResult, ParsedAction, ProjectId } from "./types";
 
 // ── Thời gian ────────────────────────────────────────────────────────────
 
-/** JS getDay(): CN=0, thứ Hai=1 … thứ Bảy=6. */
+/**
+ * JS getDay(): CN=0, thứ Hai=1 … thứ Bảy=6. Cuối từ dùng lookahead
+ * Unicode chứ KHÔNG dùng `\b` — `\b` chỉ hiểu chữ ASCII nên "thứ Tư"
+ * (kết thúc bằng "ư") trước đây không bao giờ khớp (lỗi thật v3.7).
+ */
+const END = "(?![\\p{L}\\p{M}\\d])";
 const WEEKDAY_WORDS: [RegExp, number][] = [
-  [/thứ\s*(?:hai|2)\b/i, 1],
-  [/thứ\s*(?:ba|3)\b/i, 2],
-  [/thứ\s*(?:tư|tu|4)\b/i, 3],
-  [/thứ\s*(?:năm|5)\b/i, 4],
-  [/thứ\s*(?:sáu|6)\b/i, 5],
-  [/thứ\s*(?:bảy|7)\b/i, 6],
+  [new RegExp(`thứ\\s*(?:hai|2)${END}`, "iu"), 1],
+  [new RegExp(`thứ\\s*(?:ba|3)${END}`, "iu"), 2],
+  [new RegExp(`thứ\\s*(?:tư|tu|4)${END}`, "iu"), 3],
+  [new RegExp(`thứ\\s*(?:năm|5)${END}`, "iu"), 4],
+  [new RegExp(`thứ\\s*(?:sáu|6)${END}`, "iu"), 5],
+  [new RegExp(`thứ\\s*(?:bảy|7)${END}`, "iu"), 6],
   [/chủ\s*nhật|\bcn\b/i, 0],
 ];
+
+const BOOKING_LEAD_RE = new RegExp(
+  `^(?:đi\\s+|lịch\\s+)?(?:${BOOKING_KEYWORDS.map((k) => (k === "khám" ? "khám(?!\\s+phá)" : k)).join("|")})(?![\\p{L}\\p{M}\\d])`,
+  "iu",
+);
 
 const TIME_RE = /(\d{1,2})\s*(?:giờ|h|:)\s*(\d{1,2})?(?:\s*phút)?/i;
 const PART_OF_DAY_RE = /\b(sáng|trưa|chiều|tối|đêm)\b/i;
@@ -29,6 +41,8 @@ const DURATION_RE = /(\d+(?:[.,]\d+)?)\s*(tiếng|giờ đồng hồ|phút)/i;
 interface WhenMatch {
   at?: Date;
   hasTime: boolean;
+  /** Mai có nói NGÀY ("mai", "thứ Sáu") — không phải ngày tự suy từ giờ. */
+  hasDay?: boolean;
   /** Các đoạn chữ đã khớp, để gỡ khỏi tiêu đề. */
   spans: string[];
 }
@@ -114,6 +128,7 @@ export function parseWhen(clause: string, now: Date): WhenMatch {
     if (hour !== undefined) hasTime = true;
   }
 
+  const hasDay = Boolean(day);
   if (!day && hasTime) {
     // Chỉ có giờ → hôm nay; đã qua giờ đó thì hiểu là ngày mai.
     day = atMidnight(now);
@@ -122,11 +137,11 @@ export function parseWhen(clause: string, now: Date): WhenMatch {
     if (probe.getTime() < now.getTime()) day.setDate(day.getDate() + 1);
   }
 
-  if (!day) return { hasTime: false, spans };
+  if (!day) return { hasTime: false, hasDay: false, spans };
 
   const at = new Date(day);
   at.setHours(hasTime ? (hour ?? 9) : 9, minute, 0, 0);
-  return { at, hasTime, spans };
+  return { at, hasTime, hasDay, spans };
 }
 
 // ── Dự án ────────────────────────────────────────────────────────────────
@@ -162,7 +177,7 @@ const MODE_CAR_RE = /ô tô|\bgrab\b|\btaxi\b|xe hơi/i;
 const POLITE_RE = /\s*(?:nha|nhé|nhá|nhỉ|ạ|đi|giùm|giúp (?:chị|em|mình)|hộ (?:chị|em|mình))\s*[.!?]*$/i;
 const LEAD_RE = /^(?:nhắc (?:chị|em|mình)\s*|nhắc\s+|nhớ\s+|chị\s+|em\s+|mình\s+|tuần này\s+|tuần sau\s+)+/i;
 
-function tidyTitle(raw: string): string {
+export function tidyTitle(raw: string): string {
   const s = raw
     .trim()
     .replace(POLITE_RE, "")
@@ -174,7 +189,7 @@ function tidyTitle(raw: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-function stripSpans(clause: string, spans: string[]): string {
+export function stripSpans(clause: string, spans: string[]): string {
   let out = clause;
   for (const s of spans) out = out.replace(s, " ");
   return out;
@@ -201,23 +216,114 @@ function parseClause(clause: string, now: Date): ParsedAction {
     return { kind: "complete", what: tidyTitle(doneM[1]), confidence: 0.85 };
   }
 
-  // Đổi lịch: "dời X sang thứ Năm"
+  // Mai tự nói đang ở đâu (§5.4.3 v3.7): "chị đang ở HCMC", "vừa tới Tokyo".
+  const locM = clause.match(
+    /^(?:(?:chị|em|mình)\s+)?(?:đang ở|đã tới|đã đến|vừa tới|vừa đến|đã về|vừa về)\s+(.{2,30}?)(?:\s+rồi)?\s*[.!]?$/i,
+  );
+  if (locM) {
+    const city = cityFromText(locM[1]);
+    if (city) return { kind: "location", city, confidence: 0.9 };
+  }
+
+  // "Spa thứ Năm đặt rồi" (§5.4.2): đánh dấu đã đặt chỗ + đóng việc đặt.
+  const bookedM = clause.match(/^(.+?)\s+(?:đã\s+)?đặt(?:\s+(?:chỗ|lịch|xong))?\s+rồi\s*[.!]?$/i);
+  if (bookedM) {
+    const w = parseWhen(bookedM[1], now);
+    return {
+      kind: "booked",
+      what: tidyTitle(stripSpans(bookedM[1], w.spans)),
+      day: w.hasDay ? w.at?.toISOString() : undefined,
+      confidence: 0.85,
+    };
+  }
+
+  // Xóa lịch (§5.4.0 v3.7): "xóa lịch tarot" — UI luôn hỏi xác nhận.
+  const delM = clause.match(/^(?:xóa|xoá|hủy|huỷ)\s+(?:lịch|sự kiện|cuộc hẹn|buổi|hẹn)\s+(.+)$/i);
+  if (delM) {
+    const w = parseWhen(delM[1], now);
+    return {
+      kind: "delete_event",
+      what: tidyTitle(stripSpans(delM[1], w.spans)),
+      day: w.hasDay ? w.at?.toISOString() : undefined,
+      confidence: 0.85,
+    };
+  }
+
+  // Book lịch cho một việc (§5.2.2 v3.7): "book 2 tiếng cho việc pitch deck thứ Năm".
+  const bookM = clause.match(
+    /^(?:book|đặt|giữ)\s+(?:lịch\s+)?(?:(\d+(?:[.,]\d+)?)\s*(tiếng|giờ(?:\s+đồng\s+hồ)?|phút)\s+)?(?:lịch\s+)?cho\s+việc\s+(.+)$/i,
+  );
+  if (bookM) {
+    const w = parseWhen(bookM[3], now);
+    return {
+      kind: "book_task",
+      what: tidyTitle(stripSpans(bookM[3], w.spans)),
+      durationMinutes: bookM[1]
+        ? Math.round(parseFloat(bookM[1].replace(",", ".")) * (bookM[2] === "phút" ? 1 : 60))
+        : undefined,
+      day: w.hasDay ? w.at?.toISOString() : undefined,
+      confidence: 0.85,
+    };
+  }
+
+  // Nghiên cứu (§5.9.1): "tìm giúp chị 5 công ty AI automation ở Bangkok, lưu vào Circle".
+  const resM = clause.match(
+    /^(?:(?:chị|em)\s+)?(tìm (?:giúp|hộ)(?:\s+(?:chị|em|mình))?|tìm hiểu|nghiên cứu|tra cứu|so sánh|chuẩn bị hồ sơ(?:\s+về)?)\s+(.+)$/i,
+  );
+  if (resM && !/^(?:giờ|khung|lịch|slot|chỗ trống)\b/i.test(resM[2])) {
+    let query = resM[2].trim();
+    let projectId: ProjectId | undefined;
+    const save = query.match(/,?\s*(?:và\s+)?lưu\s+(?:vào|cho|trong)\s+(?:dự án\s+)?(.+)$/i);
+    if (save && save.index !== undefined) {
+      const p = detectProject(save[1]);
+      if (p.explicit) projectId = p.id;
+      query = query.slice(0, save.index).trim();
+    }
+    const verb = resM[1].toLowerCase();
+    return {
+      kind: "research",
+      query: /so sánh|chuẩn bị hồ sơ/.test(verb) ? `${verb} ${query}` : query,
+      projectId,
+      confidence: 0.85,
+    };
+  }
+
+  // Đổi lịch: "dời X sang thứ Năm", "dời cắt tóc thứ Sáu sang 17:00".
   const resched = clause.match(/\b(?:dời|đổi|chuyển)\s+(.+?)\s+(?:sang|qua|tới|đến)\s+(.+)$/i);
   if (resched) {
     const to = parseWhen(resched[2], now);
+    // Ngày/giờ trong phần "X" dùng để chỉ ĐÚNG lịch ("cắt tóc thứ Sáu").
+    const q = parseWhen(resched[1], now);
+    const qualifier = q.hasDay ? q.at : undefined;
+    let toWhen = to.at;
+    let keepDate = false;
+    if (to.at && to.hasTime && !to.hasDay) {
+      // Chỉ nói giờ mới → giữ NGÀY của lịch đó (không nhảy về hôm nay).
+      if (qualifier) {
+        toWhen = new Date(qualifier);
+        toWhen.setHours(to.at.getHours(), to.at.getMinutes(), 0, 0);
+      } else {
+        keepDate = true;
+      }
+    }
     return {
       kind: "reschedule",
-      what: tidyTitle(resched[1]),
-      toWhen: to.at?.toISOString(),
+      what: tidyTitle(q.at ? stripSpans(resched[1], q.spans) : resched[1]),
+      toWhen: toWhen?.toISOString(),
       keepTime: !to.hasTime,
+      keepDate: keepDate || undefined,
+      day: qualifier?.toISOString(),
       confidence: baseConfidence,
       note: to.hasTime ? undefined : "Giữ nguyên giờ cũ nếu chỉ đổi ngày",
     };
   }
 
-  // Sự kiện / block lịch: hẹn, gặp, book, đặt lịch, họp, bay, deep work
+  // Sự kiện / block lịch: hẹn, gặp, book, đặt lịch, họp, bay, deep work —
+  // và "spa thứ Bảy 10h", "cắt tóc thứ Sáu 15h": nơi cần đặt chỗ đứng đầu
+  // câu + GIỜ cụ thể là lịch hẹn, không phải việc có hạn (§5.4.2 v3.7).
   const isEvent =
-    /\bhẹn\b|\bgặp\b|\bbook\b|đặt lịch|\bhọp\b|\bbay\b|deep work/i.test(clause);
+    /\bhẹn\b|\bgặp\b|\bbook\b|đặt lịch|\bhọp\b|\bbay\b|deep work/i.test(clause) ||
+    (when.hasTime && BOOKING_LEAD_RE.test(clause.trim()));
   if (isEvent) {
     const mode = MODE_CAR_RE.test(clause)
       ? ("car" as const)

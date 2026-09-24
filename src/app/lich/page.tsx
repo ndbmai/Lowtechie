@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { BannerFileLink } from "@/components/BannerFileLink";
+import { BookingAskCard } from "@/components/BookingAsk";
 import { Bubble } from "@/components/Bubble";
+import { EventDetail } from "@/components/EventDetail";
+import { findOverlaps } from "@/core/eventOps";
+import {
+  CITY_LABEL,
+  cityFromCoords,
+  currentCity,
+  defaultModeForCity,
+  originPlace,
+} from "@/core/location";
 import { projectById } from "@/core/projects";
 import {
   activeReminder,
@@ -17,9 +28,12 @@ import { carChain, transitChain, type Chain } from "@/core/timeback";
 import type { CalEvent, Destination, Task, Trip } from "@/core/types";
 import { PlaceSelect } from "@/components/PlaceSelect";
 import { fmtDay, fmtDayFull, fmtRange, fmtTime, isSameDay } from "@/lib/format";
-import { getFile } from "@/lib/fileStore";
+import { attachBooking, type BookingAsk } from "@/lib/booking";
+import { remoteMetaOf, type RemoteMeta } from "@/lib/calendarActions";
 import { useMounted } from "@/lib/hooks";
+import { POSITION_ERROR, getDevicePosition, refreshLocation, useDeviceLocation } from "@/lib/location";
 import { useStore } from "@/lib/store";
+import { showToast } from "@/lib/toast";
 import {
   createGcalEvent,
   deleteGcalEvent,
@@ -47,8 +61,29 @@ function ChainForm({
   mapsAvailable: boolean;
   onClose: () => void;
 }) {
-  const { settings, addEvents, setWalkToStation, setHomeAddress, places } = useStore();
-  const [mode, setMode] = useState<"transit" | "car">("transit");
+  const { settings, addEvents, setWalkToStation, setHomeAddress, places, locationState, trips, events } =
+    useStore();
+  // §5.4.3 v3.7: xuất phát từ nơi Mai ĐANG ở (hoặc cuộc hẹn ngay trước đó,
+  // §5.4.1), phương tiện mặc định theo thành phố (Bangkok tàu, HCMC Grab).
+  const [here] = useState(() => currentCity(locationState, trips, new Date()));
+  const [defaultOrigin] = useState(() => {
+    const start = Date.parse(event.startAt);
+    const prev = events
+      .filter(
+        (e) =>
+          e.kind === "event" &&
+          e.id !== event.id &&
+          e.location &&
+          Date.parse(e.endAt) <= start &&
+          Date.parse(e.endAt) > start - 3 * 3_600_000,
+      )
+      .sort((a, b) => b.endAt.localeCompare(a.endAt))[0];
+    if (prev?.location) return prev.location;
+    const p = originPlace(places, here);
+    return p?.address || p?.name || settings.homeAddress;
+  });
+  const cityMode = defaultModeForCity(here.city);
+  const [mode, setMode] = useState<"transit" | "car">(cityMode);
   const [prep, setPrep] = useState(settings.defaultPrepMinutes);
   const [walkTo, setWalkTo] = useState(settings.walkToStationMin);
   const [transitMin, setTransitMin] = useState(30);
@@ -58,7 +93,7 @@ function ChainForm({
   const [writeGcal, setWriteGcal] = useState(true);
   const [saving, setSaving] = useState(false);
   const [gcalWarn, setGcalWarn] = useState(false);
-  const [origin, setOrigin] = useState(settings.homeAddress);
+  const [origin, setOrigin] = useState(defaultOrigin);
   const [dest, setDest] = useState(event.location ?? "");
   const [mapsBusy, setMapsBusy] = useState(false);
   const [mapsMsg, setMapsMsg] = useState<string | null>(null);
@@ -84,7 +119,8 @@ function ChainForm({
       setMapsMsg(`Maps không tính được (${r.detail}).`);
       return;
     }
-    setHomeAddress(origin.trim());
+    // Chỉ nhớ làm "địa chỉ nhà" khi chưa có — điểm đi giờ có thể là nơi Mai đang ở.
+    if (!settings.homeAddress) setHomeAddress(origin.trim());
     if (r.route.mode === "drive") {
       setDriveMin(r.route.driveMin ?? r.route.totalMin);
       setMapsMsg(`Maps: lái ~${r.route.totalMin} phút (đã tính giao thông dự báo).`);
@@ -177,13 +213,16 @@ function ChainForm({
       <b>
         Chuỗi cho “{event.title}” — {fmtTime(event.startAt)} {fmtDay(event.startAt)}
       </b>
+      <span className="small muted">
+        📍 Xuất phát: {defaultOrigin || "chưa rõ — điền điểm đi bên dưới"} · Mai đang ở {CITY_LABEL[here.city]}
+      </span>
 
       <div className="seg" role="radiogroup" aria-label="Phương tiện">
         <button aria-pressed={mode === "transit"} onClick={() => setMode("transit")}>
-          🚆 BTS (mặc định)
+          🚆 Tàu điện{cityMode === "transit" ? " (mặc định)" : ""}
         </button>
         <button aria-pressed={mode === "car"} onClick={() => setMode("car")}>
-          🚗 Ô tô
+          🚗 Grab / ô tô{cityMode === "car" ? " (mặc định)" : ""}
         </button>
       </div>
 
@@ -346,6 +385,7 @@ function MonthGrid({
   series,
   selected,
   onSelect,
+  overlapIds,
 }: {
   year: number;
   month: number; // 0-11
@@ -355,6 +395,8 @@ function MonthGrid({
   series: RecurringSeries[];
   selected: Date;
   onSelect: (d: Date) => void;
+  /** Sự kiện trùng giờ (§5.4.0 v3.7) → dấu ⚠ trên ô ngày. */
+  overlapIds: Set<string>;
 }) {
   const { projects } = useStore();
   const first = new Date(year, month, 1);
@@ -398,6 +440,7 @@ function MonthGrid({
           );
           const hasSeries = series.some((s) => isSeriesDay(s, d));
           const hasPendingBooking = dayEvents.some((e) => e.bookingStatus === "pending");
+          const hasOverlap = dayEvents.some((e) => overlapIds.has(e.id));
           const isToday =
             d.getFullYear() === today.getFullYear() &&
             d.getMonth() === today.getMonth() &&
@@ -437,6 +480,7 @@ function MonthGrid({
                 {hasSeries && <span style={{ fontSize: 9 }}>📄</span>}
                 {hasHardDue && <span style={{ fontSize: 9 }}>❗</span>}
                 {hasPendingBooking && <span style={{ fontSize: 9 }}>🔖</span>}
+                {hasOverlap && <span style={{ fontSize: 9 }}>⚠</span>}
               </span>
             </button>
           );
@@ -713,7 +757,10 @@ const CITY_OPTIONS: { id: "" | Destination; label: string }[] = [
  * Google Maps) và nơi cần đặt chỗ trước (§5.4.2).
  */
 function PlacesSection() {
-  const { places, addPlace, updatePlace, deletePlace } = useStore();
+  const { places, addPlace, updatePlace, deletePlace, locationState, trips, settings } = useStore();
+  const here = currentCity(locationState, trips, new Date());
+  const herePlace = here.placeId ? places.find((p) => p.id === here.placeId) : undefined;
+  const [locMsg, setLocMsg] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -832,6 +879,36 @@ function PlacesSection() {
         </div>
       )}
 
+      {/* §5.4.3 v3.7: Mai đang ở đâu — chỉ thành phố + nơi đã lưu. */}
+      <div className="small" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ flex: 1, minWidth: 160 }}>
+          Đang ở <b>{CITY_LABEL[here.city]}</b>
+          {herePlace ? ` · ${herePlace.name}` : ""}
+          <span className="muted">
+            {" "}
+            (
+            {here.source === "gps"
+              ? `vị trí máy ${fmtTime(locationState!.updatedAt)}`
+              : here.source === "manual"
+                ? "Mai tự nói"
+                : "suy từ chuyến bay"}
+            )
+          </span>
+        </span>
+        {settings.locationMode !== "off" && (
+          <button
+            className="btn ghost small"
+            onClick={async () => {
+              const r = await refreshLocation();
+              setLocMsg(r.ok ? null : r.message);
+            }}
+          >
+            Cập nhật vị trí
+          </button>
+        )}
+      </div>
+      {locMsg && <div className="note-box small">{locMsg}</div>}
+
       {places.length === 0 && !adding && (
         <p className="muted small" style={{ margin: 0 }}>
           Lưu "Nhà ở HCM", "Nhà Bang Na"… để chuỗi ngày bay tự chọn đúng nhà theo đầu chặng, và
@@ -915,10 +992,27 @@ function PlacesSection() {
                     type="checkbox"
                     className="check"
                     checked={p.needsBooking}
-                    onChange={(e) => updatePlace(p.id, { needsBooking: e.target.checked })}
+                    onChange={(e) =>
+                      updatePlace(p.id, { needsBooking: e.target.checked, bookingDecided: true })
+                    }
                   />
                   🔖 cần đặt trước
                 </label>
+                <button
+                  className="btn ghost small"
+                  onClick={async () => {
+                    // Tọa độ của NƠI (Mai đang đứng ở đó) — để biết đã tới/đã rời.
+                    const r = await getDevicePosition();
+                    if (!r.ok) {
+                      setLocMsg(POSITION_ERROR[r.reason]);
+                      return;
+                    }
+                    updatePlace(p.id, { lat: r.lat, lng: r.lng, city: p.city ?? cityFromCoords(r.lat, r.lng) });
+                    setLocMsg(`Đã lưu vị trí của ${p.name} ✓`);
+                  }}
+                >
+                  {typeof p.lat === "number" ? "📍 Đã có vị trí · lấy lại" : "📍 Lấy vị trí hiện tại cho nơi này"}
+                </button>
                 {p.needsBooking && (
                   <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
                     <input
@@ -959,8 +1053,14 @@ export default function CalendarPage() {
     updateSeries,
     places,
     setEventBooking,
+    eventMarks,
   } = useStore();
   const [chainFor, setChainFor] = useState<string | null>(null);
+  /** Sự kiện đang mở màn chi tiết (§5.4.0 v3.7). */
+  const [detailId, setDetailId] = useState<string | null>(null);
+  /** Lần đầu gặp nơi cần đặt chỗ → hỏi một câu (§5.4.2 v3.7). */
+  const [bookingAsk, setBookingAsk] = useState<BookingAsk | null>(null);
+  const [quickLine, setQuickLine] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [when, setWhen] = useState("");
   const [focus, setFocus] = useState(() => new Date());
@@ -974,6 +1074,8 @@ export default function CalendarPage() {
 
   const view: ViewMode = settings.calendarView;
   const now = mounted ? new Date() : null;
+  // §5.4.3: mở màn Lịch là lúc hỏi vị trí (mức "Chỉ khi cần"); "khi app mở" thì theo dõi nhẹ.
+  useDeviceLocation(mounted);
   const gs = useGoogleStatus();
   const [gmsg, setGmsg] = useState<string | null>(null);
 
@@ -1053,9 +1155,15 @@ export default function CalendarPage() {
           location: g.location,
           kind: "event",
           gcalId: g.gcalId,
+          bookingStatus: eventMarks[`g:${g.gcalId}`]?.booking,
         }),
       );
-  }, [gcal.events, events]);
+  }, [gcal.events, events, eventMarks]);
+  /** Thông tin lịch ngoài cho màn chi tiết: lịch con, chỉ xem, lặp, người mời… */
+  const remoteMeta = useMemo(
+    () => new Map<string, RemoteMeta>(gcal.events.map((g) => [`g:${g.gcalId}`, remoteMetaOf(g)])),
+    [gcal.events],
+  );
   const allDayIds = useMemo(
     () => new Set(gcal.events.filter((g) => g.allDay).map((g) => `g:${g.gcalId}`)),
     [gcal.events],
@@ -1093,6 +1201,13 @@ export default function CalendarPage() {
     () => applyFilters([...events, ...googleAsCal]),
     [events, googleAsCal, applyFilters],
   );
+
+  // Trùng giờ (§5.4.0 v3.7 — thấy 25/9: hai lịch cùng 15:00–16:00); cả ngày không tính.
+  const overlaps = useMemo(
+    () => findOverlaps(allEvents.filter((e) => !allDayIds.has(e.id))),
+    [allEvents, allDayIds],
+  );
+  const overlapIds = useMemo(() => new Set(overlaps.keys()), [overlaps]);
 
   const inRange = useMemo(
     () =>
@@ -1182,9 +1297,21 @@ export default function CalendarPage() {
       e.bookingStatus === "pending" &&
       Date.parse(e.startAt) - Date.now() < 24 * 3_600_000 &&
       Date.parse(e.startAt) > Date.now();
+    const clash = overlaps.get(e.id);
     return (
       <div key={e.id} style={{ marginTop: 6 }}>
-        <div className={`block-line${e.kind !== "event" ? " faded" : ""}`}>
+        {/* Chạm sự kiện → màn chi tiết (§5.4.0 v3.7); nút con không lan ra dòng. */}
+        <div
+          className={`block-line${e.kind !== "event" ? " faded" : ""}`}
+          role="button"
+          tabIndex={0}
+          aria-label={`Mở sự kiện: ${e.title}`}
+          style={{ cursor: "pointer" }}
+          onClick={() => setDetailId(e.id)}
+          onKeyDown={(k) => {
+            if (k.key === "Enter") setDetailId(e.id);
+          }}
+        >
           <span className="time">
             {allDayIds.has(e.id) ? "Cả ngày" : fmtRange(e.startAt, e.endAt)}
           </span>
@@ -1201,57 +1328,67 @@ export default function CalendarPage() {
                 {" "}· {eventAccountEmail.get(e.id)!.label}
               </span>
             )}
+            {clash && (
+              <span
+                className="small"
+                style={{ color: "var(--note-ink)", background: "var(--note)", borderRadius: 999, padding: "0 8px", marginLeft: 4 }}
+              >
+                ⚠ trùng giờ
+              </span>
+            )}
           </span>
-          {e.linkUrl && (
-            <a
-              className="btn ghost small"
-              style={{ textDecoration: "none" }}
-              href={e.linkUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              🔗
-            </a>
-          )}
-          {e.bannerImage && <BannerFileLink fileId={e.bannerImage} />}
-          {e.bookingStatus === "pending" && (
-            <button
-              className="btn small"
-              style={{ background: "var(--note)", borderColor: "var(--note)", color: "var(--note-ink)" }}
-              onClick={() => {
-                if (window.confirm(`Đánh dấu đã đặt chỗ${place ? ` ở ${place.name}` : ""}?`))
-                  setEventBooking(e.id, "booked");
-              }}
-            >
-              🔖 Chưa đặt
-            </button>
-          )}
-          {e.bookingStatus === "pending" && place?.bookingContact && (
-            <a
-              className="btn ghost small"
-              style={{ textDecoration: "none" }}
-              href={
-                /^https?:/i.test(place.bookingContact)
-                  ? place.bookingContact
-                  : `tel:${place.bookingContact.replace(/\s+/g, "")}`
-              }
-              target={/^https?:/i.test(place.bookingContact) ? "_blank" : undefined}
-              rel="noreferrer"
-            >
-              {/^https?:/i.test(place.bookingContact) ? "Mở đặt chỗ" : "Gọi"}
-            </a>
-          )}
-          {withChainButtons &&
-            e.kind === "event" &&
-            (hasChain ? (
-              <button className="btn ghost small" onClick={() => void removeChainEverywhere(e)}>
-                Gỡ chuỗi
+          <span style={{ display: "inline-flex", gap: 4, alignItems: "center", flexWrap: "wrap" }} onClick={(ev) => ev.stopPropagation()}>
+            {e.linkUrl && (
+              <a
+                className="btn ghost small"
+                style={{ textDecoration: "none" }}
+                href={e.linkUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                🔗
+              </a>
+            )}
+            {e.bannerImage && <BannerFileLink fileId={e.bannerImage} />}
+            {e.bookingStatus === "pending" && (
+              <button
+                className="btn small"
+                style={{ background: "var(--note)", borderColor: "var(--note)", color: "var(--note-ink)" }}
+                onClick={() => {
+                  if (window.confirm(`Đánh dấu đã đặt chỗ${place ? ` ở ${place.name}` : ""}?`))
+                    setEventBooking(e.id, "booked");
+                }}
+              >
+                🔖 Chưa đặt
               </button>
-            ) : (
-              <button className="btn small" onClick={() => setChainFor(e.id)}>
-                + Chuỗi
-              </button>
-            ))}
+            )}
+            {e.bookingStatus === "pending" && place?.bookingContact && (
+              <a
+                className="btn ghost small"
+                style={{ textDecoration: "none" }}
+                href={
+                  /^https?:/i.test(place.bookingContact)
+                    ? place.bookingContact
+                    : `tel:${place.bookingContact.replace(/\s+/g, "")}`
+                }
+                target={/^https?:/i.test(place.bookingContact) ? "_blank" : undefined}
+                rel="noreferrer"
+              >
+                {/^https?:/i.test(place.bookingContact) ? "Mở đặt chỗ" : "Gọi"}
+              </a>
+            )}
+            {withChainButtons &&
+              e.kind === "event" &&
+              (hasChain ? (
+                <button className="btn ghost small" onClick={() => void removeChainEverywhere(e)}>
+                  Gỡ chuỗi
+                </button>
+              ) : (
+                <button className="btn small" onClick={() => setChainFor(e.id)}>
+                  + Chuỗi
+                </button>
+              ))}
+          </span>
         </div>
         {soon && (
           <div className="note-box small" style={{ marginTop: 4 }}>
@@ -1261,6 +1398,11 @@ export default function CalendarPage() {
       </div>
     );
   };
+
+  const detailEvent = detailId
+    ? [...events, ...googleAsCal].find((e) => e.id === detailId) ??
+      searchResults?.find((e) => e.id === detailId)
+    : undefined;
 
   const monthLabel = `Tháng ${focus.getMonth() + 1}/${focus.getFullYear()}`;
 
@@ -1397,7 +1539,14 @@ export default function CalendarPage() {
           <div className="group-title">Kết quả “{search.trim()}” · {searchResults.length}</div>
           {searchResults.map((e) => (
             <div key={e.id} style={{ marginTop: 6 }}>
-              <div className="block-line">
+              <div
+                className="block-line"
+                role="button"
+                tabIndex={0}
+                aria-label={`Mở sự kiện: ${e.title}`}
+                style={{ cursor: "pointer" }}
+                onClick={() => setDetailId(e.id)}
+              >
                 <span className="time">{fmtDay(e.startAt)} · {fmtRange(e.startAt, e.endAt)}</span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   {e.gcalId ? "📆 " : ""}
@@ -1455,6 +1604,38 @@ export default function CalendarPage() {
             Bỏ tìm giờ
           </button>
         </>
+      )}
+
+      {detailEvent && (
+        <EventDetail
+          event={detailEvent}
+          remote={remoteMeta.get(detailEvent.id)}
+          context={allEvents}
+          onClose={() => setDetailId(null)}
+          onChanged={() => void gcal.reload()}
+          onAddChain={(id) => {
+            setDetailId(null);
+            setChainFor(id);
+          }}
+          onRemoveChain={(ev) => void removeChainEverywhere(ev)}
+          onDeleted={(label, undo) =>
+            showToast({
+              text: label,
+              ttlMs: 120_000,
+              actions: [
+                {
+                  label: "Hoàn tác",
+                  primary: true,
+                  run: async () => {
+                    const line = await undo();
+                    void gcal.reload();
+                    return line;
+                  },
+                },
+              ],
+            })
+          }
+        />
       )}
 
       {chainEvent && (
@@ -1526,6 +1707,7 @@ export default function CalendarPage() {
             series={series}
             selected={focus}
             onSelect={setFocus}
+            overlapIds={overlapIds}
           />
           <div className="group-title">{fmtDayFull(focus.toISOString())}</div>
           {focusSeries.map((s) => (
@@ -1617,80 +1799,36 @@ export default function CalendarPage() {
               disabled={!title.trim() || !when}
               onClick={() => {
                 const start = new Date(when);
-                // Nơi cần đặt chỗ (§5.4.2): lịch mang "Chưa đặt" + việc
-                // "Đặt lịch…" vào Hộp duyệt với hạn = ngày hẹn − đặt trước.
-                const place = places.find(
-                  (pl) => pl.needsBooking && title.toLowerCase().includes(pl.name.toLowerCase()),
-                );
-                addEvent({
+                const ev = addEvent({
                   title: title.trim(),
                   startAt: start.toISOString(),
                   endAt: new Date(start.getTime() + 60 * 60_000).toISOString(),
                   kind: "event",
-                  bookingStatus: place ? "pending" : undefined,
-                  placeId: place?.id,
                 });
-                if (place) {
-                  const dueDate = new Date(start.getTime() - place.bookingLeadDays * 86_400_000);
-                  dueDate.setHours(9, 0, 0, 0);
-                  addTriage({
-                    title: `Đặt lịch ${place.name} cho ${fmtDay(start.toISOString())} ${fmtTime(start.toISOString())}`,
-                    projectId: "canhan",
-                    categoryId: "canhan:suckhoe",
-                    assignee: "mai",
-                    dueAt: dueDate.toISOString(),
-                    dueType: "hard",
-                    dueSource: "nguon",
-                    source: {
-                      channel: "manual",
-                      quote: `“${title.trim()}” — ${place.name} cần đặt trước ${place.bookingLeadDays} ngày`,
-                    },
-                    confidence: 1,
-                  });
-                }
+                // Nơi cần đặt chỗ (§5.4.2 v3.7): VIỆC "Đặt lịch…" vào thẳng
+                // danh sách việc; lần đầu gặp nơi này thì hỏi một câu.
+                const b = attachBooking(ev);
+                setBookingAsk(b.ask ?? null);
+                setQuickLine(b.line ?? null);
                 setTitle("");
                 setWhen("");
               }}
             >
               Thêm (60 phút)
             </button>
+            {quickLine && <div className="note-box small">{quickLine}</div>}
+            {bookingAsk && (
+              <BookingAskCard
+                ask={bookingAsk}
+                onDone={(line) => {
+                  setBookingAsk(null);
+                  setQuickLine(line);
+                }}
+              />
+            )}
           </div>
         </div>
       )}
     </main>
-  );
-}
-
-/**
- * Nút mở ảnh banner đính vào sự kiện (v3.0) — thẻ <a> nạp SẴN object
- * URL qua useEffect: window.open sau await bị Safari/PWA chặn (bài học
- * popup của nút "Mở" vé máy bay).
- */
-function BannerFileLink({ fileId }: { fileId: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let obj: string | null = null;
-    void getFile(fileId).then((blob) => {
-      if (blob) {
-        obj = URL.createObjectURL(blob);
-        setUrl(obj);
-      }
-    });
-    return () => {
-      if (obj) URL.revokeObjectURL(obj);
-    };
-  }, [fileId]);
-  if (!url) return null;
-  return (
-    <a
-      className="btn ghost small"
-      style={{ textDecoration: "none" }}
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      aria-label="Mở ảnh banner của sự kiện"
-    >
-      🖼
-    </a>
   );
 }

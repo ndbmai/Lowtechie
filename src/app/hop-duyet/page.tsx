@@ -26,6 +26,7 @@ const CHANNEL_LABELS: Record<SourceChannel, string> = {
   telegram: "Telegram",
   email: "Email",
   meeting: "Cuộc họp",
+  lark: "Lark",
   manual: "Tự thêm",
 };
 
@@ -338,7 +339,12 @@ export default function TriagePage() {
                   width: 16,
                   height: 16,
                   borderRadius: 5,
-                  background: top.draft.source.channel === "zalo" ? "#0068FF" : "#25D366",
+                  background:
+                    top.draft.source.channel === "zalo"
+                      ? "#0068FF"
+                      : top.draft.source.channel === "lark"
+                        ? "#3370FF"
+                        : "#25D366",
                   display: "inline-block",
                 }}
               />
@@ -482,6 +488,11 @@ export default function TriagePage() {
                   )}
                 </div>
                 {top.draft.source.quote && <div className="quote">{top.draft.source.quote}</div>}
+                {top.draft.source.ref?.startsWith("https://") && (
+                  <a className="small" href={top.draft.source.ref} target="_blank" rel="noreferrer">
+                    Mở tin gốc trong {CHANNEL_LABELS[top.draft.source.channel]} ↗
+                  </a>
+                )}
                 <div
                   className="meter"
                   role="meter"

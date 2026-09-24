@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isConfigured } from "@/lib/googleServer";
 import { isLarkConfigured } from "@/lib/larkServer";
 import { readAccounts } from "@/lib/accounts";
+import { kvConfigured } from "@/lib/kv";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     /** Số tài khoản đã nối (mọi nhà cung cấp) — màn Kết nối dùng chi tiết hơn. */
     accounts: accounts.length,
     larkConfigured: isLarkConfigured(),
+    /** Có tài khoản Lark + hàng đợi bot → app kéo việc từ group về Hộp duyệt (§5.5.1). */
+    larkInbox: isLarkConfigured() && kvConfigured() && accounts.some((a) => a.provider === "lark"),
     /** Server có GOOGLE_MAPS_API_KEY chưa (Routes API, §5.4.1). */
     maps: Boolean(process.env.GOOGLE_MAPS_API_KEY),
     /** Server có ANTHROPIC_API_KEY chưa (đọc ảnh, trích vé bay). */

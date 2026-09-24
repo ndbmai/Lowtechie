@@ -25,8 +25,15 @@ interface GEvent {
   id: string;
   status?: string;
   summary?: string;
+  description?: string;
   location?: string;
   iCalUID?: string;
+  htmlLink?: string;
+  hangoutLink?: string;
+  recurringEventId?: string;
+  guestsCanModify?: boolean;
+  organizer?: { email?: string; self?: boolean };
+  attendees?: { email?: string; displayName?: string; self?: boolean; resource?: boolean }[];
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
 }
@@ -43,6 +50,24 @@ interface OutEvent {
   account: string;
   accountEmail?: string;
   provider: "google" | "lark";
+  /** Màn chi tiết sự kiện (§5.4.0 v3.7): lịch con, chỉ xem, lặp, người mời, link họp. */
+  calendarId?: string;
+  calendarName?: string;
+  readOnly?: boolean;
+  seriesId?: string;
+  attendees?: string[];
+  meetUrl?: string;
+  openUrl?: string;
+  description?: string;
+}
+
+/** Người được mời (trừ Mai và phòng họp) — tên hiển thị hoặc email. */
+function guestNames(e: GEvent): string[] | undefined {
+  const names = (e.attendees ?? [])
+    .filter((a) => !a.self && !a.resource)
+    .map((a) => a.displayName || a.email || "")
+    .filter(Boolean);
+  return names.length ? names.slice(0, 20) : undefined;
 }
 
 async function googleEvents(at: string, p: URLSearchParams): Promise<GEvent[]> {
@@ -104,6 +129,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             account: a.id,
             accountEmail: a.email,
             provider: "google",
+            calendarId: "primary",
+            // Mai chỉ là khách mời → Google không cho khách đổi giờ.
+            readOnly: e.organizer?.self === false && !e.guestsCanModify,
+            seriesId: e.recurringEventId,
+            attendees: guestNames(e),
+            meetUrl: e.hangoutLink,
+            openUrl: e.htmlLink,
+            description: e.description?.slice(0, 600),
           });
         }
       } else {
@@ -153,6 +186,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let startAt = "";
   let endAt = "";
   let description = "";
+  let location = "";
   let accountId = "";
   try {
     const body = (await req.json()) as Record<string, unknown>;
@@ -160,6 +194,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (typeof body.startAt === "string") startAt = body.startAt;
     if (typeof body.endAt === "string") endAt = body.endAt;
     if (typeof body.description === "string") description = body.description.slice(0, 500);
+    if (typeof body.location === "string") location = body.location.slice(0, 200);
     if (typeof body.accountId === "string") accountId = body.accountId;
   } catch {
     /* 400 bên dưới */
@@ -179,6 +214,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       body: JSON.stringify({
         summary: title,
         description: description || "Tạo bởi Mai Lowtechie 🌼",
+        ...(location ? { location } : {}),
         start: { dateTime: new Date(startAt).toISOString() },
         end: { dateTime: new Date(endAt).toISOString() },
       }),
@@ -192,7 +228,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const s = await larkCalendarSession((target.link as LarkLink).rt);
   if (!s) return NextResponse.json({ error: "not-connected" }, { status: 401 });
-  const eventId = await larkCreateEvent(s.at, s.calendarId, { title, startAt, endAt, description });
+  const eventId = await larkCreateEvent(s.at, s.calendarId, { title, startAt, endAt, description, location });
   const res = eventId
     ? NextResponse.json({ gcalId: eventId, accountId: target.id })
     : NextResponse.json({ error: "lark-create" }, { status: 502 });

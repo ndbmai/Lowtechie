@@ -63,6 +63,7 @@ export type SourceChannel =
   | "telegram"
   | "email"
   | "meeting"
+  | "lark"
   | "manual";
 
 /** Một dòng ghi chú của Mai trong việc — nhật ký có giờ (PRD 3d v2.6). */
@@ -113,6 +114,12 @@ export interface Task {
   notes?: TaskNote[];
   /** Số lần bị dời — weekly review đề xuất bỏ khi ≥ 3 (PRD §5.10). */
   deferCount: number;
+  /**
+   * Việc "Đặt lịch [nơi]…" gắn với sự kiện nào (§5.4.2 v3.7): tick xong →
+   * sự kiện "Đã đặt"; xóa sự kiện → hỏi xóa việc này. Id "g:…" = sự kiện
+   * chỉ có trên Google/Lark (trạng thái giữ ở `eventMarks`).
+   */
+  bookingEventId?: string;
 }
 
 /**
@@ -135,6 +142,45 @@ export interface Place {
   bookingMethod?: "call" | "line" | "zalo" | "whatsapp" | "web";
   /** Số điện thoại hoặc link đặt chỗ. */
   bookingContact?: string;
+  /**
+   * Mai đã TRẢ LỜI "nơi này cần đặt trước bao lâu" (v3.7) — kể cả "không
+   * cần": nhớ cho lần sau, không hỏi lại.
+   */
+  bookingDecided?: boolean;
+  /**
+   * Tọa độ của NƠI (không phải đường đi của Mai) — Mai bấm "lấy vị trí
+   * hiện tại" khi đang đứng ở đó, để app biết đã tới/đã rời (§5.4.3).
+   */
+  lat?: number;
+  lng?: number;
+}
+
+/**
+ * Mai đang ở đâu (§5.4.3, `location_state` §8): CHỈ thành phố + nơi đã
+ * lưu, không bao giờ lưu tọa độ/đường đi của Mai; hết hạn là xóa.
+ */
+export interface LocationState {
+  city?: Destination;
+  placeId?: string;
+  source: "gps" | "calendar" | "manual";
+  updatedAt: string;
+  /** Tối đa 30 ngày (ranh giới §5.4.3). */
+  expiresAt: string;
+}
+
+/** Kết quả nghiên cứu đã lưu (§5.9.1) — gắn dự án hoặc khách hàng. */
+export interface ResearchNote {
+  id: string;
+  query: string;
+  summary: string;
+  details?: string;
+  /** LUÔN kèm nguồn + ngày truy cập — không đoán thành sự thật. */
+  sources: { title: string; url: string }[];
+  /** Chỗ chưa chắc / thiếu dữ liệu, nói rõ. */
+  uncertain?: string;
+  accessedAt: string;
+  projectId?: ProjectId;
+  clientId?: string;
 }
 
 /** Thẻ chờ duyệt trong Hộp duyệt (PRD §5.2 triage inbox). */
@@ -170,6 +216,12 @@ export interface CalEvent {
   bannerImage?: string;
   /** Ghi chú của sự kiện: đơn vị tổ chức, giá vé, yêu cầu… (v3.0). */
   notes?: string;
+  /** Việc mà block này được book cho (§5.2.2 v3.7 — book lịch từ việc). */
+  taskId?: string;
+  categoryId?: string;
+  clientId?: string;
+  /** Đã tới nơi hẹn — vị trí thiết bị khớp nơi đã lưu (§5.4.3). */
+  arrivedAt?: string;
 }
 
 export type Destination = "tokyo" | "hcmc" | "bkk";
@@ -252,8 +304,48 @@ export type ParsedAction =
       toWhen?: string;
       /** Mai chỉ nói ngày mới → giữ nguyên giờ của lịch cũ. */
       keepTime?: boolean;
+      /** Mai chỉ nói GIỜ mới ("sang 17:00") → giữ nguyên NGÀY của lịch cũ. */
+      keepDate?: boolean;
+      /** Ngày Mai dùng để chỉ ĐÚNG lịch ("cắt tóc thứ Sáu") — ISO. */
+      day?: string;
       confidence: number;
       note?: string;
+    }
+  | {
+      /** "book 2 tiếng cho việc pitch deck thứ Năm" (§5.2.2 v3.7). */
+      kind: "book_task";
+      what: string;
+      durationMinutes?: number;
+      /** Chỉ tìm khung trong ngày này (ISO). */
+      day?: string;
+      confidence: number;
+    }
+  | {
+      /** "xóa lịch tarot" — LUÔN qua thẻ xác nhận (§5.4.0 v3.7). */
+      kind: "delete_event";
+      what: string;
+      day?: string;
+      confidence: number;
+    }
+  | {
+      /** "Spa thứ Năm đặt rồi" — đánh dấu đã đặt chỗ + đóng việc đặt (§5.4.2). */
+      kind: "booked";
+      what: string;
+      day?: string;
+      confidence: number;
+    }
+  | {
+      /** "chị đang ở HCMC" — Mai tự nói khi đổi chỗ (§5.4.3). */
+      kind: "location";
+      city: Destination;
+      confidence: number;
+    }
+  | {
+      /** "tìm giúp chị 5 công ty AI automation ở Bangkok, lưu vào Circle" (§5.9.1). */
+      kind: "research";
+      query: string;
+      projectId?: ProjectId;
+      confidence: number;
     }
   | {
       /** "Ghi chú cho việc X: …" — thêm vào nhật ký của việc đã có (3d). */

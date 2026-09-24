@@ -26,6 +26,13 @@ export function fmtRange(startIso: string, endIso: string): string {
   return `${fmtTime(startIso)}–${fmtTime(endIso)}`;
 }
 
+/** Giá trị cho <input type="datetime-local"> theo giờ máy Mai: "2026-09-25T15:00". */
+export function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 /**
  * Nhãn hạn (5.2.2 v2.6 — sửa lỗi "hạn 30/10 0:00"): chỉ hiện giờ khi Mai
  * THẬT SỰ đặt giờ. Hai quy ước "chỉ ngày" của app là 9:00 (parse/nút nhanh)

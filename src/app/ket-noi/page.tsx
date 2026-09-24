@@ -3,9 +3,13 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { LarkBotSection } from "@/components/LarkBotSection";
+import { CITY_LABEL, LOCATION_TTL_MS, currentCity } from "@/core/location";
 import { activeProjects } from "@/core/projects";
+import type { Destination } from "@/core/types";
 import { useMounted } from "@/lib/hooks";
-import { useStore } from "@/lib/store";
+import { refreshLocation } from "@/lib/location";
+import { useStore, type LocationMode } from "@/lib/store";
 import { useAccounts, type ConnectedAccount } from "@/lib/useGoogle";
 
 /**
@@ -15,6 +19,25 @@ import { useAccounts, type ConnectedAccount } from "@/lib/useGoogle";
  */
 
 const PROVIDER_LABEL = { google: "Google", lark: "Lark" } as const;
+
+/** Ba mức vị trí (§5.4.3) — dòng mô tả là phần "giải thích rõ dùng để làm gì". */
+const LOCATION_MODES: { id: LocationMode; label: string; note: string }[] = [
+  {
+    id: "ondemand",
+    label: "Chỉ khi cần",
+    note: "Hỏi vị trí khi mở Lịch hoặc tính chuỗi di chuyển — không chạy nền, không tốn pin.",
+  },
+  {
+    id: "light",
+    label: "Khi app đang mở",
+    note: "Nhận biết đã tới/đã rời các nơi đã lưu để tính điểm xuất phát và xác nhận đã đến. Chỉ lưu nơi + thành phố, không lưu đường đi, xóa sau 30 ngày.",
+  },
+  {
+    id: "off",
+    label: "Không dùng vị trí",
+    note: "Suy thành phố từ chuyến bay đã lưu; đổi chỗ thì Mai nói “chị đang ở HCMC”.",
+  },
+];
 
 function AccountRow({
   account,
@@ -113,7 +136,20 @@ function fmtSync(at: string): string {
 export default function ConnectionsPage() {
   const mounted = useMounted();
   const { loading, configured, accounts, setParts, disconnect, reload, probe } = useAccounts();
-  const { projects, settings, setProjectCalendar, setAutoBookBanner, setSyncStatus } = useStore();
+  const {
+    projects,
+    settings,
+    trips,
+    locationState,
+    researchUsage,
+    setProjectCalendar,
+    setAutoBookBanner,
+    setSyncStatus,
+    setLocationMode,
+    setLocationState,
+    setResearchLimit,
+  } = useStore();
+  const [locMsg, setLocMsg] = useState<string | null>(null);
   const calAccounts = accounts.filter((a) => a.parts.cal);
   const [syncing, setSyncing] = useState(false);
   const probedOnce = useRef(false);
@@ -201,6 +237,88 @@ export default function ConnectionsPage() {
           </a>
         </div>
       )}
+
+      {mounted && !loading && configured.lark && <LarkBotSection />}
+
+      {mounted &&
+        (() => {
+          const here = currentCity(locationState, trips, new Date());
+          const d = new Date();
+          const used = researchUsage[`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`] ?? 0;
+          return (
+            <>
+              <div className="group-title">Vị trí</div>
+              <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="seg" role="radiogroup" aria-label="Mức dùng vị trí">
+                  {LOCATION_MODES.map((m) => (
+                    <button
+                      key={m.id}
+                      aria-pressed={settings.locationMode === m.id}
+                      onClick={async () => {
+                        setLocationMode(m.id);
+                        setLocMsg(null);
+                        // Bật vị trí → xin quyền ngay lúc này (ranh giới §5.4.3).
+                        if (m.id !== "off") {
+                          const r = await refreshLocation();
+                          setLocMsg(r.ok ? `Đã lấy vị trí — Mai đang ở ${r.city ? CITY_LABEL[r.city] : "ngoài 3 thành phố quen"}.` : r.message);
+                        }
+                      }}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="small muted">
+                  {LOCATION_MODES.find((m) => m.id === settings.locationMode)?.note}
+                </span>
+                <span className="small" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  Đang ở <b>{CITY_LABEL[here.city]}</b>
+                  <span className="muted">
+                    ({here.source === "gps" ? "vị trí máy" : here.source === "manual" ? "Mai tự nói" : "suy từ chuyến bay"})
+                  </span>
+                  · đổi tay:
+                  {(Object.keys(CITY_LABEL) as Destination[]).map((c) => (
+                    <button
+                      key={c}
+                      className="btn ghost small"
+                      aria-pressed={here.city === c && here.source === "manual"}
+                      onClick={() => {
+                        const now = Date.now();
+                        setLocationState({
+                          city: c,
+                          source: "manual",
+                          updatedAt: new Date(now).toISOString(),
+                          expiresAt: new Date(now + LOCATION_TTL_MS).toISOString(),
+                        });
+                        setLocMsg(null);
+                      }}
+                    >
+                      {CITY_LABEL[c]}
+                    </button>
+                  ))}
+                </span>
+                {locMsg && <div className="note-box small">{locMsg}</div>}
+              </div>
+
+              <div className="group-title">Nghiên cứu</div>
+              <div className="row" style={{ flexWrap: "wrap" }}>
+                <span className="t">
+                  <b>🔎 Hạn mức mỗi tháng</b>
+                  <span className="muted small">Đã dùng {used} lượt tháng này</span>
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={500}
+                  aria-label="Số lượt nghiên cứu mỗi tháng"
+                  value={settings.researchMonthlyLimit}
+                  onChange={(e) => setResearchLimit(Number(e.target.value) || 0)}
+                  style={{ width: 72, padding: "6px 8px", borderRadius: 10, border: "1.5px solid var(--line)", background: "var(--surface-2)" }}
+                />
+              </div>
+            </>
+          );
+        })()}
 
       {mounted && calAccounts.length > 0 && (
         <>

@@ -1,4 +1,5 @@
 import type { CalEvent, Project, Task } from "./types";
+import { unbookedSoon } from "./booking";
 import { rankTasks } from "./priority";
 import { freeSlotsOnDay } from "./slots";
 import { weekStats, mostStarved, next7DaysRange } from "./stats";
@@ -20,6 +21,8 @@ export interface MorningBrief {
   waiting: Task[];
   deadlines7d: Task[];
   todayEvents: CalEvent[];
+  /** Lịch 7 ngày tới CHƯA đặt chỗ (§5.4.2 v3.7) — "2 lịch tuần này chưa đặt chỗ". */
+  unbooked: CalEvent[];
   suggestion?: Suggestion;
 }
 
@@ -82,6 +85,10 @@ export function composeBrief(
     waiting,
     deadlines7d,
     todayEvents,
+    unbooked: (() => {
+      const ids = new Set(unbookedSoon(events, now));
+      return events.filter((e) => ids.has(e.id)).sort((a, b) => a.startAt.localeCompare(b.startAt));
+    })(),
     suggestion,
   };
 }

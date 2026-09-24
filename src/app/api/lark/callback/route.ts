@@ -4,7 +4,7 @@ import {
   LARK_STATE_COOKIE,
   larkExchangeCode,
   larkScopeHasCalendar,
-  larkUserEmail,
+  larkUserInfo,
 } from "@/lib/larkServer";
 
 export const runtime = "nodejs";
@@ -27,12 +27,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const result = await larkExchangeCode(code, origin);
   if ("error" in result) return back(`lerr=${encodeURIComponent(result.error)}`);
 
-  const email = await larkUserEmail(result.at);
+  const who = await larkUserInfo(result.at);
+  const email = who?.email;
   // Nối lại cùng email → ghi đè đúng tài khoản cũ, giữ bật/tắt Mai đã đặt.
   const existing = (await readAccounts(req)).find(
     (a) => a.provider === "lark" && (email ? a.email === email : true),
   );
-  const link: LarkLink = { rt: result.rt, email, parts: existing?.parts };
+  const link: LarkLink = { rt: result.rt, email, openId: who?.openId, parts: existing?.parts };
   // Lark có thể nhớ lần cho phép CŨ và cấp phiên KHÔNG kèm quyền lịch —
   // vẫn cất cookie (mail/phần khác còn dùng được) nhưng báo rõ ở Kết nối.
   const res = back(larkScopeHasCalendar(result.scope) ? "lok=1" : "lerr=noscope");

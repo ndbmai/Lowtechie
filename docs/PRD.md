@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 3.2 — 23/09/2026. Bổ sung: UX/UI, user flow, ghi recap cuộc họp, điều phối thời gian chuẩn bị + di chuyển (mặc định BTS từ ga Bang Na), chuyến đi & checklist bay, nguyên tắc chat/voice cho mọi tính năng, nhập việc từ hình chụp, kiểm tra trước khi lưu và phân loại thông minh theo dự án + category; Học tập là dự án riêng; bỏ Favstay và Edge khỏi danh sách mặc định; Mai tự thêm/sửa dự án và sub category; trích xuất vé máy bay theo thời gian thực, kiểm tra chuyến bay, đính kèm vé; khách hàng/đối tác là trường riêng; sửa và tạo dự án, category, khách hàng ngay trong thẻ duyệt; deadline cho từng việc; Mai tự sắp xếp vị trí dự án, category, khách hàng; tạo lịch trong app → xem trước → book Google Calendar; kết nối Lark Mail, Lark Calendar và bot trong group chat Lark; chuỗi ngày bay đầy đủ hai đầu, chỉnh sửa được; sửa lỗi voice; xóa chuyến bay cũ; tự lưu vé PDF vào chuyến mới; sửa cảnh báo nửa đêm sai; cập nhật danh sách phương tiện; màn Lịch xem theo tháng, không giới hạn quá khứ/tương lai; lịch hẹn định kỳ dài hạn (gia hạn giấy tờ); tên khách hàng nhập một lần được lưu và gợi ý lại; mục ghi chú trong từng việc; nhắc đặt lịch trước với spa và các nơi cần booking; chạm để xem chi tiết việc, chỉ tick hoặc "Xong" mới đóng việc, mở lại việc cũ; màn chi tiết dự án (category, việc, khách hàng); danh bạ khách hàng liên kết với việc nhập bằng voice và ảnh; bỏ mục tiêu giờ/tuần; nhiều tài khoản email và lịch; bỏ mô tả dự án; ô thêm việc đầy đủ trường + voice; gom bộ lọc vào dropdown; chụp ảnh banner sự kiện để tạo lịch; nhận dạng loại ảnh trước khi trích; lịch đích mặc định theo dự án; nhập lịch hai chiều và màn trạng thái đồng bộ.*
+*Phiên bản 3.7 — 23/09/2026. Tài liệu sống, cập nhật liên tục theo các buổi thử prototype; các thay đổi mới nhất: book lịch ngay từ việc, việc đặt chỗ cho spa/clinic, sửa và xóa sự kiện trong màn Lịch; biết Mai đang ở đâu bằng vị trí thiết bị; phân quyền bot trong group Lark; gói tổng hợp cuối ngày để Mai duyệt một lần rồi ghi vào việc, lịch và file.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -79,6 +79,7 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 | Review | "Tuần này chị dồn thời gian vào đâu?" / "Bỏ việc viết lại trang About" |
 | Học tập | "Hôm nay chị học tiếng Thái rồi" / "Tuần này học 4 buổi" |
 | Dự án & category | "Tạo dự án Podcast" / "Thêm category Tuyển dụng vào Circle" |
+| Nghiên cứu | "Tìm giúp chị 5 công ty AI automation ở Bangkok, lưu vào Circle" |
 | Ghi chú | "Ghi chú cho việc hợp đồng Đô Thị: khách muốn thêm điều khoản bảo trì" |
 | Deadline | "Hạn thứ Sáu" / "Dời hợp đồng Đô thị sang thứ Hai" / "Việc này không có hạn" |
 | Khách hàng / đối tác | "Việc này của khách Đô thị" / "Thêm đối tác OKR vào Circle" / "Cho chị xem hết việc của Đô thị" |
@@ -229,7 +230,14 @@ flowchart LR
 **Chạm để xem, không phải để đóng**
 - Chạm vào bất kỳ chỗ nào trên một việc (trừ ô tick) → mở **màn chi tiết việc**. Áp dụng ở mọi nơi có danh sách việc: Hôm nay, Dự án, Lịch, Khách hàng, kết quả tìm kiếm.
 - Màn chi tiết gồm: tên việc (sửa được), Dự án · Category · Khách hàng, Deadline, ưu tiên, người làm, trạng thái, **Ghi chú** (nhật ký, 3d), **Nguồn** (trích dẫn tin nhắn / email / ảnh gốc, link mở lại nguồn), file đính kèm, sự kiện lịch liên quan, lịch sử thay đổi (ngày tạo, các lần đổi hạn).
-- Nút trong màn chi tiết: **Xong** · Dời hạn · Sửa · Xóa.
+- Nút trong màn chi tiết: **Xong** · **Book lịch** · Dời hạn · Sửa · Xóa.
+
+**Book lịch ngay từ một việc** (ở Hôm nay, Dự án, chi tiết dự án, khách hàng)
+- Mỗi dòng việc có nút nhanh **Book lịch** (trong menu "…" hoặc vuốt phải), không cần mở màn chi tiết.
+- Bấm vào → Lowtechie đề xuất 3 khung giờ trước deadline (theo 5.4), Mai chọn → thẻ xem trước → Book. Sự kiện lấy tên việc, gắn dự án · category · khách hàng, và đính link về việc.
+- Việc đã có lịch: dòng việc hiện giờ đã đặt (ví dụ "Thứ Năm 9:00"); chạm vào đó mở sự kiện; đổi giờ hoặc xóa lịch ngay tại đây.
+- Bằng chat/voice: "book 2 tiếng cho việc pitch deck thứ Năm".
+- Đóng việc → hỏi có xóa block còn lại trên lịch không.
 
 **Chỉ hai cách để đóng việc**
 1. Tick vào **ô tick ở đầu dòng**.
@@ -466,6 +474,15 @@ Mai dùng song song nhiều hộp thư và lịch: Gmail công việc (mai@soren
 - **Xem theo tháng:**
   - Mỗi ngày hiện chấm màu theo dự án (tối đa vài chấm, thêm "+N" nếu nhiều); ngày có hạn cứng, chuyến bay hoặc hẹn gia hạn giấy tờ có biểu tượng riêng dễ nhận ra.
   - Chạm vào một ngày → danh sách sự kiện và việc đến hạn của ngày đó ngay bên dưới.
+
+**Sửa và xóa sự kiện đã có**
+- Chạm vào một sự kiện → **màn chi tiết sự kiện**: giờ, địa điểm (nút Mở Maps), lịch nguồn và tài khoản, người tham dự, link họp, ghi chú, file đính kèm, việc và chuỗi block liên quan.
+- Nút: **Sửa · Dời · Xóa · Thêm chuỗi chuẩn bị + di chuyển · Nhân bản**.
+- **Sửa** đi qua thẻ xem trước (5.4), chỉ hiện phần thay đổi (trước → sau); lưu xong đồng bộ ngược về Google/Lark Calendar.
+- **Xóa:** hỏi xác nhận, nêu rõ sẽ xóa kèm những gì (block chuẩn bị, di chuyển, nhắc việc); sự kiện lặp thì hỏi **lần này hay cả chuỗi**; có lời mời đã gửi thì hỏi riêng trước khi hủy; **hoàn tác** trong vài phút.
+- Sự kiện đến từ lịch chỉ xem (lịch nhóm, lịch đăng ký) → không cho sửa/xóa, nói rõ lý do.
+- Sửa/xóa bằng chat/voice: "dời cắt tóc thứ Sáu sang 17:00", "xóa lịch tarot".
+- **Cảnh báo trùng giờ:** hai sự kiện chồng nhau trong cùng khung (thấy 25/9: "Triệt lông… tại Ngọc Dung" và "Cắt tóc" đều 15:00–16:00) → hiện dấu trùng và đề xuất dời một cái.
   - Vuốt trái/phải để chuyển tháng; nút **Hôm nay** để quay về; chọn nhanh tháng/năm bất kỳ.
 - **Không giới hạn thời gian:** cuộn tới tương lai hay lùi về quá khứ bao xa cũng được (ví dụ xem lại lịch năm ngoái, hoặc xem hẹn gia hạn sau 1 năm). Dữ liệu được tải dần theo tháng đang xem từ Google Calendar và Lark Calendar, không tải trước toàn bộ.
 - **Lịch cũ:** sự kiện đã qua vẫn xem được đầy đủ (giờ, địa điểm, ghi chú, file đính kèm, recap họp nếu có).
@@ -554,6 +571,12 @@ Một số lịch chỉ thành khi Mai **đã đặt chỗ với nơi đó**: sp
 - Địa điểm đã lưu có thêm thông tin đặt chỗ: **cần đặt trước** (có/không), **đặt trước bao lâu** (ví dụ spa 3 ngày, nhà hàng cuối tuần 7 ngày), **cách đặt** (gọi điện, LINE, Zalo, WhatsApp, website, app đặt chỗ) kèm số điện thoại / link.
 - Lowtechie gợi ý bật "cần đặt trước" theo loại nơi (spa, salon, nhà hàng, phòng khám); Mai xác nhận một lần cho mỗi nơi, lần sau tự áp dụng.
 
+**Việc đặt chỗ nằm trong app, không chỉ là thông báo**
+- Với spa, clinic, salon, phòng khám: khi tạo sự kiện, app **tự tạo một việc "Đặt lịch [nơi] cho [ngày giờ]"** trong danh sách việc (Cá nhân · Sức khỏe & làm đẹp), hiện ở Hôm nay và trong dự án như mọi việc khác — không chỉ là một thông báo trôi qua.
+- **Nhận biết nơi cần đặt:** theo địa điểm đã lưu, hoặc theo từ khóa trong tên sự kiện (spa, triệt lông, cắt tóc, khám, nha khoa, tiêm, clinic, massage, nail). Lần đầu gặp một nơi, Lowtechie hỏi một câu: "Nơi này cần đặt trước bao lâu?" rồi nhớ cho các lần sau.
+- Việc đặt chỗ **gắn với sự kiện**: tick xong việc → sự kiện chuyển trạng thái "Đã đặt"; xóa sự kiện → hỏi có xóa việc đặt chỗ không.
+- Sự kiện chưa đặt chỗ hiện dấu riêng trong màn Lịch và trong brief sáng ("2 lịch tuần này chưa đặt chỗ").
+
 **Khi tạo lịch ở nơi cần đặt chỗ**
 - Sự kiện trên lịch hiện trạng thái **"Chưa đặt chỗ"** (biểu tượng riêng trên màn Ngày/Tuần/Tháng) cho đến khi Mai xác nhận đã đặt.
 - Tự tạo việc **"Đặt lịch [nơi] cho [ngày giờ]"** với deadline = ngày hẹn trừ thời gian đặt trước, vào dự án Cá nhân · Sức khỏe & làm đẹp (hoặc dự án của sự kiện).
@@ -569,6 +592,27 @@ Một số lịch chỉ thành khi Mai **đã đặt chỗ với nơi đó**: sp
 **Lịch định kỳ cần đặt chỗ** (ví dụ spa mỗi 2 tuần)
 - Mỗi lần lặp tự sinh một nhắc đặt chỗ riêng theo đúng thời gian đặt trước của nơi đó.
 - Tùy chọn: nhắc đặt luôn lần kế tiếp ngay sau buổi hiện tại ("đặt luôn buổi sau khi đang ở spa").
+
+### 5.4.3 Biết Mai đang ở đâu
+Để tính đúng điểm xuất phát, phương tiện và thời gian di chuyển, app cần biết Mai đang ở đâu. **Không lấy được từ lịch sử Google Maps:** từ 2024 Google chuyển Timeline về lưu trên máy, bỏ bản web, và Takeout không còn xuất nữa; chỉ còn cách người dùng tự xuất file thủ công. Vì vậy app dùng chính **vị trí của thiết bị**, không phải dữ liệu của Google.
+
+**Ba mức, Mai chọn**
+1. **Chỉ khi cần** (mặc định): app hỏi vị trí lúc mở màn Lịch hoặc khi tính chuỗi di chuyển. Không chạy nền, không tốn pin.
+2. **Nền nhẹ** (khuyến nghị): dùng phát hiện "đến/rời một nơi" và vùng quanh các địa điểm đã lưu (nhà Bangkok, nơi ở HCMC, sân bay, văn phòng). App chỉ biết Mai **đã tới hoặc đã rời** những nơi đó, không ghi lại đường đi.
+3. **Không dùng vị trí:** app suy ra thành phố từ lịch và chuyến bay đã lưu (đang ở Tokyo từ ngày này tới ngày kia), và Mai tự nói khi đổi chỗ ("chị đang ở HCMC").
+
+**App dùng vị trí để làm gì**
+- **Điểm xuất phát đúng:** tính chuỗi chuẩn bị + di chuyển từ nơi Mai đang thực sự ở, thay vì mặc định nhà Bangkok.
+- **Thành phố hiện tại:** quyết định phương tiện mặc định (Bangkok → tàu điện, HCMC → Grab), múi giờ hiển thị, và cảnh báo giờ nửa đêm theo giờ địa phương.
+- **Kiểm tra lại trước giờ đi:** so vị trí hiện tại với điểm hẹn, tính lại thời gian theo giao thông thực tế và báo "đi ngay" nếu trễ.
+- **Nhận biết phương tiện thực tế** (nếu Mai bật): hệ thống nhận dạng chuyển động của điện thoại cho biết đang đi bộ, đi xe hay ngồi yên, để học phương tiện Mai hay dùng cho từng tuyến. Mai luôn ghi đè được.
+- **Xác nhận đã đến:** tự đánh dấu đã tới nơi hẹn, và tính thời gian di chuyển thực tế để lần sau ước lượng sát hơn.
+
+**Ranh giới**
+- Quyền vị trí xin khi Mai bật mức 2, giải thích rõ dùng để làm gì; tắt lại bất cứ lúc nào.
+- Chỉ lưu **nơi và thành phố** (đã tới nhà, đã tới sân bay), **không lưu đường đi chi tiết**; dữ liệu vị trí giữ tối đa 30 ngày rồi xóa.
+- Vị trí là dữ liệu **Riêng tư**, không bao giờ chia sẻ sang không gian dự án hay cho cộng sự.
+- Nếu Mai đã có file xuất Timeline từ Google Maps và muốn dùng để app học tuyến quen, có thể nhập thủ công một lần; app không tự lấy được.
 
 ### 5.5 Ingest group chat (Zalo / WhatsApp)
 - Đọc tin nhắn các group được cho phép (allowlist), tóm tắt theo lịch (cuối ngày hoặc khi có `@bot`).
@@ -600,10 +644,95 @@ Lark là kênh **chính thức và dễ tích hợp nhất** trong các kênh ch
 - Đọc/ghi như Google Calendar (5.4): thẻ xem trước trước khi book, chuỗi chuẩn bị + di chuyển, đồng bộ hai chiều, hoàn tác.
 - Lời mời họp nhận qua Lark Calendar được đưa vào lịch tổng và kiểm tra trùng giờ.
 
-**Thiết lập**
-- Tạo một app tùy chỉnh trên Lark Open Platform (bản quốc tế larksuite.com) trong tổ chức Lark của Mai, bật khả năng bot, đăng ký sự kiện nhận tin nhắn, xin các quyền: nhắn tin, đọc tin @ trong group, (tùy chọn) đọc toàn bộ tin group, lịch, mail. Quyền nhạy cảm cần admin tổ chức duyệt.
+**Thiết lập — các bước đưa bot vào group Lark**
+1. **Bật bot cho app hiện tại** trên Lark Open Platform (bản quốc tế, larksuite.com) — dùng chính app đã kết nối lịch, không cần app mới. Đặt tên và ảnh đại diện "Mai Lowtechie".
+2. **Xin quyền:** gửi tin nhắn dưới danh nghĩa bot; đọc tin nhắn có @bot trong group; đọc danh sách group và thành viên; **(tùy chọn)** đọc toàn bộ tin nhắn group — quyền nhạy cảm, cần admin tổ chức duyệt.
+3. **Đăng ký sự kiện tin nhắn:** khai báo địa chỉ webhook của app nhận sự kiện "nhận được tin nhắn", lưu verification token và encrypt key, và trả lời đúng bước xác minh địa chỉ của Lark.
+4. **Phát hành phiên bản app** và chờ admin tổ chức duyệt. Chưa duyệt thì bot không nhận được sự kiện nào.
+5. **Thêm bot vào group:** trong cài đặt group Lark → mục bot → thêm "Mai Lowtechie". Bot gửi một tin giới thiệu: nó ghi nhận việc và quyết định, chế độ đang bật là gì, ai tắt được.
+6. **Gắn group với dự án và khách hàng** trong app (ví dụ group "Circle × Đô Thị" → Circle · Đô Thị) và chọn chế độ: chỉ khi được @ hoặc đọc toàn bộ.
+7. **Kiểm tra:** nhắn "@Lowtechie ghi việc: gửi proposal cho Đô Thị thứ Sáu" → việc phải xuất hiện trong Hộp duyệt kèm link về tin nhắn gốc trong vòng vài giây.
+
+**Bot không nhận được tin nhắn — kiểm tra theo thứ tự này**
+1. App đã **phát hành phiên bản** và được admin tổ chức **duyệt** chưa (chưa duyệt thì không có sự kiện nào tới).
+2. Đã bật tùy chọn cho phép **thêm bot vào group** trong phần cấu hình bot chưa.
+3. Quyền đọc tin có @bot trong group đã được cấp chưa; muốn đọc toàn bộ tin group thì cần quyền riêng, nhạy cảm hơn.
+4. Địa chỉ webhook đã qua bước **xác minh** của Lark chưa, và có đang chạy trên HTTPS công khai không.
+5. Sự kiện "nhận được tin nhắn" đã được đăng ký cho đúng phiên bản app đang dùng chưa.
+6. Đúng miền chưa: bản quốc tế (larksuite) và bản Trung Quốc (feishu) dùng endpoint khác nhau.
+7. Bot đã thực sự nằm trong danh sách thành viên của group chưa.
+
+**Tóm tắt và chốt việc ngay trong Lark**
+- Cuối ngày (giờ Mai chọn) bot gửi vào group hoặc nhắn riêng cho Mai một **thẻ tương tác Lark**: tóm tắt trao đổi, danh sách việc đề xuất (mỗi việc có người làm, hạn, dự án/category/khách hàng), quyết định đã chốt, câu hỏi chưa ai trả lời.
+- Thẻ có nút bấm ngay trong Lark: **Nhận tất cả · Chọn từng việc · Sửa · Bỏ**. Bấm xong Lowtechie mới ghi vào danh sách việc và file Google Sheets, đúng nguyên tắc 5.2.1.
+- Sửa nhanh bằng cách trả lời bot trong Lark ("việc 2 giao cho Linh, hạn thứ Tư") hoặc mở app để sửa đầy đủ.
+- Gọi bất cứ lúc nào: "@Lowtechie tóm tắt 2 ngày qua", "@Lowtechie group này còn việc gì treo?".
 - Mai đăng nhập Lark một lần (OAuth) để app truy cập lịch và hộp thư cá nhân.
 - Cần kiểm tra khi build: phạm vi Mail API mà tổ chức Lark của Mai được phép dùng, và giới hạn tần suất gọi API.
+
+### 5.5.3 Gói tổng hợp từ group → Mai duyệt một lần → ghi vào việc, lịch, file
+Bot gom mọi thứ rải rác trong group thành **một gói duy nhất** gửi cho Mai (nhắn riêng, hoặc trong group nếu Mai muốn). Gửi cuối ngày vào giờ Mai chọn, sau mỗi cuộc họp, hoặc khi gọi "@Lowtechie chốt việc hôm nay".
+
+**Nội dung gói**
+1. **Tóm tắt trao đổi** — 3–5 câu.
+2. **Việc theo từng người** — mỗi việc có: tên việc · người phụ trách · hạn · dự án · category · khách hàng · trích dẫn tin nhắn gốc · độ chắc chắn. Việc chưa rõ ai làm được để riêng ở mục "Chưa có người".
+3. **Lịch đề xuất** — cuộc hẹn, buổi họp, deadline có giờ được nhắc trong chat ("họp thứ Năm 3h") → soạn sẵn sự kiện kèm **lịch đích** theo dự án (ví dụ Circle → lịch Lark The Circle), thời lượng, địa điểm hoặc link họp.
+4. **File & link** — file gửi trong group (hợp đồng, báo giá, ảnh) và link quan trọng, mỗi cái kèm một dòng mô tả và đề xuất nơi lưu (thư mục dự án trên Drive / Lark) và gắn khách hàng.
+5. **Quyết định đã chốt** và **câu hỏi chưa ai trả lời**.
+
+**Mai duyệt**
+- Nút trên thẻ: **Nhận tất cả** · **Chọn từng mục** · **Sửa** · **Bỏ**. Mỗi dòng có ô tick riêng để loại bớt.
+- Sửa nhanh bằng cách trả lời bot: "việc 2 giao cho Linh, hạn thứ Tư", "bỏ mục 5", "họp thứ Năm đổi sang 16:00".
+- Trước khi ghi, gói đi qua các kiểm tra của 5.2.1: trùng việc, thiếu hạn, hạn rơi vào ngày bay, sai dự án/category/khách hàng.
+
+**Sau khi Mai duyệt, bot ghi một lượt**
+- **Việc** vào danh sách và Google Sheets, đúng dự án · category · khách hàng · hạn; việc của cộng sự hiện trong app của họ.
+- **Lịch:** tạo sự kiện trên lịch đích kèm chuỗi chuẩn bị + di chuyển nếu có địa điểm. **Sự kiện có mời người khác vẫn cần một xác nhận riêng** vì gửi email ra ngoài.
+- **File** lưu vào thư mục dự án (Drive hoặc Lark), link lưu vào ghi chú của việc hoặc hồ sơ khách hàng; mọi thứ giữ link về tin nhắn gốc.
+- **Quyết định** vào decision log của dự án; **câu hỏi treo** thành việc "cần trả lời" hoặc nhắc trong group.
+- Bot nhắn lại trong group một dòng gọn: "Đã ghi 6 việc, 1 lịch, 2 file vào [dự án]" — không liệt kê chi tiết nếu group có khách hàng.
+
+**Việc giao cho cộng sự**
+- Người phụ trách lấy từ thành viên group, khớp với cộng sự trong app; chưa khớp → bot hỏi một lần rồi nhớ.
+- Người được giao nhận thẻ riêng trong Lark: **Nhận · Đổi hạn · Từ chối kèm lý do**; kết quả báo lại cho Mai.
+- Việc quá hạn của cộng sự → bot nhắc riêng người đó trước, sau đó mới đưa vào mục "Đang chờ người khác" của Mai.
+
+### 5.5.2 Bot trong group làm được gì — ai hỏi được gì
+**Nguyên tắc:** bot chỉ trả lời **trong phạm vi dự án đã gắn với group đó**, và chỉ ở mức **Dự án**. Mọi thứ thuộc mức Riêng tư của Mai không bao giờ xuất hiện trong group, kể cả khi có người hỏi thẳng.
+
+**Ai trong group cũng tag được (tác vụ chung)**
+| Tác vụ | Ví dụ |
+|---|---|
+| Tóm tắt trao đổi | "@Lowtechie tóm tắt 2 ngày qua" / "…từ hôm qua tới giờ" |
+| Ghi việc từ đoạn chat | "@Lowtechie ghi việc: gửi proposal cho Đô Thị thứ Sáu" |
+| Giao việc cho người trong group | "@Lowtechie giao việc này cho Linh, hạn thứ Tư" |
+| Hỏi trạng thái việc của dự án đó | "@Lowtechie việc nào đang treo?" / "ai đang làm phần đào tạo?" |
+| Đổi hạn, đánh dấu xong việc mình phụ trách | "@Lowtechie việc chatbot xong rồi" |
+| Ghi quyết định và câu hỏi bỏ ngỏ | "@Lowtechie ghi quyết định: chốt pilot 6 tuần" |
+| Tìm file, recap họp, link của dự án đó | "@Lowtechie recap buổi họp OKR hôm qua đâu?" |
+| Nhắc follow-up | "@Lowtechie nhắc Linh thứ Năm" |
+| Tìm khung giờ họp chung (nếu Mai bật) | "@Lowtechie tìm 1 tiếng tuần sau cho 4 người" → bot chỉ trả về **khung giờ đề xuất**, không hiện tiêu đề hay địa điểm lịch của Mai |
+| Nghiên cứu thông tin công khai (nếu Mai bật, có hạn mức) | "@Lowtechie tìm giúp báo giá thị trường cho hạng mục này" |
+
+**Chỉ Mai hỏi được — bot trả lời trong nhắn riêng, không bao giờ trong group**
+| Nhóm | Gồm |
+|---|---|
+| Lịch cá nhân | Toàn bộ lịch trong ngày, tiêu đề, địa điểm, người tham dự, lịch của các dự án khác |
+| Vị trí & di chuyển | Mai đang ở đâu, chuỗi chuẩn bị + di chuyển, giờ rời nhà |
+| Chuyến đi | Vé máy bay, mã đặt chỗ, checklist bay, giấy tờ nhập cảnh |
+| Việc ngoài dự án của group | Sorene, Cá nhân, Học tập, Admin chung, và việc Mai đánh dấu Riêng tư |
+| Ghi chú riêng tư | Ghi chú Mai đánh dấu chỉ mình xem |
+| Email & hộp thư | Nội dung email, thư từ khách hàng khác |
+| Hẹn cá nhân | Spa, clinic, gia hạn giấy tờ, sức khỏe |
+| Tổng quan điều hành | Weekly review, việc nên bỏ, tình trạng các dự án khác, danh bạ khách hàng của dự án khác |
+| Thay đổi cấu trúc | Tạo/sửa/xóa dự án, category, khách hàng; xóa dữ liệu |
+
+**Cách bot xử lý câu hỏi vượt phạm vi**
+- Người khác hỏi thứ thuộc mức Riêng tư → bot trả lời ngắn trong group: "Việc này mình chỉ trả lời riêng với Mai", **không xác nhận cũng không phủ nhận** nội dung có tồn tại hay không.
+- Mai hỏi trong group một thứ riêng tư → bot trả lời **qua nhắn riêng**, trong group chỉ báo "Mình nhắn riêng cho Mai rồi".
+- Mọi hành động gửi ra ngoài (gửi recap cho khách, gửi email, đặt lịch có mời người khác) vẫn cần Mai duyệt.
+- **Bật/tắt theo từng group:** Mai chọn group nào được dùng tác vụ nào (ví dụ group có khách hàng thì tắt phần tìm giờ họp và nghiên cứu).
+- **Nhật ký truy vấn:** ai hỏi gì, bot trả lời gì, để Mai xem lại khi cần.
 
 ### 5.6 Không gian chung & assistant của cộng sự
 - Mô hình quyền 3 lớp: **Riêng tư** (chỉ Mai) / **Dự án** (thành viên dự án) / **Công khai trong team**.
@@ -777,6 +906,18 @@ Chuỗi đầy đủ gồm các block theo đúng thứ tự thời gian:
 - Ngày về: tự tạo việc "gửi recap chuyến đi / follow-up khách đã gặp".
 - Yêu cầu nhập cảnh thay đổi theo quốc tịch và theo thời gian; Lowtechie luôn nhắc kiểm tra trang chính thức, không khẳng định thay.
 
+### 5.9.1 Trợ lý nghiên cứu
+Mai giao việc tìm hiểu bằng chat hoặc voice ("tìm giúp chị các công ty làm AI automation ở Bangkok", "so sánh 3 nền tảng chatbot cho khách sạn", "chuẩn bị hồ sơ về Đô Thị trước buổi họp").
+
+- **Nguồn:** tìm kiếm web và đọc trang; dữ liệu nội bộ của Mai (việc, ghi chú, recap họp, email, file trên Drive/Lark) khi liên quan.
+- **Hai mức độ:** *Nhanh* (vài phút, 3–5 nguồn, trả lời ngay trong chat) và *Sâu* (nhiều nguồn, mất lâu hơn, chạy nền và báo khi xong). Với mức Sâu, Lowtechie hỏi trước phạm vi và thời điểm cần có kết quả.
+- **Kết quả:** tóm tắt ngắn trước, sau đó là phần chi tiết; **luôn kèm nguồn và ngày truy cập**; nêu rõ chỗ nào chưa chắc chắn hoặc thiếu dữ liệu, không đoán thành sự thật.
+- **Lưu kết quả:** thành ghi chú gắn vào dự án hoặc khách hàng, hoặc thành tài liệu trong Drive / Lark Docs. Mai chọn nơi lưu trên thẻ xác nhận.
+- **Biến thành việc:** từ kết quả nghiên cứu, Lowtechie đề xuất việc tiếp theo (ví dụ "liên hệ 3 công ty trong danh sách"), đi qua Hộp duyệt như mọi nguồn khác.
+- **Chuẩn bị trước họp:** hồ sơ nhanh về công ty/người sắp gặp: họ làm gì, tin tức gần đây, lịch sử trao đổi với Mai (email, recap họp, việc đang treo).
+- **Theo dõi định kỳ:** Mai đặt "mỗi thứ Hai tóm tắt tin ngành AI ở Đông Nam Á" → kết quả gửi kèm brief sáng.
+- **Giới hạn cần nói rõ với Mai:** không đọc được nội dung sau đăng nhập hoặc tường phí; số liệu quan trọng nên kiểm tra lại tại nguồn gốc; nghiên cứu sâu tốn thời gian và chi phí gọi API nên có hạn mức hàng tháng Mai đặt.
+
 ### 5.10 Briefing & review
 - **Brief sáng** (qua app + đẩy sang Zalo/WhatsApp/Telegram): lịch, top 3, chờ người khác, deadline 7 ngày.
 - **Shutdown tối**: việc xong, việc dời, nhắc chuẩn bị cho mai.
@@ -911,6 +1052,7 @@ Ghi chú lựa chọn:
 - `messages_ingested` (channel, group_id, sender, text, ts, processed)
 - `decisions` (project_id, text, decided_at, source_ref)
 - `people` (name, org, channels, last_contact_at)
+- `location_state` (current_city, current_place_id, source: gps/calendar/manual, updated_at, expires_at)
 - `places` (name, address, place_id, city, is_home, home_station, walk_to_station_min, needs_booking, booking_lead_days, booking_method, booking_contact, booking_language)
 - `bookings` (event_id, place_id, status: chua_dat/da_dat/huy, booked_at, confirmation_code, notes)
 - `city_defaults` (city, default_mode, rain_walk_buffer_min)

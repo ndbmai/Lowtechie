@@ -3,8 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Blossom } from "@/components/Blossom";
+import { BookTaskSheet } from "@/components/BookTaskSheet";
+import { BookingAskCard } from "@/components/BookingAsk";
 import { Bubble } from "@/components/Bubble";
 import { DueEditor } from "@/components/DueEditor";
+import { ResearchPanel } from "@/components/ResearchPanel";
 import { SearchSelect, type PickOption } from "@/components/SearchSelect";
 import { bannerNote, canAutoBookBanner, findDuplicateEvent, resolveBannerTiming } from "@/core/banner";
 import { classify, findDuplicate, learnableTerms, CONFIDENCE_THRESHOLD } from "@/core/classify";
@@ -12,12 +15,15 @@ import {
   clientProjectHint,
   clientsFor,
   findClientByName,
+  foldName,
   matchClient,
   matchClientDetail,
   orderClientsForPick,
   sanitizeClientId,
   withLearnedAlias,
 } from "@/core/clients";
+import { matchEventByName, rescheduleTarget } from "@/core/eventOps";
+import { CITY_LABEL, LOCATION_TTL_MS } from "@/core/location";
 import { detectProject, parseCommand, parseWhen } from "@/core/parse";
 import {
   PROJECT_COLORS,
@@ -30,6 +36,7 @@ import {
 import type {
   BannerContact,
   BannerEvent,
+  CalEvent,
   Category,
   Client,
   DueType,
@@ -38,13 +45,30 @@ import type {
   ParsedAction,
   Project,
   ProjectId,
+  Task,
 } from "@/core/types";
-import { fmtDayFull, fmtDayTime, fmtRelativeDay, fmtTime, isSameDay } from "@/lib/format";
+import { attachBooking, type BookingAsk } from "@/lib/booking";
+import {
+  deleteEventEverywhere,
+  gcalToCal,
+  remoteMetaOf,
+  saveEventEdit,
+  type RemoteMeta,
+} from "@/lib/calendarActions";
+import { fmtDay, fmtDayFull, fmtDayTime, fmtDue, fmtRange, fmtRelativeDay, fmtTime, isSameDay } from "@/lib/format";
 import { putFile } from "@/lib/fileStore";
 import { compressImage, dataUrlToBlob, decodeQr } from "@/lib/image";
 import { useSpeech } from "@/lib/speech";
 import { useStore, type TaskDraft } from "@/lib/store";
-import { createGcalEvent, deleteGcalEvent, useAccounts, useGoogleStatus } from "@/lib/useGoogle";
+import { showToast } from "@/lib/toast";
+import {
+  createGcalEvent,
+  deleteGcalEvent,
+  searchGcalEvents,
+  useAccounts,
+  useGoogleStatus,
+  type GcalEvent,
+} from "@/lib/useGoogle";
 
 function taxonomyPayload(t: { projects: Project[]; categories: Category[]; clients: Client[] }) {
   return {
@@ -78,11 +102,30 @@ async function parseViaApi(
       }),
     });
     if (!res.ok) throw new Error(String(res.status));
-    return (await res.json()) as ParseResult;
+    const r = (await res.json()) as ParseResult;
+    // Claude có thể trả thiếu trường — bỏ hành động không dùng được thay vì vỡ thẻ.
+    return { ...r, actions: (r.actions ?? []).filter(usableAction) };
   } catch {
     // Không có API key / mất mạng → bộ luật chạy ngay trên trình duyệt,
     // đúng múi giờ của Mai.
     return parseCommand(text);
+  }
+}
+
+function usableAction(a: ParsedAction): boolean {
+  const str = (v: unknown) => typeof v === "string" && v.trim().length > 0;
+  switch (a.kind) {
+    case "task":
+    case "event":
+      return str(a.title);
+    case "location":
+      return a.city === "bkk" || a.city === "hcmc" || a.city === "tokyo";
+    case "research":
+      return str(a.query);
+    case "note":
+      return str(a.what) && str(a.text);
+    default:
+      return str((a as { what?: unknown }).what);
   }
 }
 
@@ -120,7 +163,9 @@ export default function CapturePage() {
     feedback,
     addTask,
     addEvent,
-    reschedule,
+    rescheduleTask,
+    setEventBooking,
+    setLocationState,
     setPendingBlock,
     addTriageGroup,
     recordFeedback,
@@ -170,6 +215,14 @@ export default function CapturePage() {
   const [lastBooked, setLastBooked] = useState<
     { localId: string; gcalId?: string; account?: string }[] | null
   >(null);
+  /** Sự kiện trên Google/Lark khớp lệnh dời/xóa/đã đặt (khi app không có bản local). */
+  const [remoteHits, setRemoteHits] = useState<Record<number, GcalEvent | null>>({});
+  /** Lần đầu gặp nơi cần đặt chỗ → hỏi một câu (§5.4.2 v3.7). */
+  const [bookingAsk, setBookingAsk] = useState<BookingAsk | null>(null);
+  /** "book 2 tiếng cho việc X thứ Năm" → tấm chọn khung giờ (§5.2.2 v3.7). */
+  const [bookSheet, setBookSheet] = useState<{ task: Task; duration?: number; onDay?: string } | null>(null);
+  /** "tìm giúp chị…" → thẻ nghiên cứu (§5.9.1 v3.7). */
+  const [research, setResearch] = useState<{ query: string; projectId?: ProjectId } | null>(null);
 
   const runParse = useCallback(
     async (t: string) => {
@@ -183,6 +236,8 @@ export default function CapturePage() {
       setLastBooked(null);
       setClientQ({});
       setNoteEdits({});
+      setRemoteHits({});
+      setBookingAsk(null);
       const r = await parseViaApi(t.trim(), { projects, categories, clients });
       setResult(r);
       setBusy(false);
@@ -276,6 +331,62 @@ export default function CapturePage() {
         .filter((x): x is { a: Extract<ParsedAction, { kind: "task" }>; i: number } => x.a.kind === "task"),
     [result],
   );
+
+  /** Sự kiện trong app có thể là đích của lệnh chat (không tính block chuỗi). */
+  const localTargets = useMemo(
+    () => events.filter((e) => e.kind === "event" || e.kind === "block"),
+    [events],
+  );
+
+  /** Đích của "dời/xóa/đã đặt X": sự kiện trong app trước, rồi Google/Lark. */
+  const eventTarget = useCallback(
+    (
+      i: number,
+      a: { what: string; day?: string; kind: string },
+    ): { event: CalEvent; remote?: RemoteMeta } | undefined => {
+      const now = new Date();
+      const pool =
+        a.kind === "booked"
+          ? [...localTargets.filter((e) => e.bookingStatus === "pending"), ...localTargets]
+          : localTargets;
+      const local = matchEventByName(pool, a.what, a.day, now);
+      if (local) return { event: local };
+      const g = remoteHits[i];
+      if (!g) return undefined;
+      return { event: gcalToCal(g), remote: remoteMetaOf(g) };
+    },
+    [localTargets, remoteHits],
+  );
+
+  /** Việc đang mở khớp tên Mai nói (không dấu). */
+  const findOpenTask = useCallback(
+    (what: string) => {
+      const q = foldName(what);
+      return tasks.find(
+        (t) => (t.status === "todo" || t.status === "doing") && foldName(t.title).includes(q),
+      );
+    },
+    [tasks],
+  );
+
+  // Lệnh dời/xóa/đã đặt mà app không có bản local → tìm trên Google/Lark.
+  useEffect(() => {
+    if (!result || !gs.connected) return;
+    let alive = true;
+    void (async () => {
+      const next: Record<number, GcalEvent | null> = {};
+      for (const [i, a] of result.actions.entries()) {
+        if (a.kind !== "reschedule" && a.kind !== "delete_event" && a.kind !== "booked") continue;
+        if (matchEventByName(localTargets, a.what, a.day, new Date())) continue;
+        const list = await searchGcalEvents(a.what);
+        next[i] = matchEventByName(list, a.what, a.day, new Date()) ?? null;
+      }
+      if (alive) setRemoteHits(next);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [result, gs.connected, localTargets]);
 
   const duplicates = useMemo(() => {
     const m: Record<number, string> = {};
@@ -388,13 +499,6 @@ export default function CapturePage() {
             gcalId = created?.gcalId ?? null;
             calAccount = created?.accountId;
           }
-          // Nơi cần đặt chỗ trước (§5.4.2): lịch mang trạng thái "Chưa đặt"
-          // + việc "Đặt lịch…" tự vào Hộp duyệt với hạn = ngày hẹn − đặt trước.
-          const place = places.find(
-            (pl) =>
-              pl.needsBooking &&
-              `${a.location ?? ""} ${a.title}`.toLowerCase().includes(pl.name.toLowerCase()),
-          );
           const ev = addEvent({
             title: a.title,
             startAt: start.toISOString(),
@@ -403,28 +507,12 @@ export default function CapturePage() {
             kind: "event",
             gcalId: gcalId ?? undefined,
             calAccount,
-            bookingStatus: place ? "pending" : undefined,
-            placeId: place?.id,
           });
-          if (place) {
-            const dueDate = new Date(start.getTime() - place.bookingLeadDays * 86_400_000);
-            dueDate.setHours(9, 0, 0, 0);
-            addTriage({
-              title: `Đặt lịch ${place.name} cho ${fmtDayTime(start.toISOString())}`,
-              projectId: "canhan",
-              categoryId: "canhan:suckhoe",
-              assignee: "mai",
-              dueAt: dueDate.toISOString(),
-              dueType: "hard",
-              dueSource: "nguon",
-              source: {
-                channel: "manual",
-                quote: `“${a.title}” — ${place.name} cần đặt trước ${place.bookingLeadDays} ngày`,
-              },
-              confidence: 1,
-            });
-            lines.push(`🔖 ${place.name} cần đặt trước ${place.bookingLeadDays} ngày — việc "Đặt lịch" đang chờ trong Hộp duyệt.`);
-          }
+          // Nơi cần đặt chỗ (§5.4.2 v3.7): VIỆC "Đặt lịch…" vào thẳng danh
+          // sách việc (không chỉ thông báo); lần đầu gặp nơi này thì hỏi một câu.
+          const b = attachBooking(ev);
+          if (b.line) lines.push(b.line);
+          if (b.ask) setBookingAsk(b.ask);
           if (gcalId) booked.push({ localId: ev.id, gcalId, account: calAccount });
           lines.push(
             `Đã thêm “${a.title}” lúc ${fmtTime(a.startAt)} ${fmtRelativeDay(a.startAt)}${
@@ -446,12 +534,99 @@ export default function CapturePage() {
         }
       } else if (a.kind === "reschedule") {
         if (!a.toWhen) continue;
-        const hit = reschedule(a.what, a.toWhen, a.keepTime ?? true);
-        lines.push(
-          hit
-            ? `Đã dời “${a.what}” sang ${fmtRelativeDay(a.toWhen)}${hit === "event" && a.keepTime ? " (giữ giờ cũ)" : ""}.`
-            : `Mình chưa tìm thấy “${a.what}” trong lịch hay danh sách việc — Mai kiểm tra giúp mình nhé.`,
-        );
+        const tgt = eventTarget(i, a);
+        if (tgt) {
+          if (tgt.remote?.readOnly) {
+            lines.push(`“${tgt.event.title}” thuộc lịch chỉ xem — chỉ người tạo mới dời được.`);
+            continue;
+          }
+          // Dời qua cùng đường với màn chi tiết: lịch ngoài + chuỗi block đi theo.
+          const newStart = rescheduleTarget(tgt.event.startAt, a.toWhen, {
+            keepTime: a.keepTime,
+            keepDate: a.keepDate,
+          });
+          const dur = Date.parse(tgt.event.endAt) - Date.parse(tgt.event.startAt);
+          const r = await saveEventEdit(
+            tgt.event,
+            { startAt: newStart, endAt: new Date(Date.parse(newStart) + dur).toISOString() },
+            tgt.remote,
+          );
+          lines.push(
+            `Đã dời “${tgt.event.title}” sang ${fmtDay(newStart)} ${fmtRange(newStart, new Date(Date.parse(newStart) + dur).toISOString())}${r.remoteOk ? "" : " — lịch ngoài báo lỗi, mới đổi trong app"}.`,
+          );
+          continue;
+        }
+        if (matchEventByName(localTargets, a.what, undefined, new Date())) {
+          lines.push(`Mình thấy lịch “${a.what}” nhưng không vào ngày Mai nói — Mai kiểm tra giúp mình nhé.`);
+          continue;
+        }
+        const task = findOpenTask(a.what);
+        if (task) {
+          const due =
+            task.dueAt && (a.keepTime || a.keepDate)
+              ? rescheduleTarget(task.dueAt, a.toWhen, { keepTime: a.keepTime, keepDate: a.keepDate })
+              : a.toWhen;
+          rescheduleTask(task.id, due);
+          lines.push(`Đã dời hạn “${task.title}” sang ${fmtRelativeDay(due)}.`);
+        } else {
+          lines.push(`Mình chưa tìm thấy “${a.what}” trong lịch hay danh sách việc — Mai kiểm tra giúp mình nhé.`);
+        }
+      } else if (a.kind === "delete_event") {
+        // Xóa bằng chat (§5.4.0 v3.7): thẻ trên đã hiện đúng lịch khớp — bấm Lưu là xác nhận.
+        const tgt = eventTarget(i, a);
+        if (!tgt) {
+          lines.push(`Mình chưa tìm thấy lịch “${a.what}” — Mai kiểm tra trong màn Lịch nhé.`);
+          continue;
+        }
+        const guests = tgt.remote?.attendees?.length ?? 0;
+        if (tgt.remote?.readOnly || tgt.remote?.seriesId || guests > 0) {
+          lines.push(
+            `“${tgt.event.title}” ${tgt.remote?.readOnly ? "thuộc lịch chỉ xem" : tgt.remote?.seriesId ? "là lịch lặp lại" : `có ${guests} người được mời`} — Mai mở nó trong màn Lịch để xác nhận riêng nhé.`,
+          );
+          continue;
+        }
+        const r = await deleteEventEverywhere(tgt.event, tgt.remote, { dropBookingTask: true });
+        if (!r.remoteOk && tgt.remote) {
+          lines.push(`Lịch ngoài chưa cho xóa “${tgt.event.title}” — mình giữ nguyên.`);
+          continue;
+        }
+        lines.push(`Đã xóa “${tgt.event.title}” (${fmtDayTime(tgt.event.startAt)}).`);
+        showToast({
+          text: `Đã xóa “${tgt.event.title}”`,
+          ttlMs: 120_000,
+          actions: [{ label: "Hoàn tác", primary: true, run: () => r.undo() }],
+        });
+      } else if (a.kind === "booked") {
+        const tgt = eventTarget(i, a);
+        if (!tgt) {
+          lines.push(`Mình chưa thấy lịch “${a.what}” để đánh dấu đã đặt chỗ.`);
+          continue;
+        }
+        setEventBooking(tgt.event.id, "booked");
+        lines.push(`Đã đánh dấu “${tgt.event.title}” (${fmtDayTime(tgt.event.startAt)}) đã đặt chỗ ✓ — việc đặt chỗ đi kèm cũng xong.`);
+      } else if (a.kind === "book_task") {
+        const task = findOpenTask(a.what);
+        if (!task) {
+          lines.push(`Mình chưa thấy việc “${a.what}” đang mở để book lịch.`);
+          continue;
+        }
+        setBookSheet({ task, duration: a.durationMinutes, onDay: a.day });
+        lines.push(`📅 Mình đề xuất khung giờ cho “${task.title}” bên dưới — Mai chọn một khung nhé.`);
+      } else if (a.kind === "location") {
+        const now = new Date();
+        setLocationState({
+          city: a.city,
+          source: "manual",
+          updatedAt: now.toISOString(),
+          expiresAt: new Date(now.getTime() + LOCATION_TTL_MS).toISOString(),
+        });
+        lines.push(`📍 Đã ghi: Mai đang ở ${CITY_LABEL[a.city]} — chuỗi di chuyển tính từ đây, phương tiện mặc định theo thành phố.`);
+      } else if (a.kind === "research") {
+        const projectId = a.projectId
+          ? sanitizeTaxonomy(projects, categories, a.projectId, undefined).projectId
+          : undefined;
+        setResearch({ query: a.query, projectId });
+        lines.push(`🔎 Mình đang nghiên cứu “${a.query}” — kết quả hiện ngay bên dưới.`);
       } else if (a.kind === "note") {
         // Ghi chú vào việc đã có (3d) — thẻ ở trên đã hiện đúng việc khớp.
         const target = tasks.find(
@@ -748,6 +923,116 @@ export default function CapturePage() {
     }
   }
 
+  /** Thẻ xác nhận cho lệnh dời/xóa/đã đặt/book việc/vị trí/nghiên cứu (v3.7). */
+  function renderActionCard(a: ParsedAction, i: number) {
+    if (a.kind === "reschedule") {
+      const tgt = eventTarget(i, a);
+      if (tgt && a.toWhen) {
+        const ns = rescheduleTarget(tgt.event.startAt, a.toWhen, { keepTime: a.keepTime, keepDate: a.keepDate });
+        const ne = new Date(Date.parse(ns) + Date.parse(tgt.event.endAt) - Date.parse(tgt.event.startAt)).toISOString();
+        return (
+          <div className="parsed cal">
+            <div className="k">Dời lịch — xem trước</div>
+            <b>{tgt.event.title}</b>
+            <div className="small">
+              <s className="muted">
+                {fmtDay(tgt.event.startAt)} {fmtRange(tgt.event.startAt, tgt.event.endAt)}
+              </s>{" "}
+              → <b>{fmtDay(ns)} {fmtRange(ns, ne)}</b>
+            </div>
+            {tgt.remote && (
+              <div className="small muted">
+                trên {tgt.remote.provider === "lark" ? "Lark" : "Google"}
+                {tgt.remote.readOnly ? " · lịch chỉ xem, không dời được" : ""}
+              </div>
+            )}
+          </div>
+        );
+      }
+      const task = findOpenTask(a.what);
+      return (
+        <div className="parsed cal">
+          <div className="k">{task ? "Dời hạn việc" : "Đổi lịch"}</div>
+          <b>{task ? task.title : a.what}</b>
+          <div className="small muted">
+            {task?.dueAt ? `${fmtDue(task.dueAt)} → ` : ""}
+            {a.toWhen ? (a.keepTime ? fmtRelativeDay(a.toWhen) : fmtDayTime(a.toWhen)) : "…?"}
+            {!task && !tgt ? " · chưa thấy lịch/việc khớp tên" : ""}
+          </div>
+        </div>
+      );
+    }
+    if (a.kind === "delete_event" || a.kind === "booked") {
+      const tgt = eventTarget(i, a);
+      const chain = tgt ? events.filter((e) => e.chainOf === tgt.event.id).length : 0;
+      const bookingTask = tgt
+        ? tasks.find((t) => t.bookingEventId === tgt.event.id && (t.status === "todo" || t.status === "doing"))
+        : undefined;
+      return (
+        <div className="parsed cal">
+          <div className="k">{a.kind === "delete_event" ? "Xóa lịch — xác nhận" : "Đã đặt chỗ"}</div>
+          <b>{tgt ? tgt.event.title : `“${a.what}”`}</b>
+          <div className="small muted">
+            {tgt
+              ? `${fmtDay(tgt.event.startAt)} ${fmtRange(tgt.event.startAt, tgt.event.endAt)}${tgt.remote ? ` · trên ${tgt.remote.provider === "lark" ? "Lark" : "Google"}` : ""}`
+              : "Chưa thấy lịch khớp tên — Mai kiểm tra lại nhé."}
+          </div>
+          {tgt && a.kind === "delete_event" && (
+            <div className="small">
+              {tgt.remote?.readOnly || tgt.remote?.seriesId || (tgt.remote?.attendees?.length ?? 0) > 0
+                ? "Lịch này cần xác nhận riêng trong màn Lịch (chỉ xem / lặp lại / có người được mời)."
+                : `Bấm Lưu là xóa${chain ? ` kèm ${chain} block chuẩn bị + di chuyển` : ""}${bookingTask ? ` và việc “${bookingTask.title}”` : ""} — có Hoàn tác.`}
+            </div>
+          )}
+          {tgt && a.kind === "booked" && bookingTask && (
+            <div className="small">Việc “{bookingTask.title}” cũng sẽ đóng.</div>
+          )}
+        </div>
+      );
+    }
+    if (a.kind === "book_task") {
+      const task = findOpenTask(a.what);
+      return (
+        <div className="parsed cal">
+          <div className="k">Book lịch cho việc</div>
+          <b>{task ? task.title : `“${a.what}”`}</b>
+          <div className="small muted">
+            {a.durationMinutes ? `${a.durationMinutes} phút` : "thời lượng chọn sau"}
+            {a.day ? ` · ${fmtDayFull(a.day)}` : task?.dueAt ? ` · trước hạn ${fmtDue(task.dueAt)}` : ""}
+            {task ? " · bấm Lưu để xem 3 khung đề xuất" : " · chưa thấy việc đang mở khớp tên"}
+          </div>
+        </div>
+      );
+    }
+    if (a.kind === "location") {
+      return (
+        <div className="parsed cal">
+          <div className="k">Vị trí</div>
+          <b>Mai đang ở {CITY_LABEL[a.city]}</b>
+          <div className="small muted">Chuỗi di chuyển + phương tiện mặc định tính theo thành phố này.</div>
+        </div>
+      );
+    }
+    if (a.kind === "research") {
+      const d = new Date();
+      const used = useStore.getState().researchUsage[`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`] ?? 0;
+      const projectName = a.projectId
+        ? projects.find((p) => p.id === sanitizeTaxonomy(projects, categories, a.projectId, undefined).projectId)?.name
+        : undefined;
+      return (
+        <div className="parsed cal">
+          <div className="k">Nghiên cứu · nhanh</div>
+          <b>{a.query}</b>
+          <div className="small muted">
+            Tìm web 3–5 nguồn, kèm nguồn + ngày truy cập{projectName ? ` · lưu vào ${projectName}` : ""} · lượt {used + 1}/
+            {settings.researchMonthlyLimit} tháng này. Bấm Lưu để bắt đầu.
+          </div>
+        </div>
+      );
+    }
+    return null;
+  }
+
   return (
     <main className="screen-body">
       <div className="hdr">
@@ -909,6 +1194,35 @@ export default function CapturePage() {
         </div>
       )}
 
+      {bookingAsk && (
+        <BookingAskCard
+          ask={bookingAsk}
+          onDone={(line) => {
+            setBookingAsk(null);
+            setSavedLines((sl) => [...(sl ?? []), line]);
+          }}
+        />
+      )}
+      {research && (
+        <ResearchPanel
+          query={research.query}
+          projectId={research.projectId}
+          onDone={(line) => {
+            setResearch(null);
+            if (line) setSavedLines((sl) => [...(sl ?? []), line]);
+          }}
+        />
+      )}
+      {bookSheet && (
+        <BookTaskSheet
+          task={bookSheet.task}
+          initialDuration={bookSheet.duration}
+          onDay={bookSheet.onDay}
+          onClose={() => setBookSheet(null)}
+          onBooked={(line) => setSavedLines((sl) => [...(sl ?? []), line])}
+        />
+      )}
+
       {result && (
         <>
           {summary && <div className="muted small">{summary}:</div>}
@@ -999,14 +1313,7 @@ export default function CapturePage() {
                   );
                 })()
               ) : (
-                <div className="parsed cal" key={i}>
-                  <div className="k">Đổi lịch</div>
-                  <b>{a.what}</b>
-                  <div className="small muted">
-                    sang {a.toWhen ? (a.keepTime ? fmtRelativeDay(a.toWhen) : fmtDayTime(a.toWhen)) : "…?"}
-                    {a.note ? ` · ${a.note}` : ""}
-                  </div>
-                </div>
+                <div key={i}>{renderActionCard(a, i)}</div>
               );
             }
 

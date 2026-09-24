@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { BookTaskSheet } from "@/components/BookTaskSheet";
 import { DueEditor } from "@/components/DueEditor";
+import { EventDetail } from "@/components/EventDetail";
+import { announceDone } from "@/components/TaskRow";
 import { categoryName, projectById } from "@/core/projects";
 import type { SourceChannel } from "@/core/types";
-import { fmtDayFull, fmtDayTime, fmtDue } from "@/lib/format";
+import { fmtDay, fmtDayFull, fmtDayTime, fmtDue, fmtRange } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
 const CHANNEL_LABELS: Record<SourceChannel, string> = {
@@ -15,6 +18,7 @@ const CHANNEL_LABELS: Record<SourceChannel, string> = {
   telegram: "Telegram",
   email: "Email",
   meeting: "Cuộc họp",
+  lark: "Lark",
   manual: "Tự thêm",
 };
 
@@ -23,7 +27,15 @@ const CHANNEL_LABELS: Record<SourceChannel, string> = {
  * đóng việc. Đóng chỉ bằng ô tick ở dòng hoặc nút Xong ở đây. Kèm nhật ký
  * Ghi chú (3d) tách riêng với trích dẫn Nguồn.
  */
-export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () => void }) {
+export function TaskDetail({
+  taskId,
+  onClose,
+  z = 60,
+}: {
+  taskId: string;
+  onClose: () => void;
+  z?: number;
+}) {
   const {
     tasks,
     projects,
@@ -49,18 +61,28 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
   const [noteText, setNoteText] = useState("");
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [noteEdit, setNoteEdit] = useState("");
+  const [booking, setBooking] = useState(false);
+  const [openEvent, setOpenEvent] = useState<string | null>(null);
+  const [bookMsg, setBookMsg] = useState<string | null>(null);
 
   if (!task) return null;
+  /** Lịch đã book cho việc này (§5.2.2 v3.7) — sắp tới trước. */
+  const linkedEvents = events
+    .filter((e) => e.taskId === task.id)
+    .sort((a, b) => a.startAt.localeCompare(b.startAt));
+  const futureBlocks = linkedEvents.filter((e) => Date.parse(e.endAt) > Date.now());
+  const openEv = openEvent ? events.find((e) => e.id === openEvent) : undefined;
   const p = projectById(projects, task.projectId);
   const client = clients.find((c) => c.id === task.clientId);
   const done = task.status === "done";
   const myDueChanges = dueChanges.filter((d) => d.taskId === task.id);
 
   return (
+    <>
     <div
       role="dialog"
       aria-label={`Chi tiết việc: ${task.title}`}
-      style={{ position: "fixed", inset: 0, background: "rgba(30,33,80,.45)", zIndex: 60, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+      style={{ position: "fixed", inset: 0, background: "rgba(30,33,80,.45)", zIndex: z, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={onClose}
     >
       <div
@@ -145,6 +167,28 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
           />
         )}
 
+        {linkedEvents.length > 0 && (
+          <div className="small" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <b>Lịch đã đặt</b>
+            {linkedEvents.map((e) => (
+              <button
+                key={e.id}
+                className="btn ghost small"
+                style={{ alignSelf: "flex-start", textAlign: "left" }}
+                onClick={() => setOpenEvent(e.id)}
+              >
+                📅 {fmtDay(e.startAt)} · {fmtRange(e.startAt, e.endAt)}
+                {e.gcalId ? " · đã book" : ""}
+              </button>
+            ))}
+          </div>
+        )}
+        {bookMsg && (
+          <div className="note-box small" role="status">
+            {bookMsg}
+          </div>
+        )}
+
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <b className="small">Ghi chú</b>
           <form
@@ -224,6 +268,11 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <b className="small">Nguồn · {CHANNEL_LABELS[task.source.channel]}</b>
             <div className="quote">{task.source.quote}</div>
+            {task.source.ref?.startsWith("https://") && (
+              <a className="small" href={task.source.ref} target="_blank" rel="noreferrer">
+                Mở tin gốc trong {CHANNEL_LABELS[task.source.channel]} ↗
+              </a>
+            )}
           </div>
         )}
 
@@ -256,16 +305,23 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
               Mở lại
             </button>
           ) : (
-            <button
-              className="btn primary"
-              style={{ flex: 1 }}
-              onClick={() => {
-                completeTask(task.id, "button");
-                onClose();
-              }}
-            >
-              Xong ✓
-            </button>
+            <>
+              <button
+                className="btn primary"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  completeTask(task.id, "button");
+                  onClose();
+                  // Đóng việc → "Đã xong · Hoàn tác" + hỏi xóa lịch còn lại (§5.2.2 v3.7).
+                  announceDone(task.id, task.title, futureBlocks);
+                }}
+              >
+                Xong ✓
+              </button>
+              <button className="btn" onClick={() => setBooking(true)}>
+                📅 Book lịch
+              </button>
+            </>
           )}
           <button
             className="btn ghost"
@@ -281,5 +337,15 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
         </div>
       </div>
     </div>
+    {booking && (
+      <BookTaskSheet
+        task={task}
+        z={z + 10}
+        onClose={() => setBooking(false)}
+        onBooked={(line) => setBookMsg(line)}
+      />
+    )}
+    {openEv && <EventDetail event={openEv} z={z + 10} onClose={() => setOpenEvent(null)} />}
+    </>
   );
 }
