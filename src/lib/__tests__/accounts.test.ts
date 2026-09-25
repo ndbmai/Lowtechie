@@ -88,3 +88,19 @@ describe("sổ đăng ký nhiều tài khoản (§5.3.4)", () => {
     expect(u.searchParams.get("state")).toBe("st-1");
   });
 });
+
+describe("cookie Lark cất access token nhưng không bao giờ quá cỡ (25/9)", () => {
+  it("token ngắn → giữ access token; token quá dài → bỏ access token, vẫn giữ refresh token", async () => {
+    const { sealLarkLink } = await import("../accounts");
+    const small: LarkLink = { rt: "rt-1", at: "at-1", atExp: 123, email: "mai@thecircle.tech" };
+    const back1 = await unsealFor<LarkLink>(larkKeyMaterial(), await sealLarkLink(small));
+    expect(back1?.at).toBe("at-1");
+    const big: LarkLink = { rt: "rt-2", at: "x".repeat(4000), atExp: 456, email: "mai@thecircle.tech" };
+    const sealed = await sealLarkLink(big);
+    expect(sealed.length).toBeLessThanOrEqual(3700);
+    const back2 = await unsealFor<LarkLink>(larkKeyMaterial(), sealed);
+    expect(back2?.rt).toBe("rt-2");
+    expect(back2?.at).toBeUndefined();
+    expect(back2?.email).toBe("mai@thecircle.tech");
+  });
+});

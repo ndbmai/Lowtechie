@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { CAL_BASE, accessToken, type GoogleLink } from "@/lib/googleServer";
 import {
-  larkAccessToken,
+  larkTokenFor,
   larkCalendarSession,
   larkCreateEvent,
   larkEventsAllCalendars,
@@ -140,9 +140,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           });
         }
       } else {
-        const tokens = await larkAccessToken((a.link as LarkLink).rt);
+        const tokens = await larkTokenFor(a.link as LarkLink);
         if (!tokens) throw new Error("token");
-        rotated.push({ account: a, link: { ...(a.link as LarkLink), rt: tokens.rt } });
+        if (tokens.changed) rotated.push({ account: a, link: tokens.link });
         // v3.2: đọc MỌI lịch con (trước chỉ lịch chính → sự kiện "biến mất").
         const list = q
           ? await larkSearchEvents(tokens.at, q)
@@ -226,15 +226,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ gcalId: data.id, accountId: target.id });
   }
 
-  const s = await larkCalendarSession((target.link as LarkLink).rt);
+  const s = await larkCalendarSession(target.link as LarkLink);
   if (!s) return NextResponse.json({ error: "not-connected" }, { status: 401 });
   const eventId = await larkCreateEvent(s.at, s.calendarId, { title, startAt, endAt, description, location });
   const res = eventId
     ? NextResponse.json({ gcalId: eventId, accountId: target.id })
     : NextResponse.json({ error: "lark-create" }, { status: 502 });
-  await writeAccount(res, req.nextUrl.origin, target.id, "lark", {
-    ...(target.link as LarkLink),
-    rt: s.rt,
-  });
+  if (s.changed) await writeAccount(res, req.nextUrl.origin, target.id, "lark", s.link);
   return res;
 }

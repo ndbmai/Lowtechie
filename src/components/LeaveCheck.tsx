@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { defaultModeForCity } from "@/core/location";
+import { needsTravel } from "@/core/online";
 import type { CalEvent } from "@/core/types";
 import { fmtTime } from "@/lib/format";
 import { applyPosition, getDevicePosition, POSITION_ERROR } from "@/lib/location";
@@ -57,6 +58,7 @@ export function LeaveCheck({ event, auto }: { event: CalEvent; auto: boolean }) 
   }, [auto, check]);
 
   const arrived = useStore((s) => s.events.find((e) => e.id === event.id)?.arrivedAt);
+  if (!needsTravel(event)) return null;
   const dirUrl = (mode: "transit" | "car") =>
     `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.location ?? "")}&travelmode=${mode === "car" ? "driving" : "transit"}`;
 

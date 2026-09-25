@@ -33,6 +33,7 @@ import {
   projectById,
   sanitizeTaxonomy,
 } from "@/core/projects";
+import { isOnlineMeeting } from "@/core/online";
 import type {
   BannerContact,
   BannerEvent,
@@ -521,7 +522,11 @@ export default function CapturePage() {
                 : book[i] && gs.connected
                   ? " · book Google lỗi, mới lưu trong app"
                   : ""
-            }. Vào Lịch để khóa block chuẩn bị + di chuyển${a.mode === "car" ? " (ô tô)" : " (BTS)"}.`,
+            }.${
+              isOnlineMeeting({ title: a.title, location: a.location })
+                ? ""
+                : ` Vào Lịch để khóa block chuẩn bị + di chuyển${a.mode === "car" ? " (ô tô)" : " (BTS)"}.`
+            }`,
           );
         } else if (a.durationMinutes) {
           setPendingBlock({

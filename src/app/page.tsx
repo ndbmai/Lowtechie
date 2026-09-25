@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Bubble } from "@/components/Bubble";
 import { EventDetail } from "@/components/EventDetail";
 import { LeaveCheck } from "@/components/LeaveCheck";
 import { TaskDetail } from "@/components/TaskDetail";
@@ -10,6 +9,7 @@ import { TaskRow } from "@/components/TaskRow";
 import { Blossom } from "@/components/Blossom";
 import { composeBrief } from "@/core/brief";
 import { activeProjects, projectById } from "@/core/projects";
+import { needsTravel } from "@/core/online";
 import { gcalToCal, remoteMetaOf } from "@/lib/calendarActions";
 import { fmtDay, fmtRange, fmtRelativeDay, fmtTime, isSameDay, todayLabel } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
@@ -30,9 +30,6 @@ export default function TodayPage() {
       window.history.replaceState({}, "", "/");
     }
   }, []);
-  const addEvent = useStore((s) => s.addEvent);
-  const [suggestionGone, setSuggestionGone] = useState(false);
-  const [held, setHeld] = useState(false);
 
   // Lịch Google hôm nay (nếu đã nối) hòa vào brief — vẫn chỉ đọc, không ghi.
   const gs = useGoogleStatus();
@@ -63,7 +60,8 @@ export default function TodayPage() {
       .filter(
         (e) =>
           e.kind === "event" &&
-          e.location &&
+          // Họp online (địa điểm là link / "Zoom"…) thì không tính giờ đi (Mai 25/9).
+          needsTravel(e) &&
           Date.parse(e.startAt) > now - 5 * 60_000 &&
           Date.parse(e.startAt) < now + 3 * 3_600_000,
       )
@@ -88,38 +86,6 @@ export default function TodayPage() {
           Review tuần →
         </Link>
       </div>
-
-      {brief?.suggestion && !suggestionGone && (
-        <Bubble>
-          {held ? (
-            <>Đã giữ chỗ rồi nhé. Mình để block này trong Lịch, Mai đổi lúc nào cũng được.</>
-          ) : (
-            <>
-              {brief.suggestion.text}
-              <div className="act">
-                <button
-                  className="btn primary"
-                  onClick={() => {
-                    addEvent({
-                      title: brief.suggestion!.block.title,
-                      startAt: brief.suggestion!.block.startAt,
-                      endAt: brief.suggestion!.block.endAt,
-                      projectId: brief.suggestion!.block.projectId,
-                      kind: "block",
-                    });
-                    setHeld(true);
-                  }}
-                >
-                  Giữ chỗ
-                </button>
-                <button className="btn ghost" onClick={() => setSuggestionGone(true)}>
-                  Để sau
-                </button>
-              </div>
-            </>
-          )}
-        </Bubble>
-      )}
 
       {nextOut && gs.maps && settings.locationMode !== "off" && (
         <LeaveCheck

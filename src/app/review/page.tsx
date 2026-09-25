@@ -69,7 +69,7 @@ export default function ReviewPage() {
       {idle.length > 0 && (
         <div className="warn">
           {idle.map((s) => s.project.name).join(", ")} tuần này chưa xong việc nào dù còn việc
-          đang mở. Muốn mình giữ một block deep work cho {idle[0].project.name} không?
+          đang mở.
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import { foldName } from "./clients";
+import { isOnlineMeeting } from "./online";
 import type { CalEvent, Place } from "./types";
 
 /**
@@ -58,6 +59,8 @@ export function detectBooking(
   location: string | undefined,
   places: Place[],
 ): BookingDetection {
+  // Lịch online (link họp, "Zoom"…) không có chỗ nào để đặt (Mai 25/9).
+  if (location?.trim() && isOnlineMeeting({ title, location })) return { kind: "none" };
   const hay = foldName(`${location ?? ""} ${title}`);
   const sorted = [...places].sort((a, b) => b.name.length - a.name.length);
   const place = sorted.find((p) => {

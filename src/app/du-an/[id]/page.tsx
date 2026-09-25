@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useState } from "react";
 import type { DueType, ParsedAction, ParseResult, Project, Task } from "@/core/types";
 import { categoriesFor } from "@/core/projects";
@@ -460,8 +460,7 @@ export default function ProjectDetailPage() {
   const mounted = useMounted();
   const params = useParams<{ id: string }>();
   const id = decodeURIComponent(typeof params.id === "string" ? params.id : "");
-  const router = useRouter();
-  const { tasks, projects, categories, clients, events, research, setPendingBlock, setProjectView, deleteResearch } =
+  const { tasks, projects, categories, clients, events, research, setProjectView, deleteResearch } =
     useStore();
   const groupBy = useStore((s) => s.settings.projectGroupBy);
   const filter = useStore((s) => s.settings.projectFilter);
@@ -538,19 +537,6 @@ export default function ProjectDetailPage() {
       </p>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <button
-          className="btn small"
-          onClick={() => {
-            setPendingBlock({
-              title: `Deep work: ${project.name}`,
-              projectId: project.id,
-              durationMinutes: 120,
-            });
-            router.push("/lich");
-          }}
-        >
-          📅 Book block làm việc
-        </button>
         <Link href="/du-an/quan-ly" className="btn small" style={{ textDecoration: "none" }}>
           ⚙️ Quản lý
         </Link>

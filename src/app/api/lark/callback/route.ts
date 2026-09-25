@@ -33,7 +33,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const existing = (await readAccounts(req)).find(
     (a) => a.provider === "lark" && (email ? a.email === email : true),
   );
-  const link: LarkLink = { rt: result.rt, email, openId: who?.openId, parts: existing?.parts };
+  const link: LarkLink = {
+    rt: result.rt,
+    at: result.at,
+    atExp: result.atExp,
+    email,
+    openId: who?.openId,
+    parts: existing?.parts,
+  };
   // Lark có thể nhớ lần cho phép CŨ và cấp phiên KHÔNG kèm quyền lịch —
   // vẫn cất cookie (mail/phần khác còn dùng được) nhưng báo rõ ở Kết nối.
   const res = back(larkScopeHasCalendar(result.scope) ? "lok=1" : "lerr=noscope");

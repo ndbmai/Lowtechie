@@ -220,7 +220,9 @@ describe("scope Lark THẬT SỰ cấp — bắt ca nhớ-lần-cho-phép-cũ", 
       ),
     );
     const got = await larkExchangeCode("code1", "https://lowtechie.vercel.app");
-    expect(got).toEqual({ at: "at1", rt: "rt1", scope: "offline_access" });
+    expect(got).toMatchObject({ at: "at1", rt: "rt1", scope: "offline_access" });
+    // Hạn access token đi kèm để cookie cất lại, khỏi refresh mỗi request (25/9).
+    expect("atExp" in got && got.atExp > Date.now()).toBe(true);
   });
 
   it("scope thiếu calendar → phát hiện; có calendar → ổn; không trả scope → không chặn oan", () => {
@@ -245,5 +247,47 @@ describe("larkErrorAction — lỗi phải CÓ VIỆC ĐỂ LÀM (PRD v3.2)", ()
   });
   it("mã lạ → vẫn có hướng thử lại, không cụt lủn", () => {
     expect(larkErrorAction("lark-8888")).toContain("Đồng bộ ngay");
+  });
+});
+
+describe("phiên Lark không 'hết hạn' vì refresh song song (lỗi thật 25/9)", () => {
+  it("access token còn hạn trong cookie → dùng lại, KHÔNG refresh", async () => {
+    const { larkTokenFor } = await import("../larkServer");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const link = { rt: "rt-1", at: "at-1", atExp: Date.now() + 60 * 60_000 };
+    const s = await larkTokenFor(link);
+    expect(s).toEqual({ at: "at-1", link, changed: false });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("hết hạn → refresh MỘT lần dù hai request cùng lúc; request tới trễ với token cũ dùng lại kết quả", async () => {
+    const { larkTokenFor } = await import("../larkServer");
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls++;
+        await new Promise((r) => setTimeout(r, 20));
+        return res({ access_token: "at-new", refresh_token: "rt-new", expires_in: 7200 });
+      }),
+    );
+    const old = { rt: "rt-old-race", at: "at-old", atExp: Date.now() - 1000 };
+    const [a, b] = await Promise.all([larkTokenFor(old), larkTokenFor(old)]);
+    expect(calls).toBe(1);
+    expect(a?.at).toBe("at-new");
+    expect(b?.link.rt).toBe("rt-new");
+    expect(a?.changed).toBe(true);
+    expect(a!.link.atExp! - Date.now()).toBeGreaterThan(7000 * 1000);
+    // Trình duyệt chưa kịp nhận cookie mới → request sau vẫn cầm rt cũ.
+    const late = await larkTokenFor({ rt: "rt-old-race" });
+    expect(calls).toBe(1);
+    expect(late?.link.rt).toBe("rt-new");
+  });
+
+  it("refresh bị từ chối → null (route báo Kết nối lại), không ném", async () => {
+    const { larkTokenFor } = await import("../larkServer");
+    vi.stubGlobal("fetch", vi.fn(async () => res({ code: 20037, error: "invalid_grant" }, 400)));
+    expect(await larkTokenFor({ rt: "rt-dead" })).toBeNull();
   });
 });

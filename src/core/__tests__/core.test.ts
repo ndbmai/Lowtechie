@@ -162,15 +162,13 @@ describe("brief sáng (PRD §5.10)", () => {
     expect(brief.deadlines7d.map((t) => t.title)).toContain("A");
   });
 
-  it("có khoảng trống → đề xuất giữ chỗ cho dự án bị bỏ quên (còn việc, chưa tiến triển)", () => {
+  it("Mai 25/9: KHÔNG tự gợi ý giữ chỗ deep work nữa, kể cả khi có dự án bị bỏ quên + lịch trống", () => {
     const tasks = [
       task({ projectId: "circle", status: "done", completedAt: NOW.toISOString() }),
       task({ projectId: "sorene", title: "Chuẩn bị pitch" }),
     ];
     const brief = composeBrief(tasks, DEFAULT_PROJECTS, [], NOW);
-    expect(brief.suggestion).toBeTruthy();
-    expect(brief.suggestion!.block.projectId).toBe("sorene");
-    expect(brief.suggestion!.text).toMatch(/Sorene/);
+    expect("suggestion" in brief).toBe(false);
   });
 
   it("v2.8 §5.3.3: Deadline 7 ngày tới ĐẦY ĐỦ theo ngày địa phương — 20+ việc hạn ngày mai không bị cắt", () => {

@@ -1105,7 +1105,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 15,
+      version: 16,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -1273,6 +1273,10 @@ export const useStore = create<LowtechieState>()(
             if (!s.settings.locationMode) s.settings.locationMode = "ondemand";
             if (typeof s.settings.researchMonthlyLimit !== "number") s.settings.researchMonthlyLimit = 30;
           }
+        }
+        if (version < 16) {
+          // v16 (Mai 25/9): bỏ gợi ý deep work — dọn thẻ "Deep work: …" còn treo ở Lịch.
+          if (s.pendingBlock?.title?.startsWith("Deep work:")) s.pendingBlock = undefined;
         }
         return s as LowtechieState;
       },

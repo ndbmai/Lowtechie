@@ -161,13 +161,17 @@ export function LarkBotSection() {
   // Chế độ từng group phải lên máy chủ để bot biết group nào được đọc toàn bộ.
   const sync = useCallback(async () => {
     const st = useStore.getState();
-    const groups: Record<string, { name: string; mode: LarkGroupMode; projectName?: string; clientName?: string }> = {};
+    const groups: Record<
+      string,
+      { name: string; mode: LarkGroupMode; projectName?: string; clientName?: string; lang: "en" | "vi" }
+    > = {};
     for (const [id, g] of Object.entries(st.larkGroups)) {
       groups[id] = {
         name: g.name,
         mode: g.mode,
         projectName: st.projects.find((p) => p.id === g.projectId)?.name,
         clientName: st.clients.find((c) => c.id === g.clientId)?.name,
+        lang: g.lang ?? "en",
       };
     }
     await fetch("/api/lark/bot", {
@@ -241,7 +245,7 @@ export function LarkBotSection() {
           )}
           {allOk && !check.lastEvent && (
             <div className="note-box small">
-              Thử nhắn “@Lowtechie ghi việc: gửi proposal cho Đô Thị thứ Sáu” trong group — việc hiện ở Hộp duyệt sau vài giây.
+              Thử nhắn “@Mai Lowtechie add task: send the proposal to Do Thi Friday” trong group — việc hiện ở Hộp duyệt sau vài giây.
             </div>
           )}
         </div>
@@ -301,6 +305,15 @@ export function LarkBotSection() {
                 ))}
               </select>
             </div>
+            <select
+              className="btn small"
+              aria-label={`Bot nói tiếng gì trong group ${chat.name}`}
+              value={g?.lang ?? "en"}
+              onChange={(e) => save({ name: chat.name, lang: e.target.value === "vi" ? "vi" : "en" })}
+            >
+              <option value="en">Bot nói: English</option>
+              <option value="vi">Bot nói: Tiếng Việt</option>
+            </select>
             <div className="seg" role="radiogroup" aria-label={`Chế độ đọc của group ${chat.name}`}>
               {MODES.map((m) => (
                 <button

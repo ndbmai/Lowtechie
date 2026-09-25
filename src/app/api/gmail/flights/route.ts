@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { classifyAndGroup, type FlightSegment } from "@/core/flights";
 import { accessToken, type GoogleLink } from "@/lib/googleServer";
-import { larkAccessToken, larkRecentMail } from "@/lib/larkServer";
+import { larkRecentMail, larkTokenFor } from "@/lib/larkServer";
 import {
   accountsWith,
   readAccounts,
@@ -387,12 +387,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       refs.push(...r.refs);
       segments.push(...r.segments.map((s) => ({ ...s, mailbox: a.email })));
     } else {
-      const tokens = await larkAccessToken((a.link as LarkLink).rt);
+      const tokens = await larkTokenFor(a.link as LarkLink);
       if (!tokens) {
         notes.push(`${label}: không lấy được token — cần Kết nối lại`);
         continue;
       }
-      rotated.push({ account: a, link: { ...(a.link as LarkLink), rt: tokens.rt } });
+      if (tokens.changed) rotated.push({ account: a, link: tokens.link });
       const mail = await larkRecentMail(tokens.at, MAX_EMAILS);
       if ("error" in mail) {
         // PRD §9: phạm vi Mail API tùy gói Lark của tổ chức — báo rõ.

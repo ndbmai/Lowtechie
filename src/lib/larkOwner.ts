@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { readAccounts, type Account, type LarkLink } from "@/lib/accounts";
 import { KV_KEYS, kv, kvConfigured } from "@/lib/kv";
-import { larkAccessToken, larkUserInfo } from "@/lib/larkServer";
+import { larkTokenFor, larkUserInfo } from "@/lib/larkServer";
 
 /**
  * Ai là "Mai" với bot (§5.5.2 — chỉ Mai hỏi được chuyện riêng, chỉ Mai kéo
@@ -36,14 +36,16 @@ export async function larkIdentity(req: NextRequest): Promise<LarkIdentity | nul
   if (withId) return { account: withId, openId: (withId.link as LarkLink).openId };
   const first = larks[0];
   if (!first) return null;
-  const tokens = await larkAccessToken((first.link as LarkLink).rt);
+  const tokens = await larkTokenFor(first.link as LarkLink);
   if (!tokens) return { account: first };
   const who = await larkUserInfo(tokens.at);
+  const openId = who?.openId ?? (first.link as LarkLink).openId;
   return {
     account: first,
     openId: who?.openId,
     name: who?.name,
-    rotated: { ...(first.link as LarkLink), rt: tokens.rt, openId: who?.openId ?? (first.link as LarkLink).openId },
+    // Ghi lại cookie khi có refresh (xoay vòng) hoặc vừa biết thêm open_id.
+    rotated: tokens.changed || openId ? { ...tokens.link, openId } : undefined,
   };
 }
 

@@ -33,6 +33,12 @@ export interface LarkLink {
   email?: string;
   /** open_id của người dùng trong app — bot nhận ra Mai (chủ bot) nhờ id này. */
   openId?: string;
+  /**
+   * Access token còn hạn (~2 giờ) + hạn của nó — dùng lại thay vì refresh
+   * mỗi request (refresh song song làm "phiên hết hạn", lỗi thật 25/9).
+   */
+  at?: string;
+  atExp?: number;
   parts?: AccountParts;
 }
 
@@ -130,6 +136,21 @@ function cookieOptions(origin: string) {
   };
 }
 
+/** Trình duyệt bỏ lặng cookie quá ~4 KB — chừa chỗ cho tên + thuộc tính. */
+const MAX_COOKIE_VALUE = 3700;
+
+/**
+ * Giá trị cookie Lark đã mã hóa. Access token cất kèm cho đỡ refresh (25/9)
+ * nhưng token Lark v2 có thể dài: vượt ngưỡng thì BỎ access token (rơi về
+ * refresh mỗi request) — mất cookie là mất đăng nhập, tệ hơn nhiều.
+ */
+export async function sealLarkLink(link: LarkLink): Promise<string> {
+  const full = await sealFor(larkKeyMaterial(), link);
+  if (full.length <= MAX_COOKIE_VALUE || !link.at) return full;
+  const { at: _at, atExp: _atExp, ...slim } = link;
+  return sealFor(larkKeyMaterial(), slim);
+}
+
 /** Ghi (tạo/cập nhật) cookie của một tài khoản lên response. */
 export async function writeAccount(
   res: NextResponse,
@@ -138,10 +159,7 @@ export async function writeAccount(
   provider: "google" | "lark",
   link: GoogleLink | LarkLink,
 ): Promise<void> {
-  const value =
-    provider === "google"
-      ? await seal(link as GoogleLink)
-      : await sealFor(larkKeyMaterial(), link);
+  const value = provider === "google" ? await seal(link as GoogleLink) : await sealLarkLink(link as LarkLink);
   res.cookies.set(cookieNameFor(id, provider), value, cookieOptions(origin));
 }
 

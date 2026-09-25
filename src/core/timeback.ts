@@ -117,6 +117,23 @@ export function transitChain(o: TransitOpts): Chain {
   return buildChain(new Date(o.appointmentAt), o.prepMinutes, travel, "Di chuyển (BTS)", reminders);
 }
 
+// ── Họp online (Mai 25/9: có link họp thì KHÔNG tính di chuyển) ─────────
+
+export function onlineChain(o: { appointmentAt: string; prepMinutes: number }): Chain {
+  const at = new Date(o.appointmentAt);
+  const prepStart = minus(at, o.prepMinutes);
+  return {
+    prepStartAt: prepStart.toISOString(),
+    leaveAt: at.toISOString(),
+    blocks:
+      o.prepMinutes > 0
+        ? [{ kind: "prep", label: "Chuẩn bị", startAt: prepStart.toISOString(), endAt: at.toISOString() }]
+        : [],
+    totalMinutes: o.prepMinutes,
+    reminders: [],
+  };
+}
+
 // ── Ô tô (chỉ khi Mai nói rõ) ───────────────────────────────────────────
 
 export interface CarOpts {

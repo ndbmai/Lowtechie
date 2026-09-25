@@ -63,20 +63,22 @@ interface LarkTokenResponse {
   expires_in?: number;
   /** Scope Lark THẬT SỰ cấp — có thể hẹp hơn scope đã xin (nhớ lần cho phép cũ). */
   scope?: string;
-  data?: { access_token?: string; refresh_token?: string; scope?: string };
+  data?: { access_token?: string; refresh_token?: string; scope?: string; expires_in?: number };
 }
 
-function pickTokens(d: LarkTokenResponse): { at: string; rt?: string } | null {
+function pickTokens(d: LarkTokenResponse): { at: string; rt?: string; atExp: number } | null {
   const at = d.access_token ?? d.data?.access_token;
   const rt = d.refresh_token ?? d.data?.refresh_token;
-  return at ? { at, rt } : null;
+  // Access token người dùng sống ~2 giờ; không rõ thì coi 1 giờ cho an toàn.
+  const ttl = d.expires_in ?? d.data?.expires_in ?? 3600;
+  return at ? { at, rt, atExp: Date.now() + Math.max(60, ttl) * 1000 } : null;
 }
 
 /** Đổi code lấy access + refresh token (+ scope Lark thật sự cấp). */
 export async function larkExchangeCode(
   code: string,
   origin: string,
-): Promise<{ at: string; rt: string; scope?: string } | { error: string }> {
+): Promise<{ at: string; rt: string; atExp: number; scope?: string } | { error: string }> {
   const res = await fetch(`${OPEN_BASE}/open-apis/authen/v2/oauth/token`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -93,7 +95,7 @@ export async function larkExchangeCode(
   if (!res.ok || !tokens?.rt) {
     return { error: data.error_description ?? data.error ?? `lark-${data.code ?? res.status}` };
   }
-  return { at: tokens.at, rt: tokens.rt, scope: data.scope ?? data.data?.scope };
+  return { at: tokens.at, rt: tokens.rt, atExp: tokens.atExp, scope: data.scope ?? data.data?.scope };
 }
 
 /**
@@ -107,27 +109,78 @@ export function larkScopeHasCalendar(scope: string | undefined): boolean {
   return scope.includes("calendar:");
 }
 
+export interface LarkTokens {
+  at: string;
+  /** Refresh token MỚI (Lark xoay vòng — token cũ chỉ dùng được một lần). */
+  rt: string;
+  /** Hạn của access token (epoch ms). */
+  atExp: number;
+}
+
+/*
+ * Chống "Phiên Lark hết hạn" do refresh SONG SONG (lỗi thật 25/9): hai
+ * request cùng cầm một refresh token cũ → một cái được, cái kia bị Lark từ
+ * chối. (1) Gộp các lần refresh trùng đang chạy; (2) nhớ kết quả theo token
+ * CŨ 5 phút — request tới trễ (trình duyệt chưa kịp nhận cookie mới) dùng
+ * lại kết quả thay vì refresh lần hai. Chỉ trong tiến trình, không lưu đĩa.
+ */
+const refreshInflight = new Map<string, Promise<LarkTokens | null>>();
+const refreshDone = new Map<string, { tokens: LarkTokens; exp: number }>();
+
 /**
  * Refresh token → access token. LƯU Ý: `rt` trả về là refresh token MỚI
  * (Lark xoay vòng) — caller phải ghi lại cookie bằng nó.
  */
-export async function larkAccessToken(
-  refreshToken: string,
-): Promise<{ at: string; rt: string } | null> {
-  const res = await fetch(`${OPEN_BASE}/open-apis/authen/v2/oauth/token`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "refresh_token",
-      client_id: process.env.LARK_APP_ID ?? "",
-      client_secret: process.env.LARK_APP_SECRET ?? "",
-      refresh_token: refreshToken,
-    }),
-  });
-  const data = (await res.json().catch(() => ({}))) as LarkTokenResponse;
-  const tokens = pickTokens(data);
-  if (!res.ok || !tokens) return null;
-  return { at: tokens.at, rt: tokens.rt ?? refreshToken };
+export async function larkAccessToken(refreshToken: string): Promise<LarkTokens | null> {
+  const hit = refreshDone.get(refreshToken);
+  if (hit && hit.exp > Date.now()) return hit.tokens;
+  const running = refreshInflight.get(refreshToken);
+  if (running) return running;
+  const p = (async (): Promise<LarkTokens | null> => {
+    const res = await fetch(`${OPEN_BASE}/open-apis/authen/v2/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "refresh_token",
+        client_id: process.env.LARK_APP_ID ?? "",
+        client_secret: process.env.LARK_APP_SECRET ?? "",
+        refresh_token: refreshToken,
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as LarkTokenResponse;
+    const tokens = pickTokens(data);
+    if (!res.ok || !tokens) return null;
+    const out = { at: tokens.at, rt: tokens.rt ?? refreshToken, atExp: tokens.atExp };
+    const now = Date.now();
+    refreshDone.set(refreshToken, { tokens: out, exp: now + 5 * 60_000 });
+    if (refreshDone.size > 200) {
+      for (const [k, v] of refreshDone) if (v.exp <= now) refreshDone.delete(k);
+    }
+    return out;
+  })();
+  refreshInflight.set(refreshToken, p);
+  try {
+    return await p;
+  } finally {
+    refreshInflight.delete(refreshToken);
+  }
+}
+
+/**
+ * Access token cho MỘT tài khoản Lark: dùng lại token còn hạn đã cất trong
+ * cookie (≈2 giờ), sắp hết hạn mới refresh — nên phần lớn request KHÔNG
+ * đụng tới refresh token nữa (gốc của lỗi phiên hết hạn khi nhiều màn tải
+ * lịch cùng lúc). `changed` = link mới, route PHẢI ghi lại cookie.
+ */
+export async function larkTokenFor<L extends { rt: string; at?: string; atExp?: number }>(
+  link: L,
+): Promise<{ at: string; link: L; changed: boolean } | null> {
+  if (link.at && link.atExp && link.atExp - 5 * 60_000 > Date.now()) {
+    return { at: link.at, link, changed: false };
+  }
+  const t = await larkAccessToken(link.rt);
+  if (!t) return null;
+  return { at: t.at, link: { ...link, rt: t.rt, at: t.at, atExp: t.atExp }, changed: true };
 }
 
 /**
@@ -556,16 +609,16 @@ export async function larkPatchEvent(
 }
 
 /**
- * Refresh + tra lịch chính trong một bước cho các route lịch. `rt` trả
- * về là refresh token MỚI — caller PHẢI ghi lại cookie tài khoản.
+ * Token (dùng lại nếu còn hạn) + tra lịch chính trong một bước cho các
+ * route lịch. `changed` → caller PHẢI ghi lại cookie tài khoản.
  */
-export async function larkCalendarSession(
-  refreshToken: string,
-): Promise<{ at: string; rt: string; calendarId: string } | null> {
-  const tokens = await larkAccessToken(refreshToken);
-  if (!tokens) return null;
-  const calendarId = await larkPrimaryCalendarId(tokens.at);
-  return calendarId ? { ...tokens, calendarId } : null;
+export async function larkCalendarSession<L extends { rt: string; at?: string; atExp?: number }>(
+  link: L,
+): Promise<{ at: string; link: L; changed: boolean; calendarId: string } | null> {
+  const s = await larkTokenFor(link);
+  if (!s) return null;
+  const calendarId = await larkPrimaryCalendarId(s.at);
+  return calendarId ? { ...s, calendarId } : null;
 }
 
 // ── Lark Mail (best-effort — PRD §9 dặn phải kiểm tra phạm vi Mail API) ──

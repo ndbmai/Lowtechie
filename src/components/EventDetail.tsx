@@ -6,6 +6,7 @@ import { BookingAskCard } from "@/components/BookingAsk";
 import { TaskDetail } from "@/components/TaskDetail";
 import { detectBooking } from "@/core/booking";
 import { diffEvent, findOverlaps, suggestMoveSlot, type EventChange } from "@/core/eventOps";
+import { isOnlineMeeting, meetingLink } from "@/core/online";
 import { categoryName, projectById } from "@/core/projects";
 import type { CalEvent } from "@/core/types";
 import { attachBooking, type BookingAsk } from "@/lib/booking";
@@ -107,6 +108,15 @@ export function EventDetail({
   const linkedTask = live.taskId ? tasks.find((t) => t.id === live.taskId) : undefined;
   const bookingTasks = tasks.filter((t) => t.bookingEventId === live.id && t.status !== "dropped");
   const guests = remote?.attendees ?? [];
+  // Họp online (link họp / "Zoom"…): không Maps, không di chuyển — Mai 25/9.
+  const onlineInput = {
+    title: live.title,
+    location: live.location,
+    notes: isRemoteOnly ? remote?.description : live.notes,
+    meetUrl: remote?.meetUrl,
+  };
+  const online = isOnlineMeeting(onlineInput);
+  const joinUrl = meetingLink(onlineInput);
 
   const pool = useMemo(() => {
     const base = context.length ? context : events;
@@ -294,14 +304,24 @@ export function EventDetail({
             🕐 <b>{fmtDayFull(live.startAt)}</b> · {remote?.allDay ? "Cả ngày" : fmtRange(live.startAt, live.endAt)}
             {live.arrivedAt ? " · ✓ đã tới" : ""}
           </span>
-          {live.location && (
-            <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-              📍 {live.location}
-              <a className="btn ghost small" style={{ textDecoration: "none" }} href={mapsUrl(live.location)} target="_blank" rel="noreferrer">
-                Mở Maps
-              </a>
-            </span>
-          )}
+          {live.location &&
+            (online ? (
+              <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                💻 <span style={{ overflowWrap: "anywhere" }}>{live.location}</span>
+                {joinUrl && joinUrl !== remote?.meetUrl && (
+                  <a className="btn ghost small" style={{ textDecoration: "none" }} href={joinUrl} target="_blank" rel="noreferrer">
+                    🎥 Mở link họp
+                  </a>
+                )}
+              </span>
+            ) : (
+              <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                📍 {live.location}
+                <a className="btn ghost small" style={{ textDecoration: "none" }} href={mapsUrl(live.location)} target="_blank" rel="noreferrer">
+                  Mở Maps
+                </a>
+              </span>
+            ))}
           <span className="muted">
             {isRemoteOnly
               ? `📆 ${remoteLabel}${remote?.accountEmail ? ` · ${remote.accountEmail}` : ""}${remote?.calendarName ? ` · lịch “${remote.calendarName}”` : ""}${remote?.seriesId ? " · lặp lại" : ""}`
@@ -468,7 +488,7 @@ export function EventDetail({
                   )
                 : onAddChain && (
                     <button className="btn small" onClick={() => onAddChain(live.id)}>
-                      + Chuỗi chuẩn bị + di chuyển
+                      {online ? "+ Chuẩn bị (họp online)" : "+ Chuỗi chuẩn bị + di chuyển"}
                     </button>
                   ))}
             <button className="btn ghost small" onClick={() => setMode("dup")}>

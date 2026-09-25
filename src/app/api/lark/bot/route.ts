@@ -131,6 +131,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         mode: g.mode === "all" ? "all" : "mention",
         projectName: typeof g.projectName === "string" ? g.projectName.slice(0, 80) : undefined,
         clientName: typeof g.clientName === "string" ? g.clientName.slice(0, 80) : undefined,
+        lang: g.lang === "vi" ? "vi" : "en",
       };
     }
   } catch {

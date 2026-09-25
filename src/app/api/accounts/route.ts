@@ -12,7 +12,7 @@ import {
   type LarkLink,
 } from "@/lib/accounts";
 import { CAL_BASE, accessToken, isConfigured, revoke, type GoogleLink } from "@/lib/googleServer";
-import { isLarkConfigured, larkAccessToken, larkEventsAllCalendars } from "@/lib/larkServer";
+import { isLarkConfigured, larkEventsAllCalendars, larkTokenFor } from "@/lib/larkServer";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -66,10 +66,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const events = (d.items ?? []).filter((e) => e.status !== "cancelled").length;
         probe.push({ id: a.id, provider: "google", email: a.email, calendars: 1, events });
       } else {
-        const tokens = await larkAccessToken((a.link as LarkLink).rt);
+        const tokens = await larkTokenFor(a.link as LarkLink);
         if (!tokens) throw new Error("token");
-        // Lark xoay vòng refresh token → PHẢI ghi lại cookie.
-        rotated.push({ account: a, link: { ...(a.link as LarkLink), rt: tokens.rt } });
+        // Lark xoay vòng refresh token → có refresh thì PHẢI ghi lại cookie.
+        if (tokens.changed) rotated.push({ account: a, link: tokens.link });
         const got = await larkEventsAllCalendars(tokens.at, fromMs, toMs);
         const note =
           got.perCalendar.length > 1 || got.perCalendar.some((c) => c.error)

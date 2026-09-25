@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBotCommand } from "../botCommand";
+import { BOT_TEXT, botLang, parseBotCommand } from "../botCommand";
 import { groupLarkItems, larkChatLink, larkItemToDraft, type LarkInboxItem } from "../larkInbox";
 import { DEFAULT_CATEGORIES, DEFAULT_PROJECTS } from "../projects";
 import type { Client } from "../types";
@@ -138,5 +138,83 @@ describe("giao việc NÀY (trả lời một tin)", () => {
     expect(d.title).toBe("Gửi proposal cho Đô Thị");
     expect(d.assignee).toBe("Linh");
     expect(new Date(d.dueAt!).getDay()).toBe(3);
+  });
+});
+
+describe("bot hiểu lệnh TIẾNG ANH + mặc định trả lời tiếng Anh (Mai 25/9: team trao đổi tiếng Anh)", () => {
+  it("add task / task: / todo", () => {
+    expect(parseBotCommand("@_user_1 add task: send the proposal to Do Thi Friday")).toEqual({
+      kind: "task",
+      text: "send the proposal to Do Thi Friday",
+    });
+    expect(parseBotCommand("task: update the deck")).toEqual({ kind: "task", text: "update the deck" });
+    expect(parseBotCommand("todo - book the meeting room")).toEqual({ kind: "task", text: "book the meeting room" });
+  });
+
+  it("assign … to X, due … / remind X / remind me / log decision", () => {
+    expect(parseBotCommand("assign this to Linh, due Wednesday")).toEqual({
+      kind: "assign",
+      text: "this to Linh, due Wednesday",
+      assignee: "Linh",
+    });
+    expect(parseBotCommand("assign the pricing sheet to Tuan Nguyen by Friday")).toMatchObject({ assignee: "Tuan Nguyen" });
+    expect(parseBotCommand("remind Linh Thursday about the deck")).toEqual({
+      kind: "remind",
+      text: "Linh Thursday about the deck",
+      assignee: "Linh",
+    });
+    expect(parseBotCommand("remind me to call OKR tomorrow")).toEqual({ kind: "remind", text: "call OKR tomorrow" });
+    expect(parseBotCommand("log decision: 6-week pilot")).toEqual({ kind: "decision", text: "6-week pilot" });
+  });
+
+  it("summarize / recap / wrap up; status; private; help", () => {
+    expect(parseBotCommand("summarize the last 2 days")).toEqual({ kind: "summary", hours: 48 });
+    expect(parseBotCommand("recap this week")).toEqual({ kind: "summary", hours: 168 });
+    expect(parseBotCommand("wrap up today")).toEqual({ kind: "summary", hours: 24 });
+    expect(parseBotCommand("summary since yesterday")).toEqual({ kind: "summary", hours: 48 });
+    expect(parseBotCommand("what's pending?").kind).toBe("status");
+    expect(parseBotCommand("who is working on the training?").kind).toBe("status");
+    expect(parseBotCommand("where is Mai today?").kind).toBe("private");
+    expect(parseBotCommand("what time is Mai's flight?").kind).toBe("private");
+    // Lệnh đứng trước kiểm tra riêng tư: ghi việc có chữ "flights" vẫn là việc.
+    expect(parseBotCommand("add task: book flights for the team").kind).toBe("task");
+    expect(parseBotCommand("hello there").kind).toBe("help");
+  });
+
+  it("câu trả lời: mặc định tiếng Anh, group chọn Việt thì Việt", () => {
+    expect(botLang(undefined)).toBe("en");
+    expect(botLang("vi")).toBe("vi");
+    expect(BOT_TEXT.en.recorded(false, "Circle")).toBe("Logged to Mai's review inbox ✓ · Circle");
+    expect(BOT_TEXT.en.recorded(true)).toBe("Decision logged to Mai's review inbox ✓");
+    expect(BOT_TEXT.en.privateOther).toBe("I can only share that with Mai privately.");
+    expect(BOT_TEXT.en.summaryQueued("S.", { tasks: 2, decisions: 1, questions: 0 }, true)).toBe(
+      "S.\n\nSuggested: 2 tasks · 1 decision — sent to Mai's review inbox.",
+    );
+    expect(BOT_TEXT.vi.recorded(false)).toBe("Đã ghi việc vào Hộp duyệt của Mai ✓");
+  });
+});
+
+describe("thẻ duyệt từ lệnh tiếng Anh — ngày giờ + người làm", () => {
+  it("“send the proposal to Do Thi Friday” → hạn thứ Sáu 25/9 9:00, tiêu đề sạch", () => {
+    const d = larkItemToDraft(item({ text: "send the proposal to Do Thi Friday" }), ctx);
+    expect(d.title).toBe("Send the proposal to Do Thi");
+    const due = new Date(d.dueAt!);
+    expect([due.getMonth(), due.getDate(), due.getHours()]).toEqual([8, 25, 9]);
+  });
+
+  it("“assign this to Linh, due Wednesday” trả lời một tin → tên việc từ tin đó, Linh làm, hạn thứ Tư tuần sau", () => {
+    const d = larkItemToDraft(
+      item({ kind: "assign", text: "this to Linh, due Wednesday", assignee: "Linh", quote: "prepare the training slides" }),
+      ctx,
+    );
+    expect(d.title).toBe("Prepare the training slides");
+    expect(d.assignee).toBe("Linh");
+    expect(new Date(d.dueAt!).getDate()).toBe(30);
+  });
+
+  it("“the pricing sheet to Linh by Friday” → “The pricing sheet”, hạn 25/9", () => {
+    const d = larkItemToDraft(item({ kind: "assign", text: "the pricing sheet to Linh by Friday", assignee: "Linh" }), ctx);
+    expect(d.title).toBe("The pricing sheet");
+    expect(new Date(d.dueAt!).getDate()).toBe(25);
   });
 });

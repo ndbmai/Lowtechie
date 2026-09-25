@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { CAL_BASE, accessToken, type GoogleLink } from "@/lib/googleServer";
 import {
-  larkAccessToken,
+  larkTokenFor,
   larkDeleteEvent,
   larkPatchEvent,
   larkPrimaryCalendarId,
@@ -35,11 +35,11 @@ async function larkTarget(
   account: Account,
   calendarId: string | null,
 ): Promise<{ at: string; calendarId: string; link: LarkLink } | null> {
-  const tokens = await larkAccessToken((account.link as LarkLink).rt);
+  const tokens = await larkTokenFor(account.link as LarkLink);
   if (!tokens) return null;
   const cal = calendarId || (await larkPrimaryCalendarId(tokens.at));
   if (!cal) return null;
-  return { at: tokens.at, calendarId: cal, link: { ...(account.link as LarkLink), rt: tokens.rt } };
+  return { at: tokens.at, calendarId: cal, link: tokens.link };
 }
 
 /**

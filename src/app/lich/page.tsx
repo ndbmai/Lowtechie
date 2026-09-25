@@ -15,6 +15,7 @@ import {
   originPlace,
 } from "@/core/location";
 import { projectById } from "@/core/projects";
+import { isOnlineMeeting } from "@/core/online";
 import {
   activeReminder,
   daysUntil,
@@ -24,7 +25,7 @@ import {
   type SeriesUnit,
 } from "@/core/series";
 import { proposeSlots } from "@/core/slots";
-import { carChain, transitChain, type Chain } from "@/core/timeback";
+import { onlineChain, carChain, transitChain, type Chain } from "@/core/timeback";
 import type { CalEvent, Destination, Task, Trip } from "@/core/types";
 import { PlaceSelect } from "@/components/PlaceSelect";
 import { fmtDay, fmtDayFull, fmtRange, fmtTime, isSameDay } from "@/lib/format";
@@ -84,7 +85,9 @@ function ChainForm({
   });
   const cityMode = defaultModeForCity(here.city);
   const [mode, setMode] = useState<"transit" | "car">(cityMode);
-  const [prep, setPrep] = useState(settings.defaultPrepMinutes);
+  // Họp online (link họp / "Zoom"…): chỉ block Chuẩn bị, không di chuyển (Mai 25/9).
+  const online = isOnlineMeeting(event);
+  const [prep, setPrep] = useState(online ? 20 : settings.defaultPrepMinutes);
   const [walkTo, setWalkTo] = useState(settings.walkToStationMin);
   const [transitMin, setTransitMin] = useState(30);
   const [walkFrom, setWalkFrom] = useState(8);
@@ -134,8 +137,9 @@ function ChainForm({
     }
   }
 
-  const chain: Chain =
-    mode === "transit"
+  const chain: Chain = online
+    ? onlineChain({ appointmentAt: event.startAt, prepMinutes: prep })
+    : mode === "transit"
       ? transitChain({
           appointmentAt: event.startAt,
           prepMinutes: prep,
@@ -213,18 +217,24 @@ function ChainForm({
       <b>
         Chuỗi cho “{event.title}” — {fmtTime(event.startAt)} {fmtDay(event.startAt)}
       </b>
-      <span className="small muted">
-        📍 Xuất phát: {defaultOrigin || "chưa rõ — điền điểm đi bên dưới"} · Mai đang ở {CITY_LABEL[here.city]}
-      </span>
+      {online ? (
+        <span className="small muted">💻 Họp online · không tính di chuyển</span>
+      ) : (
+        <>
+          <span className="small muted">
+            📍 Xuất phát: {defaultOrigin || "chưa rõ — điền điểm đi bên dưới"} · Mai đang ở {CITY_LABEL[here.city]}
+          </span>
 
-      <div className="seg" role="radiogroup" aria-label="Phương tiện">
-        <button aria-pressed={mode === "transit"} onClick={() => setMode("transit")}>
-          🚆 Tàu điện{cityMode === "transit" ? " (mặc định)" : ""}
-        </button>
-        <button aria-pressed={mode === "car"} onClick={() => setMode("car")}>
-          🚗 Grab / ô tô{cityMode === "car" ? " (mặc định)" : ""}
-        </button>
-      </div>
+          <div className="seg" role="radiogroup" aria-label="Phương tiện">
+            <button aria-pressed={mode === "transit"} onClick={() => setMode("transit")}>
+              🚆 Tàu điện{cityMode === "transit" ? " (mặc định)" : ""}
+            </button>
+            <button aria-pressed={mode === "car"} onClick={() => setMode("car")}>
+              🚗 Grab / ô tô{cityMode === "car" ? " (mặc định)" : ""}
+            </button>
+          </div>
+        </>
+      )}
 
       <select
         className="btn"
@@ -239,7 +249,7 @@ function ChainForm({
         ))}
       </select>
 
-      {mapsAvailable && (
+      {mapsAvailable && !online && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <PlaceSelect places={places} onPick={setOrigin} label="Chọn điểm đi đã lưu" />
@@ -270,7 +280,7 @@ function ChainForm({
         </div>
       )}
 
-      {mode === "transit" ? (
+      {online ? null : mode === "transit" ? (
         <>
           {num(walkTo, setWalkTo, "Đi bộ nhà → BTS Bang Na (lưu lại)")}
           {num(transitMin, setTransitMin, "Tàu + đổi tuyến")}
@@ -304,8 +314,13 @@ function ChainForm({
       ))}
 
       <div className="muted small">
-        Bắt đầu chuẩn bị <b>{fmtTime(chain.prepStartAt)}</b> · rời nhà <b>{fmtTime(chain.leaveAt)}</b>
-        {mode === "transit" && (
+        Bắt đầu chuẩn bị <b>{fmtTime(chain.prepStartAt)}</b>
+        {!online && (
+          <>
+            {" "}· rời nhà <b>{fmtTime(chain.leaveAt)}</b>
+          </>
+        )}
+        {!online && mode === "transit" && (
           <>
             {" "}
             · nếu đi ô tô: chuẩn bị từ {fmtTime(altCar.prepStartAt)} (mình vẫn giữ phương án tàu,
@@ -322,7 +337,7 @@ function ChainForm({
             checked={writeGcal}
             onChange={(e) => setWriteGcal(e.target.checked)}
           />
-          Ghi 2 block vào Google Calendar (hiện “bận” cho người khác)
+          {online ? "Ghi block chuẩn bị vào Google Calendar" : "Ghi 2 block vào Google Calendar"} (hiện “bận” cho người khác)
         </label>
       )}
 
@@ -1385,7 +1400,7 @@ export default function CalendarPage() {
                 </button>
               ) : (
                 <button className="btn small" onClick={() => setChainFor(e.id)}>
-                  + Chuỗi
+                  {isOnlineMeeting(e) ? "+ Chuẩn bị" : "+ Chuỗi"}
                 </button>
               ))}
           </span>
