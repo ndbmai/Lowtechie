@@ -20,6 +20,7 @@ interface BotCheck {
   verificationToken: boolean;
   encryptKey: boolean;
   queue: boolean;
+  queueHint?: "redis-url-only";
   owner: { known: boolean; isYou: boolean; you?: string };
   tenant?: { ok: boolean; action?: string };
   bot?: { ok: boolean; name?: string; activateStatus?: number; action?: string };
@@ -115,7 +116,9 @@ function buildRows(c: BotCheck): Row[] {
     label: "Hàng đợi Hộp duyệt",
     fix: c.queue
       ? undefined
-      : "Trên Vercel: Storage → Create Database → Upstash → Upstash for Redis (KHÔNG chọn “Redis” của Redis Cloud — nó không có REST API) → Connect vào project lowtechie → Redeploy. Chưa có thì việc ghi trong group chỉ được nhắn riêng cho Mai.",
+      : c.queueHint === "redis-url-only"
+        ? "Máy chủ thấy REDIS_URL nhưng không có biến REST của Upstash — có thể đã chọn “Redis” (Redis Cloud). Cần Upstash: Storage → Create Database → Upstash → Upstash for Redis → Connect vào project lowtechie → Redeploy."
+        : "Trên Vercel: Storage → Create Database → Upstash → Upstash for Redis (KHÔNG chọn “Redis” của Redis Cloud — nó không có REST API) → Connect vào project lowtechie → Redeploy. Chưa có thì việc ghi trong group chỉ được nhắn riêng cho Mai.",
   });
   rows.push({
     ok: c.owner.isYou,

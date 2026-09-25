@@ -49,6 +49,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     verificationToken: Boolean(process.env.LARK_VERIFICATION_TOKEN),
     encryptKey: Boolean(process.env.LARK_ENCRYPT_KEY),
     queue,
+    /** Có REDIS_URL/KV_URL mà không có REST → nhiều khả năng chọn nhầm "Redis" (Redis Cloud). Chỉ báo có/không, không lộ giá trị. */
+    queueHint: !queue && (process.env.REDIS_URL || process.env.KV_URL) ? "redis-url-only" : undefined,
     owner: { known: Boolean(owner), isYou, you: id?.openId },
     /** Link thẳng tới console của app — Mai hỏi "mở ở đâu, gửi link?" (25/9). */
     links: larkConsoleLinks(process.env.LARK_APP_ID),
