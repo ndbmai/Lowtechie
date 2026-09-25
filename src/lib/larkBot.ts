@@ -356,17 +356,23 @@ export async function larkChatHistory(chatId: string, fromSec: number, toSec: nu
   return out.slice(0, max);
 }
 
-/** Mã lỗi bot → việc cần làm, theo đúng thứ tự kiểm tra của PRD §5.5.1. */
+/**
+ * Mã lỗi bot → việc cần làm, theo đúng thứ tự kiểm tra của PRD §5.5.1.
+ * Luôn kèm "(mã …)" — Mai hay gửi ảnh chụp màn hình, có mã là đoán đúng
+ * bệnh (lỗi thật 25/9: "Lark báo lỗi (11205)" không nói phải làm gì).
+ */
 export function botErrorAction(detail: string): string {
   const code = detail.match(/lark-(\w+)/)?.[1] ?? "";
+  const tag = code ? ` (mã ${code})` : "";
+  // 11205 = bot/v3/info "app do not have bot"; 230006 = IM "bot ability is not activated".
+  if (code === "11205" || code === "230006")
+    return `App chưa bật tính năng Bot — trên console Lark: Features → Bot → bật, rồi tạo phiên bản mới và phát hành${tag}.`;
   if (code === "10003" || code === "10014" || code === "99991663" || code === "99991664")
-    return "LARK_APP_ID / LARK_APP_SECRET trên Vercel không khớp app — chép lại từ Credentials của app.";
-  if (code === "230002") return "Bot chưa nằm trong group này — thêm bot ở cài đặt group → Bot.";
-  if (code === "230006" || code === "230001")
-    return "App chưa bật tính năng Bot — bật Bot ở mục Features của app, rồi phát hành phiên bản mới.";
-  if (code === "230027" || code.startsWith("99991672") || code.startsWith("99991"))
-    return "App thiếu quyền cho việc này — thêm quyền ở Permissions & Scopes, phát hành lại và chờ admin duyệt.";
+    return `LARK_APP_ID / LARK_APP_SECRET trên Vercel không khớp app — chép lại từ Credentials của app${tag}.`;
+  if (code === "230002") return `Bot chưa nằm trong group này — thêm bot ở cài đặt group → Bot${tag}.`;
+  if (code === "230027" || code.startsWith("99991"))
+    return `App thiếu quyền cho việc này — thêm ở Permissions & Scopes, tab Tenant token scopes (quyền của bot, KHÁC tab User token của lịch), rồi phát hành lại và chờ admin duyệt${tag}.`;
   if (code === "403" || code === "404")
-    return "Không gọi được API bot — kiểm tra app dùng đúng miền larksuite.com (bản quốc tế) và đã phát hành.";
-  return `Lark báo lỗi (${code || detail}).`;
+    return `Không gọi được API bot — kiểm tra app dùng đúng miền larksuite.com (bản quốc tế) và đã phát hành${tag}.`;
+  return `Lark báo lỗi mã ${code || detail} — bấm Kiểm tra bot lại sau vài phút.`;
 }

@@ -61,8 +61,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           out.chats = {
             ok: false,
             items: [],
-            action: /99991672|99991|230027/.test(errText(err))
-              ? "App thiếu quyền đọc thông tin group (im:chat:readonly) — thêm quyền, phát hành lại."
+            action: /lark-(?:99991|230027)/.test(errText(err))
+              ? `App thiếu quyền đọc thông tin group — thêm im:chat:readonly ở tab Tenant token scopes, phát hành lại (mã ${errText(err).replace("lark-", "")}).`
               : botErrorAction(errText(err)),
           };
         }

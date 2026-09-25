@@ -143,3 +143,20 @@ describe("chữ để tách lệnh", () => {
     expect(parseBotCommand(text)).toEqual({ kind: "assign", text: "này cho Linh, hạn thứ Tư", assignee: "Linh" });
   });
 });
+
+describe("lỗi bot → việc cần làm (lỗi thật 25/9: “Lark báo lỗi (11205)” không nói phải làm gì)", () => {
+  it("11205 (app chưa có Bot) → bật Features → Bot, kèm mã", async () => {
+    const { botErrorAction } = await import("../larkBot");
+    const a = botErrorAction("lark-11205");
+    expect(a).toContain("Features → Bot");
+    expect(a).toContain("(mã 11205)");
+    expect(botErrorAction("lark-230006")).toContain("Features → Bot");
+  });
+
+  it("thiếu quyền → chỉ đúng tab Tenant token scopes; mã lạ vẫn hiện mã", async () => {
+    const { botErrorAction } = await import("../larkBot");
+    expect(botErrorAction("lark-99991672")).toContain("Tenant token scopes");
+    expect(botErrorAction("lark-10014")).toContain("LARK_APP_SECRET");
+    expect(botErrorAction("lark-123456")).toContain("mã 123456");
+  });
+});

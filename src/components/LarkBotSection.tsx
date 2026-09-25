@@ -78,7 +78,7 @@ function buildRows(c: BotCheck): Row[] {
     detail: c.verificationToken ? `Verification Token đã đặt${c.encryptKey ? " · có Encrypt Key" : ""}` : undefined,
     fix: c.verificationToken
       ? undefined
-      : "Chép Verification Token (và Encrypt Key nếu bật mã hóa) ở Events & Callbacks → Encryption Strategy vào Vercel: LARK_VERIFICATION_TOKEN, LARK_ENCRYPT_KEY — rồi dán Request URL bên dưới và bấm xác minh.",
+      : "Chép Verification Token (và Encrypt Key nếu có) ở Events & Callbacks → Encryption Strategy vào Vercel: LARK_VERIFICATION_TOKEN, LARK_ENCRYPT_KEY → Redeploy — xong mới dán Request URL bên dưới (Lark xác minh ngay lúc lưu).",
   });
   const gotEvent = Boolean(c.lastEvent);
   rows.push({
@@ -97,7 +97,7 @@ function buildRows(c: BotCheck): Row[] {
     label: "Hàng đợi Hộp duyệt",
     fix: c.queue
       ? undefined
-      : "Thêm Upstash Redis cho project trên Vercel (Storage → Marketplace) — Vercel tự thêm KV_REST_API_URL / KV_REST_API_TOKEN. Chưa có thì việc ghi trong group chỉ được nhắn riêng cho Mai.",
+      : "Thêm Upstash Redis cho project trên Vercel (Storage → Marketplace, giữ tên biến mặc định) — Vercel tự thêm KV_REST_API_URL / KV_REST_API_TOKEN, rồi Redeploy. Chưa có thì việc ghi trong group chỉ được nhắn riêng cho Mai.",
   });
   rows.push({
     ok: c.owner.isYou,
@@ -177,7 +177,7 @@ export function LarkBotSection() {
           {rows.map((r) => (
             <div key={r.label} className="small" style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
               <span aria-hidden="true" style={{ width: 18, flex: "0 0 auto" }}>
-                {r.ok === true ? "✅" : r.ok === false ? "❌" : "·"}
+                {r.ok === true ? "✅" : r.ok === false ? "❌" : "⚪"}
               </span>
               <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                 <span>
@@ -191,7 +191,7 @@ export function LarkBotSection() {
           {check.configured && (
             <div className="small" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
               <span className="muted">Request URL:</span>
-              <code style={{ overflowWrap: "anywhere" }}>{check.webhookUrl}</code>
+              <code style={{ overflowWrap: "anywhere", fontSize: 12 }}>{check.webhookUrl}</code>
               <button
                 className="btn ghost small"
                 onClick={() => {
