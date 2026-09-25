@@ -5,12 +5,33 @@
  *
  * Env: KV_REST_API_URL + KV_REST_API_TOKEN (Upstash qua Vercel Marketplace)
  * hoặc UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (Upstash trực tiếp).
+ * Khi nối Storage, Vercel cho đặt TIỀN TỐ tùy ý (ví dụ LOWTECHIE_KV_REST_API_URL)
+ * → nhận cả cặp `<tiền tố>_REST_API_URL/_TOKEN`. Chỉ Redis có REST API (Upstash);
+ * "Redis" của Redis Cloud chỉ cho REDIS_URL dạng redis:// — không dùng được.
  */
 
+type Env = Record<string, string | undefined>;
+
+export function kvEnvFrom(env: Env): { url: string; token: string } | null {
+  const pick = (url?: string, token?: string) =>
+    url && token && /^https:\/\//.test(url) ? { url: url.replace(/\/+$/, ""), token } : null;
+  const direct =
+    pick(env.KV_REST_API_URL, env.KV_REST_API_TOKEN) ??
+    pick(env.UPSTASH_REDIS_REST_URL, env.UPSTASH_REDIS_REST_TOKEN);
+  if (direct) return direct;
+  // Tiền tố tùy ý: chỉ nhận host Upstash, kẻo nhầm biến *_REST_API_URL của dịch vụ khác.
+  for (const key of Object.keys(env).sort()) {
+    const m = key.match(/^(.+)_(REST_API|REDIS_REST)_URL$/);
+    const url = env[key];
+    if (!m || !url || !/^https:\/\/[^/]+\.upstash\.io(?:\/|$)/.test(url)) continue;
+    const found = pick(url, env[`${m[1]}_${m[2]}_TOKEN`]);
+    if (found) return found;
+  }
+  return null;
+}
+
 function kvEnv(): { url: string; token: string } | null {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  return url && token ? { url: url.replace(/\/+$/, ""), token } : null;
+  return kvEnvFrom(process.env);
 }
 
 export function kvConfigured(): boolean {

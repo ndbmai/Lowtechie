@@ -115,7 +115,7 @@ function buildRows(c: BotCheck): Row[] {
     label: "Hàng đợi Hộp duyệt",
     fix: c.queue
       ? undefined
-      : "Thêm Upstash Redis cho project trên Vercel (Storage → Marketplace, giữ tên biến mặc định) — Vercel tự thêm KV_REST_API_URL / KV_REST_API_TOKEN, rồi Redeploy. Chưa có thì việc ghi trong group chỉ được nhắn riêng cho Mai.",
+      : "Trên Vercel: Storage → Create Database → Upstash → Upstash for Redis (KHÔNG chọn “Redis” của Redis Cloud — nó không có REST API) → Connect vào project lowtechie → Redeploy. Chưa có thì việc ghi trong group chỉ được nhắn riêng cho Mai.",
   });
   rows.push({
     ok: c.owner.isYou,
