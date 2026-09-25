@@ -160,3 +160,28 @@ describe("lỗi bot → việc cần làm (lỗi thật 25/9: “Lark báo lỗi
     expect(botErrorAction("lark-123456")).toContain("mã 123456");
   });
 });
+
+describe("link thẳng tới console Lark (Mai hỏi 25/9: “mở ở đâu, gửi link?”)", () => {
+  it("trang app + trang cấp quyền lọc sẵn quyền bot, đúng tab tenant", async () => {
+    const { larkConsoleLinks, BOT_SCOPES } = await import("../larkBot");
+    const l = larkConsoleLinks("cli_a1b2c3");
+    expect(l?.app).toBe("https://open.larksuite.com/app/cli_a1b2c3");
+    expect(l?.scopes).toContain("/app/cli_a1b2c3/auth?q=");
+    expect(l?.scopes).toContain("token_type=tenant");
+    for (const sc of BOT_SCOPES) expect(l?.scopes).toContain(sc);
+    expect(larkConsoleLinks(undefined)).toBeUndefined();
+    expect(larkConsoleLinks("khong-phai-app-id")).toBeUndefined();
+  });
+
+  it("lấy link Lark gửi kèm lỗi thiếu quyền", async () => {
+    const { larkFixLink } = await import("../larkBot");
+    const err = Object.assign(new Error("lark-99991672"), {
+      larkMsg:
+        "Access denied. One of the following scopes is required: [im:chat:readonly].应用尚未开通所需的应用身份权限：[im:chat:readonly]，点击链接申请并开通任一权限即可：https://open.larksuite.com/app/cli_a1b2c3/auth?q=im:chat:readonly,im:chat&op_from=openapi&token_type=tenant",
+    });
+    expect(larkFixLink(err)).toBe(
+      "https://open.larksuite.com/app/cli_a1b2c3/auth?q=im:chat:readonly,im:chat&op_from=openapi&token_type=tenant",
+    );
+    expect(larkFixLink(new Error("lark-1"))).toBeUndefined();
+  });
+});

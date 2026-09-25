@@ -23,7 +23,9 @@ interface BotCheck {
   owner: { known: boolean; isYou: boolean; you?: string };
   tenant?: { ok: boolean; action?: string };
   bot?: { ok: boolean; name?: string; activateStatus?: number; action?: string };
-  chats?: { ok: boolean; items: { id: string; name: string; external: boolean }[]; action?: string };
+  chats?: { ok: boolean; items: { id: string; name: string; external: boolean }[]; action?: string; link?: string };
+  /** Link thẳng tới console của app (App ID chỉ máy chủ biết). */
+  links?: { app: string; scopes: string };
   lastEvent?: { at: string; type: string };
   lastError?: { at: string; type?: string; detail: string; action: string };
   log?: { at: string; chat?: string; sender?: string; ask: string; reply: string }[];
@@ -34,6 +36,8 @@ interface Row {
   label: string;
   detail?: string;
   fix?: string;
+  /** Nút mở đúng trang trên console Lark để sửa dòng này. */
+  link?: { href: string; label: string };
 }
 
 const MODES: { id: LarkGroupMode; label: string }[] = [
@@ -52,24 +56,36 @@ function buildRows(c: BotCheck): Row[] {
     rows.push({ ok: false, label: "App Lark trên máy chủ", fix: "Thiếu LARK_APP_ID / LARK_APP_SECRET trên Vercel." });
     return rows;
   }
+  const appLink = c.links && { href: c.links.app, label: "Mở app trên console ↗" };
+  const scopesLink = c.links && { href: c.links.scopes, label: "Mở trang cấp quyền ↗" };
   const appOk = Boolean(c.tenant?.ok && c.bot?.ok);
   rows.push({
     ok: appOk,
     label: "App đã phát hành & admin đã duyệt",
     detail: appOk ? `Bot “${c.bot?.name ?? "Mai Lowtechie"}” đang bật` : undefined,
     fix: appOk ? undefined : (c.tenant?.action ?? c.bot?.action ?? botStatusFix(c.bot?.activateStatus)),
+    link: appOk ? undefined : appLink,
   });
   if (c.chats) {
     const n = c.chats.items.length;
+    const scopeProblem = Boolean(c.chats.link || c.chats.action?.includes("Tenant token scopes"));
     rows.push({
       ok: n > 0,
       label: "Bot đã vào group",
       detail: n > 0 ? `${n} group` : undefined,
+      // Không có công tắc "cho phép thêm vào group" riêng: bot vào group được khi
+      // đã phát hành + duyệt và Mai nằm trong phạm vi dùng (Availability) của phiên bản.
       fix:
         n > 0
           ? undefined
           : (c.chats.action ??
-            "Bật “cho phép thêm bot vào group” trong cấu hình Bot của app, rồi vào cài đặt group → Bot → thêm “Mai Lowtechie”."),
+            "Thêm bot trên Lark bản máy tính: cài đặt group → Bot → Thêm bot → “Mai Lowtechie”. Không tìm thấy bot thì phạm vi dùng (Availability) của phiên bản đã phát hành chưa gồm Mai."),
+      link:
+        n > 0 || !scopeProblem
+          ? undefined
+          : c.chats.link
+            ? { href: c.chats.link, label: "Mở trang cấp quyền ↗" }
+            : scopesLink,
     });
   }
   rows.push({
@@ -79,6 +95,7 @@ function buildRows(c: BotCheck): Row[] {
     fix: c.verificationToken
       ? undefined
       : "Chép Verification Token (và Encrypt Key nếu có) ở Events & Callbacks → Encryption Strategy vào Vercel: LARK_VERIFICATION_TOKEN, LARK_ENCRYPT_KEY → Redeploy — xong mới dán Request URL bên dưới (Lark xác minh ngay lúc lưu).",
+    link: c.verificationToken ? undefined : appLink,
   });
   const gotEvent = Boolean(c.lastEvent);
   rows.push({
@@ -90,6 +107,7 @@ function buildRows(c: BotCheck): Row[] {
       : c.queue
         ? "Chưa có sự kiện nào tới: thêm quyền đọc tin có @bot trong group, đăng ký sự kiện “nhận tin nhắn” (im.message.receive_v1) và “bot vào group” (im.chat.member.bot.added_v1) cho đúng phiên bản app, phát hành lại — rồi @Lowtechie thử trong group."
         : "Cần hàng đợi (bên dưới) để mình ghi nhận lần cuối bot nhận tin.",
+    link: !gotEvent && c.queue ? scopesLink : undefined,
   });
   rows.push({ ok: true, label: "Miền", detail: "larksuite.com (bản quốc tế)" });
   rows.push({
@@ -185,6 +203,17 @@ export function LarkBotSection() {
                   {r.detail && <span className="muted"> — {r.detail}</span>}
                 </span>
                 {r.fix && <span style={{ color: "var(--ink-2)" }}>{r.fix}</span>}
+                {r.link && (
+                  <a
+                    className="btn ghost small"
+                    style={{ alignSelf: "flex-start", textDecoration: "none", marginTop: 2 }}
+                    href={r.link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {r.link.label}
+                  </a>
+                )}
               </span>
             </div>
           ))}

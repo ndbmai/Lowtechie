@@ -180,9 +180,38 @@ async function botCall<T>(path: string, init?: RequestInit): Promise<T> {
     },
     cache: "no-store",
   });
-  const d = (await res.json().catch(() => ({}))) as { code?: number } & T;
-  if (!res.ok || (typeof d.code === "number" && d.code !== 0)) throw new Error(`lark-${d.code ?? res.status}`);
+  const d = (await res.json().catch(() => ({}))) as { code?: number; msg?: string } & T;
+  if (!res.ok || (typeof d.code === "number" && d.code !== 0)) {
+    // Giữ msg: lỗi thiếu quyền của Lark kèm SẴN link tới đúng trang cấp quyền.
+    throw Object.assign(new Error(`lark-${d.code ?? res.status}`), { larkMsg: d.msg });
+  }
   return d;
+}
+
+/** Quyền (tenant token) bot cần cho nền móng §5.5.1 — tab Tenant token scopes. */
+export const BOT_SCOPES = [
+  "im:message:send_as_bot",
+  "im:message.group_at_msg:readonly",
+  "im:message.p2p_msg:readonly",
+  "im:chat:readonly",
+] as const;
+
+/**
+ * Link thẳng tới console của CHÍNH app (App ID chỉ máy chủ biết): trang app
+ * và trang Permissions & Scopes đã lọc sẵn các quyền bot, đúng tab tenant —
+ * cùng dạng link Lark tự gửi kèm lỗi thiếu quyền.
+ */
+export function larkConsoleLinks(appId: string | undefined): { app: string; scopes: string } | undefined {
+  if (!appId || !/^cli_[\w]+$/.test(appId)) return undefined;
+  const app = `https://open.larksuite.com/app/${appId}`;
+  return { app, scopes: `${app}/auth?q=${BOT_SCOPES.join(",")}&op_from=openapi&token_type=tenant` };
+}
+
+/** Link "mở trang cấp quyền" Lark gửi kèm lỗi thiếu quyền (99991672…), nếu có. */
+export function larkFixLink(err: unknown): string | undefined {
+  const msg = (err as { larkMsg?: unknown } | null)?.larkMsg;
+  if (typeof msg !== "string") return undefined;
+  return msg.match(/https:\/\/open\.(?:larksuite\.com|feishu\.cn)\/app\/[^\s"'<>）)]+/)?.[0];
 }
 
 export interface BotInfo {

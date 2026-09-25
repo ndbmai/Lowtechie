@@ -1,7 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { writeAccount } from "@/lib/accounts";
 import { KV_KEYS, kv, kvConfigured } from "@/lib/kv";
-import { botErrorAction, isBotConfigured, larkBotChats, larkBotInfo, larkTenantToken, type BotChat } from "@/lib/larkBot";
+import {
+  botErrorAction,
+  isBotConfigured,
+  larkBotChats,
+  larkBotInfo,
+  larkConsoleLinks,
+  larkFixLink,
+  larkTenantToken,
+  type BotChat,
+} from "@/lib/larkBot";
 import type { GroupConfig } from "@/lib/larkBotHandle";
 import { larkIdentity, resolveOwner } from "@/lib/larkOwner";
 
@@ -41,6 +50,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     encryptKey: Boolean(process.env.LARK_ENCRYPT_KEY),
     queue,
     owner: { known: Boolean(owner), isYou, you: id?.openId },
+    /** Link thẳng tới console của app — Mai hỏi "mở ở đâu, gửi link?" (25/9). */
+    links: larkConsoleLinks(process.env.LARK_APP_ID),
   };
 
   if (isBotConfigured()) {
@@ -64,6 +75,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             action: /lark-(?:99991|230027)/.test(errText(err))
               ? `App thiếu quyền đọc thông tin group — thêm im:chat:readonly ở tab Tenant token scopes, phát hành lại (mã ${errText(err).replace("lark-", "")}).`
               : botErrorAction(errText(err)),
+            link: larkFixLink(err),
           };
         }
       }
