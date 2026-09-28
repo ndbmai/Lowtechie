@@ -10,6 +10,7 @@ import { Blossom } from "@/components/Blossom";
 import { composeBrief } from "@/core/brief";
 import { activeProjects, projectById } from "@/core/projects";
 import { needsTravel } from "@/core/online";
+import { followUpsDue } from "@/core/contacts";
 import { gcalToCal, remoteMetaOf } from "@/lib/calendarActions";
 import { fmtDay, fmtRange, fmtRelativeDay, fmtTime, isSameDay, todayLabel } from "@/lib/format";
 import { useMounted } from "@/lib/hooks";
@@ -19,7 +20,7 @@ import { useGoogleEvents, useGoogleStatus } from "@/lib/useGoogle";
 
 export default function TodayPage() {
   const mounted = useMounted();
-  const { tasks, projects, events, eventMarks, settings } = useStore();
+  const { tasks, projects, events, eventMarks, settings, updateEvent } = useStore();
   /** Link "Mở trong Lowtechie" đính trong sự kiện book từ việc (§5.2.2 v3.7). */
   const [openTask, setOpenTask] = useState<string | null>(null);
   const [openEvent, setOpenEvent] = useState<string | null>(null);
@@ -74,6 +75,8 @@ export default function TodayPage() {
   );
 
   const hasAnything = tasks.length > 0 || events.length > 0;
+  /** Người được mời chưa trả lời sau một khoảng → nhắc Mai follow-up (§5.4 v3.9). */
+  const followUps = useMemo(() => (mounted ? followUpsDue(events, new Date()) : []), [mounted, events]);
 
   return (
     <main className="screen-body">
@@ -105,6 +108,24 @@ export default function TodayPage() {
           {brief.unbooked.length > 3 ? "…" : ""}
         </Link>
       )}
+
+      {followUps.map((f) => (
+        <div key={f.event.id} className="note-box small" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ flex: 1 }}>
+            ⏰ <b>{f.names.join(", ")}</b> chưa trả lời lời mời “{f.event.title}” ({fmtDay(f.event.startAt)}{" "}
+            {fmtTime(f.event.startAt)}) — Mai nhắn follow-up nhé?
+          </span>
+          <button className="btn small" onClick={() => setOpenEvent(f.event.id)}>
+            Mở
+          </button>
+          <button
+            className="btn ghost small"
+            onClick={() => updateEvent(f.event.id, { inviteFollowUpAt: new Date().toISOString() })}
+          >
+            Đã nhắc ✓
+          </button>
+        </div>
+      ))}
 
       {mounted && !hasAnything && (
         <div className="empty card">

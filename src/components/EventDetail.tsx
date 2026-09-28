@@ -1,14 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BannerFileLink } from "@/components/BannerFileLink";
 import { BookingAskCard } from "@/components/BookingAsk";
+import { InviteConfirm } from "@/components/InviteConfirm";
+import { InviteEditor, inviteeReady } from "@/components/InviteEditor";
 import { TaskDetail } from "@/components/TaskDetail";
 import { detectBooking } from "@/core/booking";
+import {
+  applyResponses,
+  followUpsDue,
+  inviteStats,
+  inviteStatsLine,
+  inviteeFromDraft,
+  mergeInvitees,
+  normalizeResponse,
+  type InviteeDraft,
+} from "@/core/contacts";
 import { diffEvent, findOverlaps, suggestMoveSlot, type EventChange } from "@/core/eventOps";
 import { isOnlineMeeting, meetingLink } from "@/core/online";
 import { categoryName, projectById } from "@/core/projects";
-import type { CalEvent } from "@/core/types";
+import type { CalEvent, EventInvitee, InviteResponse } from "@/core/types";
 import { attachBooking, type BookingAsk } from "@/lib/booking";
 import {
   deleteEventEverywhere,
@@ -20,9 +32,23 @@ import {
 import { fmtDay, fmtDayFull, fmtDue, fmtRange, toLocalInput } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { showToast } from "@/lib/toast";
-import { useAccounts } from "@/lib/useGoogle";
+import { addMeetLink, fetchInviteStatus, patchGcalEvent, useAccounts } from "@/lib/useGoogle";
 
 type Mode = "view" | "edit" | "move" | "delete" | "dup";
+
+/** Biểu tượng trạng thái trả lời lời mời (§5.4 v3.9). */
+const RSVP_ICON: Record<InviteResponse, string> = {
+  accepted: "✅",
+  declined: "❌",
+  tentative: "❔",
+  no_reply: "⏳",
+};
+const RSVP_LABEL: Record<InviteResponse, string> = {
+  accepted: "nhận",
+  declined: "từ chối",
+  tentative: "có thể",
+  no_reply: "chưa trả lời",
+};
 
 const mapsUrl = (q: string) =>
   `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
@@ -89,8 +115,19 @@ export function EventDetail({
   onDeleted?: (label: string, undo: () => Promise<string>) => void;
   z?: number;
 }) {
-  const { events, tasks, places, projects, categories, clients, eventMarks, settings, setEventBooking } =
-    useStore();
+  const {
+    events,
+    tasks,
+    places,
+    projects,
+    categories,
+    clients,
+    eventMarks,
+    settings,
+    setEventBooking,
+    updateEvent,
+    addTask,
+  } = useStore();
   const accts = useAccounts();
   const calAccounts = accts.accounts.filter((a) => a.parts.cal);
   const live = events.find((e) => e.id === event.id) ?? event;
@@ -107,16 +144,26 @@ export function EventDetail({
   const chain = events.filter((e) => e.chainOf === live.id);
   const linkedTask = live.taskId ? tasks.find((t) => t.id === live.taskId) : undefined;
   const bookingTasks = tasks.filter((t) => t.bookingEventId === live.id && t.status !== "dropped");
-  const guests = remote?.attendees ?? [];
+  // Người được mời (§5.4 v3.9): sự kiện app tạo giữ danh sách + trạng thái trả lời.
+  const invitees = live.invitees ?? [];
+  const sentInvitees = invitees.filter((i) => i.sentAt && !i.error);
+  const unsentInvitees = invitees.filter((i) => !i.sentAt || i.error);
+  const remoteGuests = remote?.guestStatus ?? [];
+  const guests = remote?.attendees ?? sentInvitees.map((i) => i.name);
+  const meetUrl = remote?.meetUrl ?? live.meetUrl;
   // Họp online (link họp / "Zoom"…): không Maps, không di chuyển — Mai 25/9.
   const onlineInput = {
     title: live.title,
     location: live.location,
     notes: isRemoteOnly ? remote?.description : live.notes,
-    meetUrl: remote?.meetUrl,
+    meetUrl,
   };
   const online = isOnlineMeeting(onlineInput);
   const joinUrl = meetingLink(onlineInput);
+  /** Mời người được khi sự kiện đã nằm trên Google/Lark và Mai là người tạo. */
+  const canInvite = Boolean(live.gcalId) && !readOnly;
+  const inviteProvider = (isRemoteOnly ? remote?.provider : bookedAcct?.provider) ?? "google";
+  const followUp = followUpsDue([live], new Date())[0];
 
   const pool = useMemo(() => {
     const base = context.length ? context : events;
@@ -151,6 +198,95 @@ export function EventDetail({
   const [dupAcct, setDupAcct] = useState(
     remote?.account ?? live.calAccount ?? (live.projectId ? settings.projectCalendar[live.projectId] : undefined) ?? "",
   );
+  /** Mời người: soạn danh sách → bước "Gửi mời" xác nhận RIÊNG. */
+  const [inviteMode, setInviteMode] = useState<"none" | "add" | "confirm" | "link">("none");
+  const [addDrafts, setAddDrafts] = useState<InviteeDraft[]>([]);
+  const [remoteInvitees, setRemoteInvitees] = useState<EventInvitee[]>([]);
+  const [pasteLink, setPasteLink] = useState("");
+
+  /** Đọc lại ai đã nhận / từ chối từ Google/Lark (tự chạy khi mở nếu đã gửi mời). */
+  async function refreshResponses(manual: boolean) {
+    const cur = useStore.getState().events.find((e) => e.id === live.id);
+    if (!cur?.gcalId || !cur.invitees?.length) return;
+    const r = await fetchInviteStatus(cur.gcalId, cur.calAccount);
+    if (!r) {
+      if (manual) setMsg("Chưa đọc được trạng thái trả lời — Mai thử lại sau nhé.");
+      return;
+    }
+    updateEvent(cur.id, {
+      invitees: applyResponses(cur.invitees, r.attendees),
+      meetUrl: cur.meetUrl ?? r.meetUrl,
+    });
+    if (manual) setMsg("Đã cập nhật trạng thái trả lời ✓");
+  }
+  useEffect(() => {
+    if (!isRemoteOnly && live.gcalId && (live.invitees ?? []).some((i) => i.sentAt)) void refreshResponses(false);
+    // Chỉ chạy khi mở màn cho sự kiện này.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.id]);
+
+  async function createMeetLink() {
+    if (!live.gcalId) return;
+    setBusy(true);
+    const url = await addMeetLink(live.gcalId, isRemoteOnly ? remote?.account : live.calAccount, remote?.calendarId);
+    setBusy(false);
+    if (!url) {
+      setMsg(`${remoteLabel || "Lịch"} chưa tạo được link họp — Mai dán link có sẵn nhé.`);
+      return;
+    }
+    if (!isRemoteOnly) updateEvent(live.id, { meetUrl: url });
+    setMsg(`🎥 Đã tạo link họp: ${url}`);
+    setInviteMode("none");
+    onChanged?.();
+  }
+
+  async function savePastedLink() {
+    const raw = pasteLink.trim();
+    if (!raw) return;
+    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    if (!isRemoteOnly) {
+      updateEvent(live.id, { meetUrl: url, ...(live.location ? {} : { location: url }) });
+      if (live.gcalId && !live.location) void patchGcalEvent(live.gcalId, { account: live.calAccount, location: url });
+    } else if (!live.location) {
+      await saveEventEdit(live, { location: url }, remote);
+    } else {
+      setMsg("Sự kiện đã có địa điểm — Mai dán link vào ghi chú qua nút Sửa nhé.");
+      return;
+    }
+    setPasteLink("");
+    setInviteMode("none");
+    setMsg("Đã lưu link họp ✓");
+    onChanged?.();
+  }
+
+  /** Danh sách soạn xong → thêm vào sự kiện (chưa gửi) → bước xác nhận riêng. */
+  function toConfirm() {
+    const fresh = addDrafts.filter((d) => inviteeReady(d, inviteProvider)).map(inviteeFromDraft);
+    if (!fresh.length) return;
+    if (isRemoteOnly) setRemoteInvitees(fresh);
+    else updateEvent(live.id, { invitees: mergeInvitees(invitees, fresh) });
+    setAddDrafts([]);
+    setInviteMode("confirm");
+  }
+
+  function followUpTask() {
+    if (!followUp) return;
+    const today = new Date();
+    today.setHours(9, 0, 0, 0);
+    addTask({
+      title: `Follow-up ${followUp.names.join(", ")}: lời mời “${live.title}”`,
+      projectId: live.projectId ?? "canhan",
+      clientId: live.clientId,
+      assignee: "mai",
+      dueAt: today.toISOString(),
+      dueType: "soft",
+      waitingOn: { person: followUp.names[0] },
+      source: { channel: "manual", quote: `Chưa trả lời lời mời “${live.title}” (${fmtDay(live.startAt)})` },
+      confidence: 1,
+    });
+    updateEvent(live.id, { inviteFollowUpAt: new Date().toISOString() });
+    setMsg("Đã ghi việc follow-up vào danh sách việc hôm nay.");
+  }
 
   const before = {
     title: live.title,
@@ -308,9 +444,21 @@ export function EventDetail({
             (online ? (
               <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 💻 <span style={{ overflowWrap: "anywhere" }}>{live.location}</span>
-                {joinUrl && joinUrl !== remote?.meetUrl && (
+                {joinUrl && joinUrl !== meetUrl && (
                   <a className="btn ghost small" style={{ textDecoration: "none" }} href={joinUrl} target="_blank" rel="noreferrer">
                     🎥 Mở link họp
+                  </a>
+                )}
+                {!joinUrl && !meetUrl && (
+                  // "Link Zoom trong email" → mở đúng email chứa link (tìm theo tên sự kiện).
+                  <a
+                    className="btn ghost small"
+                    style={{ textDecoration: "none" }}
+                    href={`https://mail.google.com/mail/u/0/#search/${encodeURIComponent(`"${live.title}"`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    📧 Mở email có link họp
                   </a>
                 )}
               </span>
@@ -338,16 +486,16 @@ export function EventDetail({
               {clientName && <span className="muted">🤝 {clientName}</span>}
             </span>
           )}
-          {guests.length > 0 && (
+          {guests.length > 0 && !invitees.length && !remoteGuests.length && (
             <span>
               👥 {guests.length} người được mời: {guests.slice(0, 5).join(", ")}
               {guests.length > 5 ? "…" : ""}
             </span>
           )}
-          {(remote?.meetUrl || remote?.openUrl || live.linkUrl || live.bannerImage) && (
+          {(meetUrl || remote?.openUrl || live.linkUrl || live.bannerImage) && (
             <span style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-              {remote?.meetUrl && (
-                <a className="btn ghost small" style={{ textDecoration: "none" }} href={remote.meetUrl} target="_blank" rel="noreferrer">
+              {meetUrl && (
+                <a className="btn ghost small" style={{ textDecoration: "none" }} href={meetUrl} target="_blank" rel="noreferrer">
                   🎥 Link họp
                 </a>
               )}
@@ -366,6 +514,132 @@ export function EventDetail({
           )}
           {before.notes && <span className="muted">📝 {before.notes}</span>}
         </div>
+
+        {(invitees.length > 0 || remoteGuests.length > 0) && (
+          <div className="small" style={{ display: "flex", flexDirection: "column", gap: 4 }} aria-label="Người được mời">
+            <b>
+              👥 Người được mời
+              {invitees.length > 0 ? ` · ${inviteStatsLine(inviteStats(invitees))}` : ""}
+            </b>
+            {invitees.map((i) => (
+              <span key={`${i.name}-${i.email ?? i.larkOpenId}`} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {i.error ? "⚠" : !i.sentAt ? "✉️" : RSVP_ICON[i.response]} <b>{i.name}</b>
+                <span className="muted">{i.email ?? "Lark"}</span>
+                <span className="muted">
+                  {i.error ? `— gửi lỗi: ${i.error}` : !i.sentAt ? "— chưa gửi" : `— ${RSVP_LABEL[i.response]}`}
+                </span>
+              </span>
+            ))}
+            {!invitees.length &&
+              remoteGuests.map((g) => {
+                const r = normalizeResponse(g.response);
+                return (
+                  <span key={`${g.name}-${g.email}`}>
+                    {RSVP_ICON[r]} {g.name} <span className="muted">— {RSVP_LABEL[r]}</span>
+                  </span>
+                );
+              })}
+            <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {unsentInvitees.length > 0 && canInvite && inviteMode !== "confirm" && (
+                <button className="btn primary small" onClick={() => setInviteMode("confirm")}>
+                  ✉️ Gửi mời ({unsentInvitees.length})
+                </button>
+              )}
+              {sentInvitees.length > 0 && !isRemoteOnly && (
+                <button className="btn ghost small" onClick={() => void refreshResponses(true)}>
+                  ↻ Cập nhật trả lời
+                </button>
+              )}
+            </span>
+            {unsentInvitees.length > 0 && !live.gcalId && (
+              <span className="muted">Gửi mời cần sự kiện nằm trên lịch Google/Lark — Mai nhân bản + book lên lịch nhé.</span>
+            )}
+          </div>
+        )}
+
+        {followUp && (
+          <div className="note-box small" style={{ display: "flex", flexDirection: "column", gap: 6 }} role="status">
+            <span>
+              ⏰ {followUp.names.join(", ")} chưa trả lời lời mời — Mai nhắn follow-up nhé?
+            </span>
+            <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button className="btn small" onClick={() => updateEvent(live.id, { inviteFollowUpAt: new Date().toISOString() })}>
+                Đã nhắc ✓
+              </button>
+              <button className="btn ghost small" onClick={followUpTask}>
+                Ghi việc follow-up
+              </button>
+            </span>
+          </div>
+        )}
+
+        {inviteMode === "add" && (
+          <div className="parsed cal" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div className="k">Mời người</div>
+            <InviteEditor drafts={addDrafts} onChange={setAddDrafts} provider={inviteProvider} />
+            <span style={{ display: "flex", gap: 6 }}>
+              <button
+                className="btn primary small"
+                disabled={!addDrafts.some((d) => inviteeReady(d, inviteProvider))}
+                onClick={toConfirm}
+              >
+                Tiếp: xem trước thư mời
+              </button>
+              <button className="btn ghost small" onClick={() => { setAddDrafts([]); setInviteMode("none"); }}>
+                Thôi
+              </button>
+            </span>
+          </div>
+        )}
+
+        {inviteMode === "confirm" && live.gcalId && (
+          <InviteConfirm
+            event={{ title: live.title, startAt: live.startAt, endAt: live.endAt, meetUrl, location: live.location }}
+            target={{
+              gcalId: live.gcalId,
+              account: isRemoteOnly ? remote?.account : live.calAccount,
+              calendarId: remote?.calendarId,
+            }}
+            invitees={isRemoteOnly ? remoteInvitees : unsentInvitees}
+            onSent={(updated, title) => {
+              if (isRemoteOnly) {
+                const ok = updated.filter((i) => i.sentAt).length;
+                setMsg(ok ? `Đã gửi mời cho ${ok} người ✓` : null);
+              } else {
+                const cur = useStore.getState().events.find((e) => e.id === live.id);
+                updateEvent(live.id, { invitees: mergeInvitees(cur?.invitees ?? [], updated), title });
+              }
+              onChanged?.();
+            }}
+            onClose={() => setInviteMode("none")}
+          />
+        )}
+
+        {inviteMode === "link" && (
+          <div className="note-box small" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {canInvite && (
+              <button className="btn small" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => void createMeetLink()}>
+                {busy ? "Đang tạo…" : `🎥 Tạo link ${inviteProvider === "lark" ? "Lark Meeting" : "Google Meet"}`}
+              </button>
+            )}
+            <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                className="transcript"
+                style={{ minHeight: 0, padding: "6px 10px", flex: 1, minWidth: 180 }}
+                placeholder="hoặc dán link có sẵn (Zoom…)"
+                aria-label="Dán link họp có sẵn"
+                value={pasteLink}
+                onChange={(e) => setPasteLink(e.target.value)}
+              />
+              <button className="btn small" disabled={!pasteLink.trim()} onClick={() => void savePastedLink()}>
+                Lưu link
+              </button>
+              <button className="btn ghost small" onClick={() => setInviteMode("none")}>
+                Thôi
+              </button>
+            </span>
+          </div>
+        )}
 
         {overlapEvents.length > 0 && (
           <div className="warn small" role="alert">
@@ -494,6 +768,16 @@ export function EventDetail({
             <button className="btn ghost small" onClick={() => setMode("dup")}>
               Nhân bản
             </button>
+            {live.kind === "event" && canInvite && (
+              <button className="btn ghost small" onClick={() => setInviteMode("add")}>
+                ＋ Mời người
+              </button>
+            )}
+            {live.kind === "event" && !meetUrl && !readOnly && (
+              <button className="btn ghost small" onClick={() => setInviteMode("link")}>
+                ＋ Link họp
+              </button>
+            )}
           </div>
         )}
 
@@ -559,6 +843,18 @@ export function EventDetail({
                 <input type="checkbox" className="check" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
                 Gửi thông báo cập nhật cho {guests.length} người được mời
               </label>
+            )}
+            {guests.length > 0 && notify && (
+              // Thông báo soạn sẵn từ phần thay đổi — Mai duyệt ngay trên thẻ này rồi mới gửi.
+              <span className="small note-box">
+                ✉️ Thông báo: “{preview.patch.title ?? live.title}”
+                {preview.patch.startAt
+                  ? ` đổi sang ${fmtDay(preview.patch.startAt)} ${fmtRange(preview.patch.startAt, preview.patch.endAt ?? live.endAt)}`
+                  : " có thay đổi"}
+                {preview.patch.location !== undefined ? ` · địa điểm: ${preview.patch.location || "(bỏ trống)"}` : ""} — gửi tới{" "}
+                {guests.slice(0, 4).join(", ")}
+                {guests.length > 4 ? "…" : ""}.
+              </span>
             )}
             <div style={{ display: "flex", gap: 6 }}>
               <button className="btn primary small" disabled={busy} onClick={() => void save()}>

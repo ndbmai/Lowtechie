@@ -114,6 +114,26 @@ export function matchEventByName<T extends { title: string; startAt: string }>(
   return [...pool].sort((a, b) => Date.parse(b.startAt) - Date.parse(a.startAt))[0];
 }
 
+/**
+ * Việc ĐANG MỞ khớp tên Mai nói ("pitch deck Sorene" → "Chuẩn bị pitch
+ * deck"): khớp cả cụm trước, không có thì thử các cụm con liền nhau từ dài
+ * tới ngắn (bỏ tên dự án / động từ thừa ở hai đầu) — cụm một chữ phải ≥ 4
+ * ký tự để "làm", "gửi" không khớp bừa. Không phân biệt dấu.
+ */
+export function matchTaskByName<T extends { title: string; status: string }>(tasks: T[], what: string): T | undefined {
+  const open = tasks.filter((t) => t.status === "todo" || t.status === "doing");
+  const words = foldName(what).split(" ").filter(Boolean);
+  for (let len = words.length; len >= 1; len--) {
+    for (let i = 0; i + len <= words.length; i++) {
+      const q = words.slice(i, i + len).join(" ");
+      if (len === 1 && q.length < 4) continue;
+      const hit = open.find((t) => ` ${foldName(t.title)} `.includes(` ${q} `));
+      if (hit) return hit;
+    }
+  }
+  return undefined;
+}
+
 export type EventField = "title" | "time" | "location" | "notes";
 
 export interface EventChange {

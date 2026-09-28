@@ -1,45 +1,53 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { CAL_BASE, accessToken, type GoogleLink } from "@/lib/googleServer";
-import {
-  larkTokenFor,
-  larkDeleteEvent,
-  larkPatchEvent,
-  larkPrimaryCalendarId,
-} from "@/lib/larkServer";
-import {
-  LEGACY_GOOGLE_ID,
-  findAccount,
-  readAccounts,
-  writeAccount,
-  type Account,
-  type LarkLink,
-} from "@/lib/accounts";
+import { larkAddMeeting, larkDeleteEvent, larkListAttendees, larkPatchEvent } from "@/lib/larkServer";
+import { writeAccount } from "@/lib/accounts";
+import { larkTarget, targetAccount } from "@/lib/calendarTarget";
 
 export const runtime = "nodejs";
 
-/** Tài khoản đích: ?account= (§5.3.4); block cũ không có → cookie Google đời đầu. */
-async function targetAccount(req: NextRequest, wanted: string | null): Promise<Account | undefined> {
-  const accounts = await readAccounts(req);
-  return (
-    findAccount(accounts, wanted) ??
-    findAccount(accounts, LEGACY_GOOGLE_ID) ??
-    accounts.find((a) => a.provider === "google")
-  );
-}
-
 /**
- * Lark: access token + lịch con đích. Lark XOAY VÒNG refresh token → trả
- * kèm link mới để route ghi lại cookie.
+ * Ai đã nhận / từ chối / chưa trả lời lời mời (§5.4 v3.9) + link họp —
+ * màn chi tiết sự kiện gọi khi mở. ?account= ?calendar= (lịch con Lark).
  */
-async function larkTarget(
-  account: Account,
-  calendarId: string | null,
-): Promise<{ at: string; calendarId: string; link: LarkLink } | null> {
-  const tokens = await larkTokenFor(account.link as LarkLink);
-  if (!tokens) return null;
-  const cal = calendarId || (await larkPrimaryCalendarId(tokens.at));
-  if (!cal) return null;
-  return { at: tokens.at, calendarId: cal, link: tokens.link };
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<NextResponse> {
+  const sp = req.nextUrl.searchParams;
+  const target = await targetAccount(req, sp.get("account"));
+  if (!target) return NextResponse.json({ error: "not-connected" }, { status: 401 });
+  const { id } = await params;
+
+  if (target.provider === "google") {
+    const at = await accessToken(target.link as GoogleLink);
+    if (!at) return NextResponse.json({ error: "not-connected" }, { status: 401 });
+    const res = await fetch(`${CAL_BASE}/calendars/primary/events/${encodeURIComponent(id)}`, {
+      headers: { authorization: `Bearer ${at}` },
+    });
+    if (!res.ok) return NextResponse.json({ error: `google-${res.status}` }, { status: 502 });
+    const e = (await res.json()) as {
+      hangoutLink?: string;
+      attendees?: { email?: string; displayName?: string; self?: boolean; resource?: boolean; responseStatus?: string }[];
+    };
+    return NextResponse.json({
+      meetUrl: e.hangoutLink,
+      attendees: (e.attendees ?? [])
+        .filter((a) => !a.self && !a.resource)
+        .map((a) => ({ email: a.email, name: a.displayName, response: a.responseStatus ?? "needsAction" })),
+    });
+  }
+
+  const t = await larkTarget(target, sp.get("calendar"));
+  if (!t) return NextResponse.json({ error: "not-connected" }, { status: 401 });
+  let res: NextResponse;
+  try {
+    res = NextResponse.json({ attendees: await larkListAttendees(t.at, t.calendarId, id) });
+  } catch (e) {
+    res = NextResponse.json({ error: e instanceof Error ? e.message : "lark" }, { status: 502 });
+  }
+  if (t.changed) await writeAccount(res, req.nextUrl.origin, target.id, "lark", t.link);
+  return res;
 }
 
 /**
@@ -77,7 +85,7 @@ export async function DELETE(
   const res = ok
     ? NextResponse.json({ ok: true })
     : NextResponse.json({ error: "lark-delete" }, { status: 502 });
-  await writeAccount(res, req.nextUrl.origin, target.id, "lark", t.link);
+  if (t.changed) await writeAccount(res, req.nextUrl.origin, target.id, "lark", t.link);
   return res;
 }
 
@@ -112,6 +120,8 @@ export async function PATCH(
     return NextResponse.json({ error: "Giờ không hợp lệ" }, { status: 400 });
   }
   const notify = body.notify === true;
+  // "＋ Tạo link họp" cho sự kiện đã có (§5.4 v3.9) — Mai bấm nút là duyệt.
+  const meet = body.meet === true;
   const target = await targetAccount(req, str("account", 64) ?? null);
   if (!target) return NextResponse.json({ error: "not-connected" }, { status: 401 });
   const { id } = await params;
@@ -125,8 +135,13 @@ export async function PATCH(
     if (patch.description !== undefined) g.description = patch.description;
     if (patch.startAt) g.start = { dateTime: new Date(patch.startAt).toISOString() };
     if (patch.endAt) g.end = { dateTime: new Date(patch.endAt).toISOString() };
+    if (meet) {
+      g.conferenceData = {
+        createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: "hangoutsMeet" } },
+      };
+    }
     const res = await fetch(
-      `${CAL_BASE}/calendars/primary/events/${encodeURIComponent(id)}?sendUpdates=${notify ? "all" : "none"}`,
+      `${CAL_BASE}/calendars/primary/events/${encodeURIComponent(id)}?sendUpdates=${notify ? "all" : "none"}${meet ? "&conferenceDataVersion=1" : ""}`,
       {
         method: "PATCH",
         headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
@@ -134,15 +149,28 @@ export async function PATCH(
       },
     );
     if (!res.ok) return NextResponse.json({ error: `google-${res.status}` }, { status: 502 });
-    return NextResponse.json({ ok: true });
+    const d = (await res.json().catch(() => ({}))) as {
+      hangoutLink?: string;
+      conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
+    };
+    const meetUrl = d.hangoutLink ?? d.conferenceData?.entryPoints?.find((e) => e.entryPointType === "video")?.uri;
+    return NextResponse.json({ ok: true, meetUrl: meet ? meetUrl : undefined });
   }
 
   const t = await larkTarget(target, str("calendarId", 200) ?? null);
   if (!t) return NextResponse.json({ error: "not-connected" }, { status: 401 });
+  if (meet) {
+    const meetUrl = await larkAddMeeting(t.at, t.calendarId, id);
+    const r = meetUrl
+      ? NextResponse.json({ ok: true, meetUrl })
+      : NextResponse.json({ error: "lark-meeting" }, { status: 502 });
+    if (t.changed) await writeAccount(r, req.nextUrl.origin, target.id, "lark", t.link);
+    return r;
+  }
   const ok = await larkPatchEvent(t.at, t.calendarId, id, patch, notify);
   const res = ok
     ? NextResponse.json({ ok: true })
     : NextResponse.json({ error: "lark-patch" }, { status: 502 });
-  await writeAccount(res, req.nextUrl.origin, target.id, "lark", t.link);
+  if (t.changed) await writeAccount(res, req.nextUrl.origin, target.id, "lark", t.link);
   return res;
 }

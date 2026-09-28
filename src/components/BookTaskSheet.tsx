@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { deadlineEnd, proposeTaskSlots } from "@/core/slots";
-import type { CalEvent, Task } from "@/core/types";
+import type { CalEvent, ProjectId, Task } from "@/core/types";
 import { fmtDay, fmtDayFull, fmtDue, fmtRange, isSameDay } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import {
@@ -38,13 +38,20 @@ function localMs(date: string, time: string): number {
  */
 export function BookTaskSheet({
   task,
+  block,
   onClose,
   onBooked,
   initialDuration,
   onDay,
   z = 75,
 }: {
-  task: Task;
+  /** Việc cần book giờ làm (block mang taskId + link về việc). */
+  task?: Task;
+  /**
+   * Block Mai tự đặt khi CHƯA có việc khớp tên (PRD v3.9: "đặt 2 tiếng thứ
+   * Năm cho pitch deck Sorene") — cùng form gọn, không gắn việc.
+   */
+  block?: { title: string; projectId?: ProjectId };
   onClose: () => void;
   onBooked?: (line: string) => void;
   initialDuration?: number;
@@ -53,13 +60,15 @@ export function BookTaskSheet({
   z?: number;
 }) {
   const { events, trips, settings, addEvent, removeEvent } = useStore();
+  const title = task?.title ?? block?.title ?? "Block làm việc";
+  const projectId = task?.projectId ?? block?.projectId;
   const gs = useGoogleStatus();
   const accts = useAccounts();
   const calAccounts = accts.accounts.filter((a) => a.parts.cal);
   const [now] = useState(() => new Date());
-  const dur = initialDuration ?? task.estMinutes ?? 60;
+  const dur = initialDuration ?? task?.estMinutes ?? 60;
   const horizon = Math.max(
-    task.dueAt ? deadlineEnd(task.dueAt) : 0,
+    task?.dueAt ? deadlineEnd(task.dueAt) : 0,
     onDay ? Date.parse(onDay) + 86_400_000 : 0,
     now.getTime() + 7 * 86_400_000,
   );
@@ -82,7 +91,7 @@ export function BookTaskSheet({
   const [touched, setTouched] = useState(false);
   useEffect(() => {
     if (touched) return;
-    const first = proposeTaskSlots(busy, now, dur, { deadline: task.dueAt, onDay }).slots[0];
+    const first = proposeTaskSlots(busy, now, dur, { deadline: task?.dueAt, onDay }).slots[0];
     let start: Date;
     if (first) start = new Date(first.startAt);
     else {
@@ -98,10 +107,10 @@ export function BookTaskSheet({
     setDate(toDateInput(start));
     setFrom(toTimeInput(start));
     setTo(toTimeInput(end));
-  }, [busy, now, dur, task.dueAt, onDay, touched]);
+  }, [busy, now, dur, task?.dueAt, onDay, touched]);
 
   const defaultAcct = (() => {
-    const byProject = settings.projectCalendar[task.projectId];
+    const byProject = projectId ? settings.projectCalendar[projectId] : undefined;
     if (byProject && calAccounts.some((c) => c.id === byProject)) return byProject;
     return calAccounts[0]?.id ?? APP_ONLY;
   })();
@@ -136,10 +145,12 @@ export function BookTaskSheet({
     if (targetAcct) {
       const created = await createGcalEvent(
         {
-          title: task.title,
+          title,
           startAt,
           endAt,
-          description: `Việc: ${task.title}\nMở trong Lowtechie: ${window.location.origin}/?task=${task.id}`,
+          description: task
+            ? `Việc: ${task.title}\nMở trong Lowtechie: ${window.location.origin}/?task=${task.id}`
+            : undefined,
         },
         targetAcct.id,
       );
@@ -148,19 +159,19 @@ export function BookTaskSheet({
       remoteFail = !created;
     }
     const ev = addEvent({
-      title: task.title,
+      title,
       startAt,
       endAt,
       kind: "block",
-      projectId: task.projectId,
-      categoryId: task.categoryId,
-      clientId: task.clientId,
-      taskId: task.id,
+      projectId,
+      categoryId: task?.categoryId,
+      clientId: task?.clientId,
+      taskId: task?.id,
       gcalId,
       calAccount: account,
     });
     setSaving(false);
-    const line = `📅 Đã book “${task.title}” ${fmtDay(startAt)} ${fmtRange(startAt, endAt)}${
+    const line = `📅 Đã book “${title}” ${fmtDay(startAt)} ${fmtRange(startAt, endAt)}${
       gcalId
         ? ` lên ${targetAcct?.provider === "lark" ? "Lark" : "Google"}`
         : remoteFail
@@ -176,7 +187,7 @@ export function BookTaskSheet({
     if (done.gcalId) await deleteGcalEvent(done.gcalId, done.account);
     removeEvent(done.localId);
     setDone(null);
-    onBooked?.(`Đã gỡ lịch vừa book cho “${task.title}”.`);
+    onBooked?.(`Đã gỡ lịch vừa book cho “${title}”.`);
   }
 
   const inputStyle = { padding: "8px 10px", borderRadius: 10, border: "1.5px solid var(--line)", background: "var(--surface-2)", minWidth: 0 } as const;
@@ -184,7 +195,7 @@ export function BookTaskSheet({
   return (
     <div
       role="dialog"
-      aria-label={`Book lịch cho việc: ${task.title}`}
+      aria-label={task ? `Book lịch cho việc: ${task.title}` : `Book lịch: ${title}`}
       style={{ position: "fixed", inset: 0, background: "rgba(30,33,80,.45)", zIndex: z, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={onClose}
     >
@@ -195,10 +206,12 @@ export function BookTaskSheet({
       >
         <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
           <span style={{ flex: 1 }}>
-            <b style={{ fontSize: 16 }}>📅 Book lịch: {task.title}</b>
-            <span className="small muted" style={{ display: "block" }}>
-              {task.dueAt ? `Hạn ${fmtDue(task.dueAt)}` : "Không có hạn"}
-            </span>
+            <b style={{ fontSize: 16 }}>📅 Book lịch: {title}</b>
+            {task && (
+              <span className="small muted" style={{ display: "block" }}>
+                {task.dueAt ? `Hạn ${fmtDue(task.dueAt)}` : "Không có hạn"}
+              </span>
+            )}
           </span>
           <button className="btn ghost small" aria-label="Đóng book lịch" onClick={onClose}>
             ✕

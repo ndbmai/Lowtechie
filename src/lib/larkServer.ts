@@ -535,12 +535,15 @@ export async function larkSearchEvents(at: string, query: string): Promise<Remot
   }
 }
 
-/** Ghi sự kiện — CHỈ gọi sau khi Mai bấm duyệt (nguyên tắc số 1). */
+/**
+ * Ghi sự kiện — CHỈ gọi sau khi Mai bấm duyệt (nguyên tắc số 1). `meet` =
+ * tạo luôn phòng Lark Meeting (§5.4 v3.9) — link trả về trong `meetUrl`.
+ */
 export async function larkCreateEvent(
   at: string,
   calendarId: string,
-  ev: { title: string; startAt: string; endAt: string; description?: string; location?: string },
-): Promise<string | null> {
+  ev: { title: string; startAt: string; endAt: string; description?: string; location?: string; meet?: boolean },
+): Promise<{ id: string; meetUrl?: string } | null> {
   const res = await fetch(
     `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events`,
     {
@@ -552,15 +555,85 @@ export async function larkCreateEvent(
         start_time: { timestamp: String(Math.floor(Date.parse(ev.startAt) / 1000)) },
         end_time: { timestamp: String(Math.floor(Date.parse(ev.endAt) / 1000)) },
         ...(ev.location ? { location: { name: ev.location } } : {}),
+        ...(ev.meet ? { vchat: { vc_type: "vc" } } : {}),
       }),
     },
   );
   const d = (await res.json().catch(() => ({}))) as {
     code?: number;
-    data?: { event?: { event_id?: string } };
+    data?: { event?: { event_id?: string; vchat?: { meeting_url?: string } } };
   };
   // 200 kèm code != 0 = lỗi (bài học v3.2), không có event_id.
-  return res.ok && (d.code ?? 0) === 0 ? (d.data?.event?.event_id ?? null) : null;
+  const id = res.ok && (d.code ?? 0) === 0 ? d.data?.event?.event_id : undefined;
+  return id ? { id, meetUrl: d.data?.event?.vchat?.meeting_url || undefined } : null;
+}
+
+/** Người được mời: email (người ngoài) hoặc open_id (người trong tổ chức Lark). */
+export interface InviteTarget {
+  email?: string;
+  openId?: string;
+}
+
+/**
+ * Mời người vào sự kiện Lark (§5.4 v3.9) — CHỈ sau bước Mai xác nhận gửi
+ * mời riêng. `need_notification` = Lark gửi lời mời (email với người ngoài).
+ * Trả mã lỗi dạng "lark-<code>" để báo lại kèm tên người, không im lặng.
+ */
+export async function larkAddAttendees(
+  at: string,
+  calendarId: string,
+  eventId: string,
+  people: InviteTarget[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const attendees = people.map((p) =>
+    p.openId
+      ? { type: "user", is_optional: false, user_id: p.openId }
+      : { type: "third_party", is_optional: false, third_party_email: p.email },
+  );
+  try {
+    const res = await fetch(
+      `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}/attendees?user_id_type=open_id`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
+        body: JSON.stringify({ attendees, need_notification: true }),
+      },
+    );
+    await larkJson(res);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "lark-attendees" };
+  }
+}
+
+/** Ai đã nhận/từ chối/chưa trả lời (Lark: accept/decline/tentative/needs_action). */
+export async function larkListAttendees(
+  at: string,
+  calendarId: string,
+  eventId: string,
+): Promise<{ email?: string; openId?: string; name?: string; response: string }[]> {
+  const res = await fetch(
+    `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}/attendees?user_id_type=open_id&page_size=100`,
+    { headers: { authorization: `Bearer ${at}` } },
+  );
+  const d = await larkJson<{
+    items?: {
+      type?: string;
+      user_id?: string;
+      third_party_email?: string;
+      display_name?: string;
+      rsvp_status?: string;
+      is_organizer?: boolean;
+    }[];
+  }>(res);
+  return (d.items ?? [])
+    .filter((i) => !i.is_organizer && i.type !== "resource")
+    .map((i) => ({
+      email: i.third_party_email || undefined,
+      openId: i.user_id || undefined,
+      name: i.display_name,
+      response: i.rsvp_status ?? "needs_action",
+    }));
 }
 
 export async function larkDeleteEvent(
@@ -608,6 +681,24 @@ export async function larkPatchEvent(
   return res.ok && (typeof d.code !== "number" || d.code === 0);
 }
 
+/** Gắn phòng Lark Meeting vào sự kiện đã có (§5.4 v3.9) — trả link, lỗi thì undefined. */
+export async function larkAddMeeting(at: string, calendarId: string, eventId: string): Promise<string | undefined> {
+  try {
+    const res = await fetch(
+      `${OPEN_BASE}/open-apis/calendar/v4/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+      {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
+        body: JSON.stringify({ vchat: { vc_type: "vc" }, need_notification: false }),
+      },
+    );
+    const d = await larkJson<{ event?: { vchat?: { meeting_url?: string } } }>(res);
+    return d.event?.vchat?.meeting_url || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Token (dùng lại nếu còn hạn) + tra lịch chính trong một bước cho các
  * route lịch. `changed` → caller PHẢI ghi lại cookie tài khoản.
@@ -622,6 +713,61 @@ export async function larkCalendarSession<L extends { rt: string; at?: string; a
 }
 
 // ── Lark Mail (best-effort — PRD §9 dặn phải kiểm tra phạm vi Mail API) ──
+
+interface LarkMailAddress {
+  mail_address?: string;
+  name?: string;
+}
+
+/**
+ * Người gửi/nhận trong Lark Mail gần đây → dòng "Tên <email>" cho danh bạ
+ * liên hệ (§5.4 v3.9). Best-effort như mọi lời gọi Mail: lỗi trả ghi chú.
+ */
+export async function larkMailPeople(
+  at: string,
+  max = 30,
+): Promise<{ headers: string[] } | { error: string }> {
+  try {
+    const listRes = await fetch(
+      `${OPEN_BASE}/open-apis/mail/v1/user_mailboxes/me/messages?page_size=${max}`,
+      { headers: { authorization: `Bearer ${at}` } },
+    );
+    if (!listRes.ok) return { error: `mail-${listRes.status}` };
+    const list = (await listRes.json().catch(() => ({}))) as {
+      code?: number;
+      data?: { items?: string[] | { message_id?: string }[] };
+    };
+    if (typeof list.code === "number" && list.code !== 0) return { error: `lark-${list.code}` };
+    const ids = (list.data?.items ?? [])
+      .map((x) => (typeof x === "string" ? x : x.message_id))
+      .filter((x): x is string => Boolean(x))
+      .slice(0, max);
+    const fmt = (a: LarkMailAddress) =>
+      a.mail_address ? (a.name ? `"${a.name.replace(/"/g, "")}" <${a.mail_address}>` : a.mail_address) : "";
+    const headers: string[] = [];
+    for (const id of ids) {
+      const res = await fetch(
+        `${OPEN_BASE}/open-apis/mail/v1/user_mailboxes/me/messages/${encodeURIComponent(id)}`,
+        { headers: { authorization: `Bearer ${at}` } },
+      );
+      if (!res.ok) continue;
+      const d = (await res.json().catch(() => ({}))) as {
+        data?: { message?: { head_from?: LarkMailAddress; to?: LarkMailAddress[]; cc?: LarkMailAddress[] } };
+      };
+      const m = d.data?.message;
+      if (!m) continue;
+      const line = [m.head_from, ...(m.to ?? []), ...(m.cc ?? [])]
+        .filter((x): x is LarkMailAddress => Boolean(x))
+        .map(fmt)
+        .filter(Boolean)
+        .join(", ");
+      if (line) headers.push(line);
+    }
+    return { headers };
+  } catch {
+    return { error: "mail-network" };
+  }
+}
 
 export interface LarkMailMessage {
   subject: string;

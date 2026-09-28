@@ -6,6 +6,7 @@ import type {
   CalEvent,
   Category,
   Client,
+  Contact,
   Destination,
   DueType,
   FeedbackEntry,
@@ -21,6 +22,7 @@ import type {
   TripAttachment,
 } from "@/core/types";
 import { makeClientId } from "@/core/clients";
+import { mergeContacts, upsertContact, type ContactInput } from "@/core/contacts";
 import type { LarkGroupSetting } from "@/core/larkInbox";
 import {
   DEFAULT_PREP_TEMPLATE,
@@ -88,6 +90,8 @@ interface LowtechieState {
   categories: Category[];
   /** Danh bạ khách hàng / đối tác theo dự án (PRD §5.3.2). */
   clients: Client[];
+  /** Danh bạ LIÊN HỆ — người để mời họp, tự nhớ email (§5.4 v3.9). */
+  contacts: Contact[];
   /** Lịch sử đổi hạn (due_changes §8) — weekly review soi việc bị dời nhiều. */
   dueChanges: { taskId: string; oldDue?: string; newDue?: string; changedAt: string }[];
   /** Chuyến vừa xóa, giữ vài phút để Hoàn tác (§5.9 6a — xóa mềm). */
@@ -257,6 +261,14 @@ interface LowtechieState {
 
   /** Đánh dấu khách vừa được dùng — nuôi gợi ý "gần đây/hay dùng" (v2.3). */
   touchClient: (id: string) => void;
+  /** Thêm/cập nhật liên hệ không tạo trùng (email → open_id → id); `use` = vừa mời. */
+  saveContact: (input: ContactInput, opts?: { id?: string; use?: boolean }) => Contact;
+  updateContact: (id: string, patch: Partial<Omit<Contact, "id">>) => void;
+  deleteContact: (id: string) => void;
+  /** Gộp liên hệ trùng: giữ `keepId`; người được mời trỏ tới người bị gộp đổi theo. */
+  mergeContactInto: (keepId: string, dropId: string) => void;
+  /** Nhập người gửi/nhận thư + thành viên group Lark — trả số liên hệ MỚI. */
+  importContacts: (people: ContactInput[]) => number;
 
   addPlace: (p: Omit<Place, "id">) => Place | null;
   updatePlace: (id: string, patch: Partial<Omit<Place, "id">>) => void;
@@ -359,6 +371,7 @@ export const useStore = create<LowtechieState>()(
       projects: DEFAULT_PROJECTS,
       categories: DEFAULT_CATEGORIES,
       clients: [],
+      contacts: [],
       dueChanges: [],
       tripTrash: [],
       series: [],
@@ -929,6 +942,41 @@ export const useStore = create<LowtechieState>()(
       markLarkImported: (ids) =>
         set((s) => ({ larkImported: [...s.larkImported, ...ids.filter((id) => !s.larkImported.includes(id))].slice(-300) })),
 
+      saveContact: (input, opts = {}) => {
+        const r = upsertContact(get().contacts, input, opts);
+        set({ contacts: r.contacts });
+        return r.contact;
+      },
+      updateContact: (id, patch) =>
+        set((s) => ({
+          contacts: s.contacts.map((c) =>
+            c.id === id
+              ? { ...c, ...patch, email: patch.email !== undefined ? patch.email.trim().toLowerCase() || undefined : c.email }
+              : c,
+          ),
+        })),
+      deleteContact: (id) => set((s) => ({ contacts: s.contacts.filter((c) => c.id !== id) })),
+      mergeContactInto: (keepId, dropId) =>
+        set((s) => ({
+          contacts: mergeContacts(s.contacts, keepId, dropId),
+          events: s.events.map((e) =>
+            e.invitees?.some((i) => i.contactId === dropId)
+              ? { ...e, invitees: e.invitees.map((i) => (i.contactId === dropId ? { ...i, contactId: keepId } : i)) }
+              : e,
+          ),
+        })),
+      importContacts: (people) => {
+        let list = get().contacts;
+        let added = 0;
+        for (const p of people) {
+          const r = upsertContact(list, p);
+          list = r.contacts;
+          if (r.created) added++;
+        }
+        set({ contacts: list });
+        return added;
+      },
+
       addProject: (name, color) => {
         const trimmed = name.trim().slice(0, 40);
         if (!trimmed) return null;
@@ -1105,7 +1153,7 @@ export const useStore = create<LowtechieState>()(
     {
       name: "lowtechie-v1",
       skipHydration: true,
-      version: 16,
+      version: 17,
       migrate: (persisted, version) => {
         const s = persisted as Partial<LowtechieState>;
         if (version < 2) {
@@ -1277,6 +1325,15 @@ export const useStore = create<LowtechieState>()(
         if (version < 16) {
           // v16 (Mai 25/9): bỏ gợi ý deep work — dọn thẻ "Deep work: …" còn treo ở Lịch.
           if (s.pendingBlock?.title?.startsWith("Deep work:")) s.pendingBlock = undefined;
+        }
+        if (version < 17) {
+          // v17 (PRD v3.9): danh bạ liên hệ để mời họp; gỡ các block "Deep work: …"
+          // app TỰ tạo trước đây (chỉ nằm trong app — bản đã book lên Google/Lark
+          // hay block book từ việc thì giữ, Mai tự quyết).
+          s.contacts = s.contacts ?? [];
+          s.events = (s.events ?? []).filter(
+            (e) => !(e.kind === "block" && e.title.startsWith("Deep work:") && !e.gcalId && !e.taskId),
+          );
         }
         return s as LowtechieState;
       },

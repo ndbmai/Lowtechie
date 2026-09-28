@@ -78,6 +78,18 @@ const TOOL_SCHEMA = {
             durationMinutes: { type: "number" },
             location: { type: "string" },
             mode: { type: "string", enum: ["transit", "car"] },
+            invitees: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "kind=event: người Mai muốn mời ('họp với anh Tuấn và chị Linh', 'mời anh Tuấn bên OKR') — mỗi người một phần tử, GIỮ NGUYÊN cách gọi kể cả danh xưng + 'bên công ty'; email nếu Mai đọc email. KHÔNG tự đoán email.",
+            },
+            meetLink: {
+              type: "string",
+              enum: ["meet", "lark", "zoom", "any"],
+              description:
+                "kind=event: Mai muốn link họp online ('tạo link Meet' → meet, 'link Lark' → lark, 'Zoom' → zoom, 'họp online' → any). Không nói thì bỏ trống.",
+            },
             confidence: { type: "number" },
           },
           required: ["kind", "confidence"],
@@ -95,14 +107,14 @@ const TOOL_SCHEMA = {
 function systemPrompt(localNow: string, tzName: string, taxonomy: TaxonomyPayload): string {
   return `Bạn là bộ tách lệnh của Mai Lowtechie — trợ lý của Mai (founder ở Bangkok, nói tiếng Việt/Thái/Anh trộn).
 Bây giờ ở chỗ Mai là ${localNow} (múi giờ ${tzName}). Dùng mốc này cho "ngày mai", "thứ Ba tuần sau"…; mọi ISO trả về phải kèm đúng offset múi giờ này.
-Tách câu của Mai thành các hành động: task (việc, có projectId + categoryId + dueAt nếu nói), event (hẹn/họp/bay/block deep work; kèm startAt hoặc durationMinutes, location, mode nếu Mai nói "đi tàu"/"ô tô"), reschedule (dời lịch/việc ĐÃ CÓ; what=tên KHÔNG kèm ngày; ngày dùng để chỉ đúng lịch → day; keepTime=true khi chỉ nói ngày mới; keepDate=true khi chỉ nói giờ mới — "dời cắt tóc thứ Sáu sang 17:00" → what="cắt tóc", day=thứ Sáu, toWhen=thứ Sáu 17:00), note ("ghi chú cho việc X: …" → what=tên việc ĐÃ CÓ, text=nội dung — không tạo việc mới), complete ("xong việc X rồi" → what=tên việc; app sẽ hiện thẻ xác nhận trước khi đóng), book_task ("book 2 tiếng cho việc pitch deck thứ Năm" → what=tên việc ĐÃ CÓ, durationMinutes, day — app đề xuất khung giờ), delete_event ("xóa lịch tarot" → what, day nếu nói; app luôn hỏi xác nhận), booked ("spa thứ Năm đặt rồi" → what, day — đánh dấu đã đặt chỗ), location ("chị đang ở HCMC" → city bkk|hcmc|tokyo), research ("tìm giúp chị…", "so sánh…", "chuẩn bị hồ sơ về…" → query + projectId nếu Mai nói "lưu vào dự án X").
+Tách câu của Mai thành các hành động: task (việc, có projectId + categoryId + dueAt nếu nói), event (hẹn/họp/bay/block Mai tự nói; kèm startAt hoặc durationMinutes, location, mode nếu Mai nói "đi tàu"/"ô tô", invitees = người Mai muốn mời giữ nguyên cách gọi, meetLink khi Mai xin link họp online — "Thứ Năm 2 giờ họp với anh Tuấn và chị Linh, tạo link Meet" → event title "Họp với anh Tuấn và chị Linh", 14:00 thứ Năm, invitees ["anh Tuấn","chị Linh"], meetLink "meet"), reschedule (dời lịch/việc ĐÃ CÓ; what=tên KHÔNG kèm ngày; ngày dùng để chỉ đúng lịch → day; keepTime=true khi chỉ nói ngày mới; keepDate=true khi chỉ nói giờ mới — "dời cắt tóc thứ Sáu sang 17:00" → what="cắt tóc", day=thứ Sáu, toWhen=thứ Sáu 17:00), note ("ghi chú cho việc X: …" → what=tên việc ĐÃ CÓ, text=nội dung — không tạo việc mới), complete ("xong việc X rồi" → what=tên việc; app sẽ hiện thẻ xác nhận trước khi đóng), book_task ("book 2 tiếng cho việc pitch deck thứ Năm" hoặc "đặt 2 tiếng thứ Năm cho pitch deck Sorene" → what=tên việc/nội dung KHÔNG kèm ngày, durationMinutes, day — app điền sẵn khung trống gần nhất để Mai chỉnh rồi Book; chưa có việc khớp tên thì đặt block riêng), delete_event ("xóa lịch tarot" → what, day nếu nói; app luôn hỏi xác nhận), booked ("spa thứ Năm đặt rồi" → what, day — đánh dấu đã đặt chỗ), location ("chị đang ở HCMC" → city bkk|hcmc|tokyo), research ("tìm giúp chị…", "so sánh…", "chuẩn bị hồ sơ về…" → query + projectId nếu Mai nói "lưu vào dự án X").
 Tiêu đề việc bắt đầu bằng động từ rõ ràng ("Gửi báo giá cho OKR", không phải "báo giá OKR").
 Dự án, category và danh bạ khách CỦA MAI (chỉ dùng đúng các id này, Mai tự quản danh sách):
 ${taxonomyText(taxonomy)}
 Không chắc category thì bỏ trống, đừng đoán bừa; confidence phản ánh độ chắc của phân loại.
 Khách hàng/đối tác: tên trong câu khớp danh bạ (kể cả tên gọi tắt) → điền clientId; tên chưa có trong danh bạ → BỎ TRỐNG, không tự tạo, không đoán.
 Deadline: câu có hạn (kể cả ngày tương đối "thứ Sáu", "cuối tháng") → quy ra dueAt theo mốc thời gian trên; câu KHÔNG có hạn → BỎ TRỐNG dueAt, tuyệt đối không tự đề xuất hạn.
-Giờ không nói rõ: nhắc việc = 9:00. "tối"=19:00, "chiều"=15:00, "sáng"=9:00.
+Giờ không nói rõ: nhắc việc = 9:00. "tối"=19:00, "chiều"=15:00, "sáng"=9:00. Họp/gặp "2 giờ", "3h" không kèm buổi = buổi chiều (14:00, 15:00).
 Hỏi lại TỐI ĐA MỘT câu, chỉ khi thiếu thông tin thật sự quan trọng. Không bịa hành động Mai không nói.`;
 }
 

@@ -313,6 +313,18 @@ export async function larkChatMembers(chatId: string): Promise<Map<string, strin
   return names;
 }
 
+/**
+ * Email của một thành viên tổ chức (danh bạ liên hệ §5.4 v3.9) — cần quyền
+ * danh bạ (contact:user.email:readonly) ở tab Tenant token scopes; thiếu
+ * quyền thì ném lỗi `lark-<code>` để route dừng hỏi tiếp và ghi chú cho Mai.
+ */
+export async function larkMemberEmail(openId: string): Promise<string | undefined> {
+  const d = await botCall<{ data?: { user?: { email?: string; enterprise_email?: string } } }>(
+    `/open-apis/contact/v3/users/${encodeURIComponent(openId)}?user_id_type=open_id`,
+  );
+  return d.data?.user?.enterprise_email || d.data?.user?.email || undefined;
+}
+
 interface RawMessage {
   message_id?: string;
   msg_type?: string;

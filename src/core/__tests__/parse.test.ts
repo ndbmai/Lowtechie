@@ -143,20 +143,23 @@ describe("parseCommand — ví dụ trong PRD/mockup", () => {
     expect(a.title).not.toMatch(/Thonglor/);
   });
 
-  it("PRD §4.2: dời spa + book 2 tiếng deep work", () => {
+  it("PRD §4.2 (v3.9): dời spa + đặt 2 tiếng cho pitch deck → form book gọn, không hỏi lại", () => {
+    // v3.9 đổi ví dụ: không còn "deep work" — "book/đặt N tiếng … cho X" đi thẳng
+    // tới form book gọn (việc khớp tên, hoặc block riêng khi chưa có việc).
     const r = parseCommand(
       "Tuần này dời spa sang thứ Năm, và book 2 tiếng deep work cho Sorene pitch deck",
       NOW,
     );
     expect(r.actions).toHaveLength(2);
     const [m, b] = r.actions;
-    if (m.kind !== "reschedule" || b.kind !== "event") throw new Error("sai loại");
+    if (m.kind !== "reschedule" || b.kind !== "book_task") throw new Error("sai loại");
     expect(m.what.toLowerCase()).toBe("spa");
     expect(b.durationMinutes).toBe(120);
-    expect(b.title).toMatch(/deep work/i);
-    expect(b.startAt).toBeUndefined();
-    // Có duration thì đi luồng đề xuất khung giờ, không cần hỏi lại.
+    expect(b.what).toBe("Sorene pitch deck");
     expect(r.question).toBeUndefined();
+    // "block 2 tiếng …" (không có "cho X") vẫn là block chờ tìm giờ như cũ.
+    const blk = parseCommand("block 2 tiếng deep work chiều mai", NOW).actions[0];
+    expect(blk.kind === "event" && blk.durationMinutes).toBe(120);
   });
 
   it("thiếu giờ hẹn → hỏi lại đúng MỘT câu", () => {

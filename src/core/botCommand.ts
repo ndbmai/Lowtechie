@@ -1,4 +1,5 @@
 import { foldName } from "./clients";
+import { thaiDigits } from "./whenTh";
 
 /**
  * Lệnh "@Lowtechie …" trong group Lark (§5.5.1–5.5.2 v3.7). Bot chỉ làm
@@ -49,6 +50,10 @@ const PRIVATE_PATTERNS = [
   /\bhealth\b|\bdoctor\b|\bdentist\b|\bdental\b|\bmedical\b/,
   /\binbox\b|\bmailbox\b|\bemails?\b/,
   /\bprivate\b|\bpersonal notes?\b/,
+  // Liên hệ của người khác (v3.9): email/số điện thoại không bao giờ đọc ra trong group.
+  /\bphone(?: number)?\b|\bcontact (?:info|details)\b|\bso dien thoai\b|\bsdt\b/,
+  // ภาษาไทย (tiếng Thái — PRD v3.9): Mai ở đâu, lịch riêng, vé bay, hộ chiếu, sức khỏe, email/số điện thoại.
+  /มาย\s*อยู่\s*(?:ที่)?\s*ไหน|ปฏิทินส่วนตัว|ตารางส่วนตัว|เที่ยวบิน|ตั๋วเครื่องบิน|พาสปอร์ต|หนังสือเดินทาง|สุขภาพ|หมอฟัน|โรงพยาบาล|อีเมล|เบอร์โทร/u,
 ];
 
 export function isPrivateAsk(text: string): boolean {
@@ -61,22 +66,44 @@ function afterColon(s: string): string {
 }
 
 function summaryHours(t: string): number {
-  const n = t.match(/(\d+)\s*(?:ngay|days?|d)\b/);
+  const n = t.match(/(\d+)\s*(?:ngay|days?|d\b|วัน)/u);
   if (n) return Math.min(14, Math.max(1, parseInt(n[1], 10))) * 24;
-  if (/hom qua|yesterday/.test(t)) return 48;
-  if (/tuan|week/.test(t)) return 168;
+  if (/hom qua|yesterday|เมื่อวาน/u.test(t)) return 48;
+  if (/tuan|week|สัปดาห์|อาทิตย์/u.test(t)) return 168;
   return 24;
 }
 
-/** Tách lệnh (Anh hoặc Việt); không hiểu → help (không đoán). */
+/** Người được giao trong câu tiếng Thái: "ให้คุณลินห์ …" / "ให้ Linh …". */
+function thaiAssignee(rest: string): string | undefined {
+  return rest.match(/ให้\s*(?:คุณ|พี่|น้อง)?\s*([A-Za-z\p{L}\p{M}]+?)(?=[\s,]|$)/u)?.[1];
+}
+
+/** Tách lệnh (Anh, Việt hoặc Thái); không hiểu → help (không đoán). */
 export function parseBotCommand(raw: string): BotCommand {
-  const text = stripMentions(raw);
+  const text = thaiDigits(stripMentions(raw));
   const t = foldName(text);
 
-  // Tóm tắt: "tóm tắt 2 ngày qua" · "summarize the last 2 days" · "recap this week".
+  // Tóm tắt: "tóm tắt 2 ngày qua" · "summarize the last 2 days" · "recap this week" · "สรุป 2 วัน".
   // "chốt việc hôm nay" / "wrap up today" (§5.5.3) = tóm tắt + gói việc cho Mai duyệt.
-  if (/^(?:tom tat|chot viec|summari[sz]e|summary|recap|wrap[\s-]?up)\b/.test(t)) {
+  if (/^(?:tom tat|chot viec|summari[sz]e|summary|recap|wrap[\s-]?up)\b/.test(t) || /^สรุป/u.test(text)) {
     return { kind: "summary", hours: summaryHours(t) };
+  }
+
+  // ── ภาษาไทย (PRD v3.9: bot hiểu cả tiếng Thái) ──
+  const th = text.match(/^(เพิ่มงาน|บันทึกงาน|จดงาน|สร้างงาน|งาน\s*[:：]|มอบหมายงาน|มอบหมาย|สั่งงาน|เตือน|บันทึกการตัดสินใจ|บันทึกมติ|มติ\s*[:：])\s*(.*)$/u);
+  if (th) {
+    const verb = th[1].replace(/\s*[:：]$/u, "");
+    const rest = afterColon(th[2]);
+    if (!rest) return { kind: "help" };
+    if (verb.startsWith("บันทึกการ") || verb.startsWith("บันทึกมติ") || verb === "มติ") return { kind: "decision", text: rest };
+    if (verb.startsWith("มอบหมาย") || verb === "สั่งงาน") return { kind: "assign", text: rest, assignee: thaiAssignee(rest) };
+    if (verb === "เตือน") {
+      // "เตือนฉัน…" = nhắc chính người gửi; "เตือนคุณลินห์ …" / "เตือน Linh …" = nhắc người đó.
+      if (/^(?:ฉัน|ผม|ดิฉัน|หนู|เรา)/u.test(rest)) return { kind: "remind", text: rest.replace(/^(?:ฉัน|ผม|ดิฉัน|หนู|เรา)\s*(?:ให้)?\s*/u, "") };
+      const who = rest.match(/^(?:คุณ|พี่|น้อง)?\s*([A-Z][\p{L}]*|[\p{L}\p{M}]+?)(?=\s|$)/u)?.[1];
+      return { kind: "remind", text: rest, assignee: who };
+    }
+    return { kind: "task", text: rest };
   }
 
   // ── Tiếng Việt ──
@@ -132,6 +159,7 @@ export function parseBotCommand(raw: string): BotCommand {
 
   if (isPrivateAsk(text)) return { kind: "private" };
   if (
+    /งานค้าง|ใครทำ|ใครรับผิดชอบ|สถานะงาน/u.test(text) ||
     /\bdang treo\b|\bcon viec gi\b|\bai dang lam\b|\bviec cua [\p{L} ]+ (?:tuan|hom)\b/u.test(t) ||
     /\bwhat(?:'s| is| are)\b.*\b(?:pending|open|left|outstanding|overdue)\b|\bwho(?:'s| is)\s+(?:working on|doing|handling)\b|\bopen tasks\b|\bstatus\b/.test(t)
   ) {

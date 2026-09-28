@@ -1,5 +1,6 @@
 import { BOOKING_KEYWORDS } from "./booking";
 import { classify } from "./classify";
+import { MEET_PHRASE_RE, extractInvitees, meetLinkRequest } from "./contacts";
 import { cityFromText } from "./location";
 import type { DueType, ParseResult, ParsedAction, ProjectId } from "./types";
 
@@ -35,7 +36,8 @@ const BOOKING_LEAD_RE = new RegExp(
 );
 
 const TIME_RE = /(\d{1,2})\s*(?:giờ|h|:)\s*(\d{1,2})?(?:\s*phút)?/i;
-const PART_OF_DAY_RE = /\b(sáng|trưa|chiều|tối|đêm)\b/i;
+// Biên Unicode (không dùng \b — "đêm" bắt đầu bằng chữ có dấu nên \b không bao giờ khớp).
+const PART_OF_DAY_RE = /(?<![\p{L}\p{M}\d])(sáng|trưa|chiều|tối|đêm)(?![\p{L}\p{M}\d])/iu;
 const DURATION_RE = /(\d+(?:[.,]\d+)?)\s*(tiếng|giờ đồng hồ|phút)/i;
 
 interface WhenMatch {
@@ -265,6 +267,24 @@ function parseClause(clause: string, now: Date): ParsedAction {
       confidence: 0.85,
     };
   }
+  // PRD v3.9: "đặt 2 tiếng thứ Năm cho pitch deck Sorene" — thời lượng + "cho X" (không
+  // cần chữ "việc"), ngày đứng trước hoặc sau. Không có việc khớp tên thì app đặt block riêng.
+  const bookDurM = clause.match(
+    /^(?:book|đặt|giữ)\s+(?:lịch\s+)?(\d+(?:[.,]\d+)?)\s*(tiếng|giờ\s+đồng\s+hồ|phút)\s+(.*?)\s*cho\s+(.+)$/i,
+  );
+  if (bookDurM) {
+    const w = parseWhen(`${bookDurM[3]} ${bookDurM[4]}`, now);
+    const what = tidyTitle(stripSpans(bookDurM[4], w.spans));
+    if (what) {
+      return {
+        kind: "book_task",
+        what,
+        durationMinutes: Math.round(parseFloat(bookDurM[1].replace(",", ".")) * (bookDurM[2] === "phút" ? 1 : 60)),
+        day: w.hasDay ? w.at?.toISOString() : undefined,
+        confidence: 0.8,
+      };
+    }
+  }
 
   // Nghiên cứu (§5.9.1): "tìm giúp chị 5 công ty AI automation ở Bangkok, lưu vào Circle".
   const resM = clause.match(
@@ -323,7 +343,9 @@ function parseClause(clause: string, now: Date): ParsedAction {
   // câu + GIỜ cụ thể là lịch hẹn, không phải việc có hạn (§5.4.2 v3.7).
   const isEvent =
     /\bhẹn\b|\bgặp\b|\bbook\b|đặt lịch|\bhọp\b|\bbay\b|deep work/i.test(clause) ||
-    (when.hasTime && BOOKING_LEAD_RE.test(clause.trim()));
+    (when.hasTime && BOOKING_LEAD_RE.test(clause.trim())) ||
+    // "mời anh Tuấn thứ Năm 2h" — mời người + giờ cụ thể là một cuộc họp (v3.9).
+    (when.hasTime && /(?:^|\s)mời\s/iu.test(clause));
   if (isEvent) {
     const mode = MODE_CAR_RE.test(clause)
       ? ("car" as const)
@@ -337,10 +359,16 @@ function parseClause(clause: string, now: Date): ParsedAction {
       ? Math.round(parseFloat(dur[1].replace(",", ".")) * (dur[2] === "phút" ? 1 : 60))
       : undefined;
 
+    // Mời người + link họp (§5.4 v3.9): "họp với anh Tuấn và chị Linh, tạo link Meet".
+    const invite = extractInvitees(clause);
+    const meetLink = meetLinkRequest(clause);
+
     let title = stripSpans(clause, when.spans);
     // Địa điểm đã tách riêng → gỡ "ở X" khỏi tiêu đề, tránh lặp khi hiển thị.
     if (loc) title = title.replace(loc[0], " ");
+    if (invite.span) title = title.replace(invite.span.trim(), " ");
     title = title
+      .replace(MEET_PHRASE_RE, " ")
       .replace(MODE_TRANSIT_RE, "")
       .replace(MODE_CAR_RE, "")
       .replace(/\bđi\s*,?\s*$/i, "")
@@ -348,13 +376,27 @@ function parseClause(clause: string, now: Date): ParsedAction {
       .replace(/\bbook\b|\bđặt lịch\b/gi, "");
     title = tidyTitle(title);
 
+    // "Thứ Năm 2 giờ họp" = 14:00 — họp/gặp lúc 1–5 giờ không kèm buổi là buổi chiều.
+    let startAt = when.hasTime ? when.at : undefined;
+    if (
+      startAt &&
+      /họp|gặp|hẹn|meeting|call/iu.test(clause) &&
+      !PART_OF_DAY_RE.test(clause) &&
+      startAt.getHours() >= 1 &&
+      startAt.getHours() <= 5
+    ) {
+      startAt = new Date(startAt.getTime() + 12 * 3_600_000);
+    }
+
     return {
       kind: "event",
       title: title || "Cuộc hẹn",
-      startAt: when.hasTime ? when.at?.toISOString() : undefined,
+      startAt: startAt?.toISOString(),
       durationMinutes,
       location: loc?.[1]?.trim(),
       mode,
+      invitees: invite.names.length ? invite.names : undefined,
+      meetLink,
       confidence: baseConfidence,
     };
   }

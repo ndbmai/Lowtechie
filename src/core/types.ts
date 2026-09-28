@@ -222,6 +222,56 @@ export interface CalEvent {
   clientId?: string;
   /** Đã tới nơi hẹn — vị trí thiết bị khớp nơi đã lưu (§5.4.3). */
   arrivedAt?: string;
+  /** Link họp: Meet/Lark Meeting app tạo khi book, hoặc link Mai dán (Zoom…) — v3.9. */
+  meetUrl?: string;
+  /** Người được mời (`event_invitees` §8) — gửi mời LUÔN qua bước xác nhận riêng. */
+  invitees?: EventInvitee[];
+  /** Mai đã xem/nhắc follow-up người chưa trả lời lúc này — không nhắc lại. */
+  inviteFollowUpAt?: string;
+}
+
+/**
+ * Danh bạ LIÊN HỆ (§5.4 v3.9, `contacts` §8) — NGƯỜI để mời họp, khác danh
+ * bạ khách hàng (tổ chức). Hình thành từ người Mai đã mời, người gửi/nhận
+ * trong Gmail/Lark Mail, thành viên group Lark, người liên hệ của khách
+ * hàng; Mai sửa/gộp/xóa ở Quản lý. Email là dữ liệu mức Riêng tư/Dự án —
+ * bot không bao giờ đọc ra trong group chat.
+ */
+export interface Contact {
+  id: string;
+  name: string;
+  /** Cách gọi khác ("Tuấn OKR", "Tuan") — để lần sau chỉ cần nói tên. */
+  aliases: string[];
+  email?: string;
+  company?: string;
+  clientId?: string;
+  projectIds?: ProjectId[];
+  source: "invite" | "mail" | "lark_group" | "manual" | "client";
+  /** open_id Lark (thành viên group) — mời vào lịch Lark không cần email. */
+  larkOpenId?: string;
+  /** Thư mời tiếng Việt khi liên hệ dùng tiếng Việt; thiếu = tự đoán, mặc định tiếng Anh. */
+  lang?: "vi" | "en";
+  lastUsedAt?: string;
+  useCount?: number;
+}
+
+export type InviteResponse = "accepted" | "declined" | "tentative" | "no_reply";
+
+/** Một người được mời vào sự kiện (`event_invitees` §8). */
+export interface EventInvitee {
+  name: string;
+  /** Cách Mai gọi ("anh Tuấn") — lời chào trong thư mời tiếng Việt. */
+  call?: string;
+  /** Liên hệ dùng tiếng Việt → thư mời tiếng Việt khi mọi người đều vậy. */
+  lang?: "vi" | "en";
+  email?: string;
+  contactId?: string;
+  larkOpenId?: string;
+  response: InviteResponse;
+  /** Chưa có = mới soạn, CHƯA gửi (gửi luôn cần Mai xác nhận riêng). */
+  sentAt?: string;
+  /** Gửi lỗi / email sai — báo lại Mai kèm tên, không im lặng. */
+  error?: string;
 }
 
 export type Destination = "tokyo" | "hcmc" | "bkk";
@@ -295,6 +345,10 @@ export type ParsedAction =
       location?: string;
       /** Phương tiện Mai nói rõ ("đi ô tô") — mặc định là tàu (§5.4.1). */
       mode?: "transit" | "car";
+      /** Người Mai muốn mời, GIỮ NGUYÊN cách gọi ("anh Tuấn bên OKR") — v3.9. */
+      invitees?: string[];
+      /** "tạo link Meet" / "họp online" → bật Tạo link họp trên thẻ (v3.9). */
+      meetLink?: "meet" | "lark" | "zoom" | "any";
       confidence: number;
       note?: string;
     }

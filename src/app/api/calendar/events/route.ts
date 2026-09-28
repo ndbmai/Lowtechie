@@ -33,7 +33,13 @@ interface GEvent {
   recurringEventId?: string;
   guestsCanModify?: boolean;
   organizer?: { email?: string; self?: boolean };
-  attendees?: { email?: string; displayName?: string; self?: boolean; resource?: boolean }[];
+  attendees?: {
+    email?: string;
+    displayName?: string;
+    self?: boolean;
+    resource?: boolean;
+    responseStatus?: string;
+  }[];
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
 }
@@ -56,9 +62,19 @@ interface OutEvent {
   readOnly?: boolean;
   seriesId?: string;
   attendees?: string[];
+  /** Ai nhận/từ chối/chưa trả lời (§5.4 v3.9) — Google có sẵn trong danh sách. */
+  guestStatus?: { name: string; email?: string; response: string }[];
   meetUrl?: string;
   openUrl?: string;
   description?: string;
+}
+
+function guestStatus(e: GEvent): OutEvent["guestStatus"] {
+  const list = (e.attendees ?? [])
+    .filter((a) => !a.self && !a.resource)
+    .map((a) => ({ name: a.displayName || a.email || "", email: a.email, response: a.responseStatus ?? "needsAction" }))
+    .filter((a) => a.name);
+  return list.length ? list.slice(0, 30) : undefined;
 }
 
 /** Người được mời (trừ Mai và phòng họp) — tên hiển thị hoặc email. */
@@ -134,6 +150,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             readOnly: e.organizer?.self === false && !e.guestsCanModify,
             seriesId: e.recurringEventId,
             attendees: guestNames(e),
+            guestStatus: guestStatus(e),
             meetUrl: e.hangoutLink,
             openUrl: e.htmlLink,
             description: e.description?.slice(0, 600),
@@ -171,10 +188,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   return res;
 }
 
+/** Link Meet trong sự kiện Google vừa tạo (hangoutLink hoặc điểm vào video). */
+function googleMeetUrl(d: {
+  hangoutLink?: string;
+  conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
+}): string | undefined {
+  return d.hangoutLink ?? d.conferenceData?.entryPoints?.find((e) => e.entryPointType === "video")?.uri;
+}
+
 /**
  * Ghi một block/sự kiện — chỉ gọi sau khi Mai bấm duyệt. `accountId`
  * chọn LỊCH ĐÍCH (§5.3.4, mặc định theo dự án do client quyết); thiếu
- * thì vào tài khoản bật Lịch đầu tiên.
+ * thì vào tài khoản bật Lịch đầu tiên. `meet` = tạo luôn link họp (§5.4
+ * v3.9): Google Meet ở lịch Google, Lark Meeting ở lịch Lark. KHÔNG gửi
+ * mời ai ở đây — gửi mời là bước xác nhận riêng (/invite).
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const accounts = accountsWith(await readAccounts(req), "cal");
@@ -188,8 +215,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let description = "";
   let location = "";
   let accountId = "";
+  let meet = false;
   try {
     const body = (await req.json()) as Record<string, unknown>;
+    meet = body.meet === true;
     if (typeof body.title === "string") title = body.title.slice(0, 200);
     if (typeof body.startAt === "string") startAt = body.startAt;
     if (typeof body.endAt === "string") endAt = body.endAt;
@@ -208,29 +237,53 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (target.provider === "google") {
     const at = await accessToken(target.link as GoogleLink);
     if (!at) return NextResponse.json({ error: "not-connected" }, { status: 401 });
-    const res = await fetch(`${CAL_BASE}/calendars/primary/events`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        summary: title,
-        description: description || "Tạo bởi Mai Lowtechie 🌼",
-        ...(location ? { location } : {}),
-        start: { dateTime: new Date(startAt).toISOString() },
-        end: { dateTime: new Date(endAt).toISOString() },
-      }),
-    });
-    const data = (await res.json().catch(() => ({}))) as { id?: string };
+    const res = await fetch(
+      `${CAL_BASE}/calendars/primary/events${meet ? "?conferenceDataVersion=1" : ""}`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          summary: title,
+          description: description || "Tạo bởi Mai Lowtechie 🌼",
+          ...(location ? { location } : {}),
+          start: { dateTime: new Date(startAt).toISOString() },
+          end: { dateTime: new Date(endAt).toISOString() },
+          ...(meet
+            ? {
+                conferenceData: {
+                  createRequest: {
+                    requestId: crypto.randomUUID(),
+                    conferenceSolutionKey: { type: "hangoutsMeet" },
+                  },
+                },
+              }
+            : {}),
+        }),
+      },
+    );
+    const data = (await res.json().catch(() => ({}))) as { id?: string; hangoutLink?: string };
     if (!res.ok || !data.id) {
       return NextResponse.json({ error: `google-${res.status}` }, { status: 502 });
     }
-    return NextResponse.json({ gcalId: data.id, accountId: target.id });
+    return NextResponse.json({
+      gcalId: data.id,
+      accountId: target.id,
+      provider: "google",
+      meetUrl: meet ? googleMeetUrl(data) : undefined,
+    });
   }
 
   const s = await larkCalendarSession(target.link as LarkLink);
   if (!s) return NextResponse.json({ error: "not-connected" }, { status: 401 });
-  const eventId = await larkCreateEvent(s.at, s.calendarId, { title, startAt, endAt, description, location });
-  const res = eventId
-    ? NextResponse.json({ gcalId: eventId, accountId: target.id })
+  const created = await larkCreateEvent(s.at, s.calendarId, { title, startAt, endAt, description, location, meet });
+  const res = created
+    ? NextResponse.json({
+        gcalId: created.id,
+        accountId: target.id,
+        provider: "lark",
+        calendarId: s.calendarId,
+        meetUrl: created.meetUrl,
+      })
     : NextResponse.json({ error: "lark-create" }, { status: 502 });
   if (s.changed) await writeAccount(res, req.nextUrl.origin, target.id, "lark", s.link);
   return res;

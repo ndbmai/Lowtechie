@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ContactsManager } from "@/components/ContactsManager";
 import { useState } from "react";
 import { clientsFor } from "@/core/clients";
 import { categoriesFor, PROJECT_COLORS } from "@/core/projects";
@@ -504,6 +505,11 @@ export default function ManageProjectsPage() {
               {sorting ? "Thoát sắp xếp" : "Sắp xếp"}
             </button>
           )}
+          {mounted && !sorting && (
+            <a href="#danh-ba" className="muted small">
+              📇 Danh bạ
+            </a>
+          )}
           <Link href="/du-an" className="muted small">
             ← Dự án
           </Link>
@@ -538,6 +544,8 @@ export default function ManageProjectsPage() {
           </button>
         </div>
       )}
+
+      {mounted && !sorting && <ContactsManager />}
     </main>
   );
 }

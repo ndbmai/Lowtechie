@@ -7,6 +7,8 @@ import { BookTaskSheet } from "@/components/BookTaskSheet";
 import { BookingAskCard } from "@/components/BookingAsk";
 import { Bubble } from "@/components/Bubble";
 import { DueEditor } from "@/components/DueEditor";
+import { InviteConfirm } from "@/components/InviteConfirm";
+import { InviteEditor, inviteeReady } from "@/components/InviteEditor";
 import { ResearchPanel } from "@/components/ResearchPanel";
 import { SearchSelect, type PickOption } from "@/components/SearchSelect";
 import { bannerNote, canAutoBookBanner, findDuplicateEvent, resolveBannerTiming } from "@/core/banner";
@@ -15,14 +17,21 @@ import {
   clientProjectHint,
   clientsFor,
   findClientByName,
-  foldName,
   matchClient,
   matchClientDetail,
   orderClientsForPick,
   sanitizeClientId,
   withLearnedAlias,
 } from "@/core/clients";
-import { matchEventByName, rescheduleTarget } from "@/core/eventOps";
+import {
+  invitePool,
+  inviteeFromDraft,
+  mergeInvitees,
+  parseSaidName,
+  resolveInvitee,
+  type InviteeDraft,
+} from "@/core/contacts";
+import { matchEventByName, matchTaskByName, rescheduleTarget } from "@/core/eventOps";
 import { CITY_LABEL, LOCATION_TTL_MS } from "@/core/location";
 import { detectProject, parseCommand, parseWhen } from "@/core/parse";
 import {
@@ -41,6 +50,7 @@ import type {
   Category,
   Client,
   DueType,
+  EventInvitee,
   ImageParseResult,
   ParseResult,
   ParsedAction,
@@ -105,12 +115,22 @@ async function parseViaApi(
     if (!res.ok) throw new Error(String(res.status));
     const r = (await res.json()) as ParseResult;
     // Claude có thể trả thiếu trường — bỏ hành động không dùng được thay vì vỡ thẻ.
-    return { ...r, actions: (r.actions ?? []).filter(usableAction) };
+    return { ...r, actions: (r.actions ?? []).filter(usableAction).map(cleanAction) };
   } catch {
     // Không có API key / mất mạng → bộ luật chạy ngay trên trình duyệt,
     // đúng múi giờ của Mai.
     return parseCommand(text);
   }
+}
+
+/** Người mời / link họp từ Claude: chỉ nhận chuỗi, tối đa 15 người, loại link đúng danh sách. */
+function cleanAction(a: ParsedAction): ParsedAction {
+  if (a.kind !== "event") return a;
+  const invitees = Array.isArray(a.invitees)
+    ? a.invitees.filter((n): n is string => typeof n === "string" && n.trim().length > 0).slice(0, 15)
+    : undefined;
+  const meetLink = a.meetLink && ["meet", "lark", "zoom", "any"].includes(a.meetLink) ? a.meetLink : undefined;
+  return { ...a, invitees: invitees?.length ? invitees : undefined, meetLink };
 }
 
 function usableAction(a: ParsedAction): boolean {
@@ -213,6 +233,13 @@ export default function CapturePage() {
   /** Book sự kiện lên lịch ngoài sau khi xem trước (§5.4 v2.0). */
   const [book, setBook] = useState<Record<number, boolean>>({});
   const [bookAcct, setBookAcct] = useState<Record<number, string>>({});
+  /** Mời người + link họp trên thẻ sự kiện (§5.4 v3.9). */
+  const [invites, setInvites] = useState<Record<number, InviteeDraft[]>>({});
+  const [meet, setMeet] = useState<Record<number, boolean>>({});
+  const [meetPaste, setMeetPaste] = useState<Record<number, string>>({});
+  const [inviteOpen, setInviteOpen] = useState<Record<number, boolean>>({});
+  /** Sự kiện vừa book có người mời → bước "Gửi mời" xác nhận RIÊNG. */
+  const [inviteQueue, setInviteQueue] = useState<string[]>([]);
   const [lastBooked, setLastBooked] = useState<
     { localId: string; gcalId?: string; account?: string }[] | null
   >(null);
@@ -221,7 +248,13 @@ export default function CapturePage() {
   /** Lần đầu gặp nơi cần đặt chỗ → hỏi một câu (§5.4.2 v3.7). */
   const [bookingAsk, setBookingAsk] = useState<BookingAsk | null>(null);
   /** "book 2 tiếng cho việc X thứ Năm" → tấm chọn khung giờ (§5.2.2 v3.7). */
-  const [bookSheet, setBookSheet] = useState<{ task: Task; duration?: number; onDay?: string } | null>(null);
+  const [bookSheet, setBookSheet] = useState<{
+    task?: Task;
+    /** Chưa có việc khớp tên → block Mai tự đặt (PRD v3.9). */
+    block?: { title: string; projectId?: ProjectId };
+    duration?: number;
+    onDay?: string;
+  } | null>(null);
   /** "tìm giúp chị…" → thẻ nghiên cứu (§5.9.1 v3.7). */
   const [research, setResearch] = useState<{ query: string; projectId?: ProjectId } | null>(null);
 
@@ -239,7 +272,29 @@ export default function CapturePage() {
       setNoteEdits({});
       setRemoteHits({});
       setBookingAsk(null);
+      setInviteQueue([]);
       const r = await parseViaApi(t.trim(), { projects, categories, clients });
+      // Người Mai muốn mời → khớp danh bạ liên hệ, điền sẵn email (§5.4 v3.9).
+      const st = useStore.getState();
+      const pool = invitePool(st.contacts, st.clients);
+      const inv: Record<number, InviteeDraft[]> = {};
+      const mt: Record<number, boolean> = {};
+      const bk: Record<number, boolean> = {};
+      r.actions.forEach((a, i) => {
+        if (a.kind !== "event") return;
+        const drafts = (a.invitees ?? [])
+          .map((n) => resolveInvitee(n, pool, st.clients))
+          // "họp với OKR" — tên KHÁCH HÀNG (tổ chức) chưa có người liên hệ thì không phải người để mời.
+          .filter((d) => !(d.status === "ask_email" && findClientByName(st.clients, parseSaidName(d.said).core)));
+        if (drafts.length) inv[i] = drafts;
+        if (a.meetLink && a.meetLink !== "zoom") mt[i] = true;
+        if (a.startAt && (drafts.length || a.meetLink)) bk[i] = true;
+      });
+      setInvites(inv);
+      setMeet(mt);
+      setMeetPaste({});
+      setInviteOpen({});
+      setBook(bk);
       setResult(r);
       setBusy(false);
     },
@@ -359,16 +414,8 @@ export default function CapturePage() {
     [localTargets, remoteHits],
   );
 
-  /** Việc đang mở khớp tên Mai nói (không dấu). */
-  const findOpenTask = useCallback(
-    (what: string) => {
-      const q = foldName(what);
-      return tasks.find(
-        (t) => (t.status === "todo" || t.status === "doing") && foldName(t.title).includes(q),
-      );
-    },
-    [tasks],
-  );
+  /** Việc đang mở khớp tên Mai nói (không dấu; bỏ được tên dự án/động từ thừa ở hai đầu). */
+  const findOpenTask = useCallback((what: string) => matchTaskByName(tasks, what), [tasks]);
 
   // Lệnh dời/xóa/đã đặt mà app không có bản local → tìm trên Google/Lark.
   useEffect(() => {
@@ -436,6 +483,7 @@ export default function CapturePage() {
     if (!result) return;
     const lines: string[] = [];
     const booked: { localId: string; gcalId?: string; account?: string }[] = [];
+    const inviteNext: string[] = [];
     let goCalendar = false;
 
     for (const [i, a] of result.actions.entries()) {
@@ -487,28 +535,48 @@ export default function CapturePage() {
           // lịch đích chọn được trên thẻ (§5.3.4).
           let gcalId: string | null = null;
           let calAccount: string | undefined;
+          let bookedOn: "google" | "lark" | undefined;
+          // Link họp + người mời (§5.4 v3.9): link tạo cùng lúc book; gửi mời là bước RIÊNG sau đó.
+          const provider = (calAccounts.find((c) => c.id === bookAcct[i]) ?? calAccounts[0])?.provider;
+          const readyDrafts = (invites[i] ?? []).filter((d) => inviteeReady(d, provider));
+          const missing = (invites[i] ?? []).filter((d) => !inviteeReady(d, provider));
+          const paste = meetPaste[i]?.trim();
+          const pasteUrl = paste ? (/^https?:\/\//i.test(paste) ? paste : `https://${paste}`) : undefined;
+          const location = a.location ?? pasteUrl;
+          const wantMeet = Boolean(meet[i]) && !pasteUrl;
+          let meetUrl = pasteUrl;
           if (book[i] && gs.connected) {
             const created = await createGcalEvent(
               {
                 title: a.title,
                 startAt: start.toISOString(),
                 endAt: end.toISOString(),
-                description: a.location ? `Ở ${a.location}` : undefined,
+                description:
+                  [a.location ? `Ở ${a.location}` : "", a.location && pasteUrl ? pasteUrl : ""]
+                    .filter(Boolean)
+                    .join(" · ") || undefined,
+                location,
+                meet: wantMeet,
               },
               bookAcct[i] || undefined,
             );
             gcalId = created?.gcalId ?? null;
             calAccount = created?.accountId;
+            bookedOn = created?.provider;
+            if (created?.meetUrl) meetUrl = created.meetUrl;
           }
           const ev = addEvent({
             title: a.title,
             startAt: start.toISOString(),
             endAt: end.toISOString(),
-            location: a.location,
+            location,
             kind: "event",
             gcalId: gcalId ?? undefined,
             calAccount,
+            meetUrl,
+            invitees: readyDrafts.length ? readyDrafts.map(inviteeFromDraft) : undefined,
           });
+          if (gcalId && readyDrafts.length) inviteNext.push(ev.id);
           // Nơi cần đặt chỗ (§5.4.2 v3.7): VIỆC "Đặt lịch…" vào thẳng danh
           // sách việc (không chỉ thông báo); lần đầu gặp nơi này thì hỏi một câu.
           const b = attachBooking(ev);
@@ -518,16 +586,26 @@ export default function CapturePage() {
           lines.push(
             `Đã thêm “${a.title}” lúc ${fmtTime(a.startAt)} ${fmtRelativeDay(a.startAt)}${
               gcalId
-                ? " · đã book lên Google Calendar ✓"
+                ? ` · đã book lên ${bookedOn === "lark" ? "Lark" : "Google Calendar"} ✓`
                 : book[i] && gs.connected
-                  ? " · book Google lỗi, mới lưu trong app"
+                  ? " · book lịch ngoài lỗi, mới lưu trong app"
                   : ""
-            }.${
-              isOnlineMeeting({ title: a.title, location: a.location })
+            }${wantMeet && gcalId ? (meetUrl ? ` · 🎥 link họp: ${meetUrl}` : " · chưa tạo được link họp (dán link có sẵn trong chi tiết sự kiện)") : ""}.${
+              isOnlineMeeting({ title: a.title, location, meetUrl })
                 ? ""
                 : ` Vào Lịch để khóa block chuẩn bị + di chuyển${a.mode === "car" ? " (ô tô)" : " (BTS)"}.`
             }`,
           );
+          if (readyDrafts.length) {
+            lines.push(
+              gcalId
+                ? `✉️ Chưa gửi mời — Mai xem lại ${readyDrafts.length} người ở thẻ “Gửi mời” bên dưới rồi bấm gửi.`
+                : `✉️ Chưa gửi mời cho ${readyDrafts.map((d) => d.name).join(", ")}: cần book lên lịch Google/Lark (mở sự kiện trong Lịch để gửi sau).`,
+            );
+          }
+          if (missing.length) {
+            lines.push(`Chưa mời ${missing.map((d) => d.call).join(", ")} — chưa có email.`);
+          }
         } else if (a.durationMinutes) {
           setPendingBlock({
             title: a.title,
@@ -612,11 +690,18 @@ export default function CapturePage() {
       } else if (a.kind === "book_task") {
         const task = findOpenTask(a.what);
         if (!task) {
-          lines.push(`Mình chưa thấy việc “${a.what}” đang mở để book lịch.`);
+          // Chưa có việc khớp tên → vẫn đặt được block (Mai tự nói), cùng form gọn.
+          const project = detectProject(a.what);
+          setBookSheet({
+            block: { title: a.what, projectId: project.explicit ? project.id : undefined },
+            duration: a.durationMinutes,
+            onDay: a.day,
+          });
+          lines.push(`📅 Mình điền sẵn khung trống gần nhất cho “${a.what}” bên dưới — Mai chỉnh giờ rồi bấm Book nhé.`);
           continue;
         }
         setBookSheet({ task, duration: a.durationMinutes, onDay: a.day });
-        lines.push(`📅 Mình đề xuất khung giờ cho “${task.title}” bên dưới — Mai chọn một khung nhé.`);
+        lines.push(`📅 Mình điền sẵn khung trống gần nhất cho “${task.title}” bên dưới — Mai chỉnh giờ rồi bấm Book nhé.`);
       } else if (a.kind === "location") {
         const now = new Date();
         setLocationState({
@@ -660,6 +745,7 @@ export default function CapturePage() {
 
     setLastBooked(booked.length ? booked : null);
     setSavedLines(lines);
+    setInviteQueue(inviteNext);
     setResult(null);
     setBook({});
     setText("");
@@ -1004,7 +1090,7 @@ export default function CapturePage() {
           <div className="small muted">
             {a.durationMinutes ? `${a.durationMinutes} phút` : "thời lượng chọn sau"}
             {a.day ? ` · ${fmtDayFull(a.day)}` : task?.dueAt ? ` · trước hạn ${fmtDue(task.dueAt)}` : ""}
-            {task ? " · bấm Lưu để xem 3 khung đề xuất" : " · chưa thấy việc đang mở khớp tên"}
+            {task ? " · bấm Lưu để chọn lịch + giờ" : " · chưa có việc khớp tên — bấm Lưu để đặt block riêng"}
           </div>
         </div>
       );
@@ -1221,6 +1307,7 @@ export default function CapturePage() {
       {bookSheet && (
         <BookTaskSheet
           task={bookSheet.task}
+          block={bookSheet.block}
           initialDuration={bookSheet.duration}
           onDay={bookSheet.onDay}
           onClose={() => setBookSheet(null)}
@@ -1293,6 +1380,59 @@ export default function CapturePage() {
                       )}
                     </span>
                   )}
+                  {a.startAt &&
+                    (() => {
+                      // Mời người + link họp (§5.4 v3.9) — gửi mời là bước xác nhận RIÊNG sau khi book.
+                      const acct = calAccounts.find((c) => c.id === bookAcct[i]) ?? calAccounts[0];
+                      const provider = acct?.provider;
+                      const booking = (book[i] ?? false) && gs.connected;
+                      const drafts = invites[i] ?? [];
+                      const open = inviteOpen[i] || drafts.length > 0 || Boolean(a.meetLink);
+                      if (!open)
+                        return (
+                          <button
+                            className="btn ghost small"
+                            style={{ alignSelf: "flex-start", marginTop: 6 }}
+                            onClick={() => setInviteOpen((s) => ({ ...s, [i]: true }))}
+                          >
+                            ＋ Mời người · link họp
+                          </button>
+                        );
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                          <label className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                            <input
+                              type="checkbox"
+                              className="check"
+                              checked={(meet[i] ?? false) && booking && !meetPaste[i]?.trim()}
+                              disabled={!booking || Boolean(meetPaste[i]?.trim())}
+                              onChange={(e) => setMeet((s) => ({ ...s, [i]: e.target.checked }))}
+                            />
+                            Tạo link họp ({provider === "lark" ? "Lark Meeting" : "Google Meet"})
+                          </label>
+                          <input
+                            className="transcript"
+                            style={{ minHeight: 0, padding: "6px 10px" }}
+                            placeholder={a.meetLink === "zoom" ? "Dán link Zoom có sẵn" : "hoặc dán link có sẵn (Zoom…)"}
+                            aria-label="Dán link họp"
+                            value={meetPaste[i] ?? ""}
+                            onChange={(e) => setMeetPaste((s) => ({ ...s, [i]: e.target.value }))}
+                          />
+                          <InviteEditor
+                            drafts={drafts}
+                            onChange={(d) => {
+                              setInvites((s) => ({ ...s, [i]: d }));
+                              // Có người mời → cần lịch Google/Lark để gửi: tick sẵn Book.
+                              if (d.length && gs.connected) setBook((s) => ({ ...s, [i]: true }));
+                            }}
+                            provider={provider}
+                          />
+                          {drafts.length > 0 && !booking && (
+                            <span className="small muted">Gửi mời cần book lên lịch Google/Lark.</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                 </div>
               ) : a.kind === "note" || a.kind === "complete" ? (
                 (() => {
@@ -1491,6 +1631,32 @@ export default function CapturePage() {
           )}
         </Bubble>
       )}
+
+      {inviteQueue.length > 0 &&
+        (() => {
+          const ev = events.find((e) => e.id === inviteQueue[0]);
+          const unsent = (ev?.invitees ?? []).filter((x) => !x.sentAt);
+          if (!ev?.gcalId || !unsent.length) return null;
+          return (
+            <InviteConfirm
+              key={ev.id}
+              event={ev}
+              target={{ gcalId: ev.gcalId, account: ev.calAccount }}
+              invitees={unsent}
+              onSent={(updated, title) => {
+                updateEvent(ev.id, { invitees: mergeInvitees(ev.invitees ?? [], updated), title });
+                const ok = updated.filter((x) => x.sentAt).length;
+                const bad = updated.filter((x) => x.error);
+                setSavedLines((sl) => [
+                  ...(sl ?? []),
+                  ...(ok ? [`✉️ Đã gửi mời “${title}” cho ${ok} người ✓`] : []),
+                  ...bad.map((x) => `⚠ Chưa gửi được cho ${x.name}: ${x.error}`),
+                ]);
+              }}
+              onClose={() => setInviteQueue((q) => q.slice(1))}
+            />
+          );
+        })()}
 
       {!supported && (
         <p className="muted small">Trình duyệt này chưa hỗ trợ voice — Mai gõ hoặc gửi ảnh nhé.</p>
@@ -1843,7 +2009,7 @@ function ContactCard({
   readNote?: string;
   onDone: (lines: string[]) => void;
 }) {
-  const { projects, clients, addClient, updateClient, touchClient } = useStore();
+  const { projects, clients, addClient, updateClient, touchClient, saveContact } = useStore();
   const live = activeProjects(projects);
   const [name, setName] = useState(contact.name);
   const [projectId, setProjectId] = useState<ProjectId>(live[0]?.id ?? "canhan");
@@ -1862,6 +2028,16 @@ function ContactCard({
       projectIds: c.projectIds.includes(projectId) ? c.projectIds : [...c.projectIds, projectId],
     });
     touchClient(c.id);
+    // Danh thiếp có email → vào luôn danh bạ liên hệ để mời họp (§5.4 v3.9).
+    if (contact.email)
+      saveContact({
+        name: trimmed,
+        email: contact.email,
+        company: contact.org,
+        clientId: c.id,
+        projectIds: [projectId],
+        source: "manual",
+      });
     onDone([
       existing
         ? `"${c.name}" đã có trong danh bạ — mình cập nhật liên hệ từ danh thiếp.`

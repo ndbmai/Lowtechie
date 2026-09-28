@@ -1,6 +1,6 @@
 /**
  * Đọc ngày giờ TIẾNG ANH trong lệnh bot Lark (Mai 25/9: team trao đổi
- * tiếng Anh) — "Friday", "by tomorrow 3pm", "next Monday", "Sep 30",
+ * tiếng Anh) — "Friday", "by tomorrow 3pm", "next Monday", "Sep 30", "end of month",
  * "30/9" (ngày/tháng như ở VN/TH). Cùng quy ước với parse.ts: chỉ có ngày
  * → 9:00 sáng; chỉ có giờ → hôm nay (qua rồi thì ngày mai); `now` tiêm vào
  * để test được và để tính theo LÚC GỬI tin.
@@ -86,7 +86,7 @@ export function parseWhenEn(text: string, now: Date): WhenEn {
   // 1) Tương đối: today / tonight / tomorrow / day after tomorrow / EOD / EOW / next week.
   const rel = text.match(
     new RegExp(
-      String.raw`${LEAD}(?:the\s+)?\b(day after tomorrow|tomorrow|tmrw|tmr|today|tonight|eod|end of (?:the )?day|eow|end of (?:the )?week|next week)\b`,
+      String.raw`${LEAD}(?:the\s+)?\b(day after tomorrow|tomorrow|tmrw|tmr|today|tonight|eod|end of (?:the )?day|eow|end of (?:the )?week|eom|end of (?:the )?month|next week)\b`,
       "i",
     ),
   );
@@ -96,6 +96,7 @@ export function parseWhenEn(text: string, now: Date): WhenEn {
     if (w === "day after tomorrow") day = addDays(midnight(now), 2);
     else if (w === "tomorrow" || w === "tmrw" || w === "tmr") day = addDays(midnight(now), 1);
     else if (w === "eow" || w.startsWith("end of") && w.endsWith("week")) day = weekdayDate(addDays(now, -1), 5, false);
+    else if (w === "eom" || w.endsWith("month")) day = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     else if (w === "next week") day = addDays(monday(now), 7);
     else day = midnight(now);
   }

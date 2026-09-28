@@ -25,6 +25,7 @@ export type RemoteMeta = Pick<
   | "readOnly"
   | "seriesId"
   | "attendees"
+  | "guestStatus"
   | "meetUrl"
   | "openUrl"
   | "description"
@@ -57,6 +58,7 @@ export function remoteMetaOf(g: GcalEvent): RemoteMeta {
     readOnly: g.readOnly,
     seriesId: g.seriesId,
     attendees: g.attendees,
+    guestStatus: g.guestStatus,
     meetUrl: g.meetUrl,
     openUrl: g.openUrl,
     description: g.description,

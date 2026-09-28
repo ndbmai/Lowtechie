@@ -10,7 +10,9 @@ import { useStore } from "@/lib/store";
 function clientVocab(): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const c of useStore.getState().clients) {
+  // Khách hàng + người trong danh bạ liên hệ (v3.9 — "mời anh Tuấn…") là từ vựng ưu tiên.
+  const st = useStore.getState();
+  for (const c of [...st.clients, ...st.contacts]) {
     for (const name of [c.name, ...c.aliases]) {
       const v = name.trim();
       const key = v.toLowerCase();

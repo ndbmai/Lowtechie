@@ -3,6 +3,7 @@ import { matchClient } from "./clients";
 import type { BotLang } from "./botCommand";
 import { parseWhen, stripSpans, tidyTitle } from "./parse";
 import { parseWhenEn } from "./whenEn";
+import { hasThai, parseWhenTh } from "./whenTh";
 import { sanitizeTaxonomy } from "./projects";
 import type { Category, Client, FeedbackEntry, Project, ProjectId, Task } from "./types";
 
@@ -86,12 +87,19 @@ export function larkItemToDraft(item: LarkInboxItem, ctx: LarkDraftContext): Lar
   // "giao việc gửi proposal cho Linh, hạn thứ Tư" / "assign the deck to Linh by Friday" → người làm tách riêng.
   if (item.kind === "assign" && item.assignee) {
     text = text.replace(new RegExp(`(?:^|\\s)(?:cho|to|for)\\s+${escapeRe(item.assignee)}(?=[\\s,.]|$)`, "iu"), " ");
+    // Tiếng Thái viết liền: "ส่งสไลด์ให้คุณลินห์" (giao cho chị Linh).
+    text = text.replace(new RegExp(`ให้\\s*(?:คุณ|พี่|น้อง)?\\s*${escapeRe(item.assignee)}`, "u"), " ");
   }
   const decision = item.kind === "decision" || item.kind === "question";
   // Ngày giờ: tiếng Việt trước, không thấy thì tiếng Anh (team trao đổi tiếng Anh — Mai 25/9).
   const vi = decision ? undefined : parseWhen(text, now);
   const en = decision || vi?.at ? undefined : parseWhenEn(text, now);
-  const when = { at: vi?.at ?? en?.at, spans: vi?.at ? vi.spans : (en?.spans ?? []) };
+  // …rồi tiếng Thái (PRD v3.9: bot hiểu cả tiếng Thái).
+  const th = decision || vi?.at || en?.at || !hasThai(text) ? undefined : parseWhenTh(text, now);
+  const when = {
+    at: vi?.at ?? en?.at ?? th?.at,
+    spans: vi?.at ? vi.spans : en?.at ? en.spans : (th?.spans ?? []),
+  };
   let body = tidyTitle(
     stripSpans(text, when.spans)
       .replace(/(?:^|[\s,])hạn(?:\s+chót)?(?=[\s,.]|$)/giu, " ")
@@ -99,7 +107,10 @@ export function larkItemToDraft(item: LarkInboxItem, ctx: LarkDraftContext): Lar
       // Tiếng Anh: "this to Linh, due" → bỏ "this" đầu câu + chữ dẫn hạn còn sót cuối câu.
       .replace(/^\s*(?:this|that|it)\b/i, " ")
       .replace(/[\s,;]+(?:due|by|on|before|until|deadline)\s*[,.;]?\s*$/i, " ")
-      .replace(/^\s*(?:to|that)\s+/i, " "),
+      .replace(/^\s*(?:to|that)\s+/i, " ")
+      // Tiếng Thái: bỏ tiểu từ lịch sự cuối câu (ครับ/ค่ะ/นะ) và chữ dẫn hạn "ภายใน" còn sót.
+      .replace(/\s*(?:นะ)?\s*(?:ครับ|ค่ะ|คะ|จ้า|จ้ะ)\s*$/u, " ")
+      .replace(/\s*(?:ภายใน|ก่อน)\s*$/u, " "),
   );
   // "nhắc Linh thứ Năm" trả lời một tin → lấy tin đó làm nội dung.
   if (item.quote && (!body || body.split(/\s+/).length <= 2)) {

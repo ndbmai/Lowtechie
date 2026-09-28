@@ -1,6 +1,6 @@
 # PRD — Mai Lowtechie: Trợ lý AI Chief of Staff cá nhân & nhóm
 
-*Phiên bản 3.7 — 23/09/2026. Tài liệu sống, cập nhật liên tục theo các buổi thử prototype; các thay đổi mới nhất: book lịch ngay từ việc, việc đặt chỗ cho spa/clinic, sửa và xóa sự kiện trong màn Lịch; biết Mai đang ở đâu bằng vị trí thiết bị; phân quyền bot trong group Lark; gói tổng hợp cuối ngày để Mai duyệt một lần rồi ghi vào việc, lịch và file.*
+*Phiên bản 3.9 — 23/09/2026. Tài liệu sống, cập nhật liên tục theo các buổi thử prototype; các thay đổi mới nhất: book lịch ngay từ việc, việc đặt chỗ cho spa/clinic, sửa và xóa sự kiện trong màn Lịch; biết Mai đang ở đâu bằng vị trí thiết bị; phân quyền bot trong group Lark; họp online không tính giờ đi; bỏ gợi ý deep work; book lịch từ việc gọn lại; bot Lark nói tiếng Anh mặc định; tạo link họp và mời người khác, danh bạ email tự nhớ.*
 
 Tài liệu đi kèm: **Mai Lowtechie — UI & user flow** (mockup màn hình) và **Checklist bay của Mai** (mẫu checklist tick được, dùng làm nguyên mẫu cho module 5.9).
 
@@ -38,7 +38,7 @@ Vấn đề cốt lõi không phải là thiếu công cụ to-do, mà là:
 ## 4. Use case chính (user stories)
 
 1. *"Nhắc chị gọi cho anh A bên OKR thứ Ba tuần sau, liên quan hợp đồng Circle"* → task gắn dự án Circle, deadline, reminder.
-2. *(voice, đang đi taxi)* "Tuần này dời spa sang thứ Năm, và book 2 tiếng deep work cho Sorene pitch deck" → agent đề xuất slot, Mai bấm duyệt, lịch được tạo.
+2. *(voice, đang đi taxi)* "Tuần này dời spa sang thứ Năm, và đặt 2 tiếng thứ Năm cho pitch deck Sorene" → Mai xem thẻ xem trước, bấm duyệt, lịch được tạo.
 3. Group Zalo "Circle Core" bàn 40 tin nhắn → cuối ngày agent tóm tắt: 3 quyết định, 4 đầu việc (ai làm, hạn khi nào), 2 câu hỏi chưa có ai trả lời.
 4. Sáng thứ Hai: "Hôm nay có gì?" → brief: lịch, 3 việc ưu tiên nhất, việc đang chờ người khác, deadline trong 7 ngày.
 5. Cộng sự của Circle hỏi assistant của họ: "Mai đã duyệt proposal chưa?" → assistant trả lời từ không gian chung (không lộ việc riêng của Mai).
@@ -71,6 +71,7 @@ Mai có thể ra **mọi** yêu cầu bằng chat (gõ) hoặc voice (nói), b�
 | Ảnh banner sự kiện | *(chụp banner)* → xem trước sự kiện → "ok book đi, thêm việc mua vé" |
 | Lịch & di chuyển | "Tối nay 7 giờ hẹn ở Thonglor, đi tàu" / "Mai đi ô tô ra sân bay nhé" |
 | Xem lịch | "Tháng 12 chị có gì?" / "Lần gia hạn trước là ngày nào?" |
+| Mời họp | "Thứ Năm 2 giờ họp với anh Tuấn và chị Linh, tạo link Meet" → xem trước (email điền sẵn) → "gửi mời" |
 | Tạo & book lịch | "Thứ Năm 2 giờ họp với Đô thị, tạo link Meet" → xem trước → "ok book đi" |
 | Hồ sơ chuẩn bị | "Lần này chỉ cần 30 phút chuẩn bị thôi" |
 | Chuyến đi | "Thứ Tư tuần sau chị bay Tokyo 4 ngày" / "Thêm máy uốn tóc vào checklist Tokyo" |
@@ -206,7 +207,7 @@ flowchart LR
 - **Loại hạn:** hạn cứng (khách hàng, pháp lý, chuyến bay) hoặc hạn mềm (tự đặt); hạn cứng hiện nổi bật và được ưu tiên khi xếp lịch.
 - **Không có hạn:** Mai có thể chọn rõ "Không có hạn". Nếu bấm "Lưu & nhận" mà ô Deadline vẫn trống, thẻ nhắc một lần "Chưa có deadline — thêm hay để không hạn?" rồi lưu theo lựa chọn.
 - **Kiểm tra khi điền:** hạn đã qua, rơi vào ngày Mai đang bay, hoặc ngày đã kín lịch → cảnh báo nhẹ, Mai vẫn giữ được.
-- **Sau khi lưu:** hạn đi vào cột Hạn của Google Sheets, xếp ưu tiên, brief sáng ("3 việc đến hạn hôm nay"), nhắc việc (mặc định 1 ngày trước và sáng ngày đến hạn, chỉnh được) và đề xuất khung giờ làm với việc lớn.
+- **Sau khi lưu:** hạn đi vào cột Hạn của Google Sheets, xếp ưu tiên, brief sáng ("3 việc đến hạn hôm nay") và nhắc việc (mặc định 1 ngày trước và sáng ngày đến hạn, chỉnh được).
 - **Đổi hạn sau:** bằng chat/voice ("dời hợp đồng Đô thị sang thứ Hai") hoặc sửa trong danh sách; lịch sử đổi hạn được lưu để weekly review chỉ ra việc bị dời nhiều lần.
 
 **4. Thẻ xác nhận**
@@ -234,7 +235,10 @@ flowchart LR
 
 **Book lịch ngay từ một việc** (ở Hôm nay, Dự án, chi tiết dự án, khách hàng)
 - Mỗi dòng việc có nút nhanh **Book lịch** (trong menu "…" hoặc vuốt phải), không cần mở màn chi tiết.
-- Bấm vào → Lowtechie đề xuất 3 khung giờ trước deadline (theo 5.4), Mai chọn → thẻ xem trước → Book. Sự kiện lấy tên việc, gắn dự án · category · khách hàng, và đính link về việc.
+- Bấm vào → mở form gọn đúng 5 dòng: **Lịch · Ngày · Từ · Đến · Book**. Không có gợi ý khung giờ, không có đề xuất nào khác.
+- Giờ được điền sẵn **khung trống gần nhất** để Mai sửa nhanh; lịch đích điền sẵn theo dự án.
+- Giờ Mai chọn trùng một sự kiện khác → nhắc **đúng một dòng**: "Trùng [tên sự kiện]". Mai vẫn book được nếu muốn.
+- Sự kiện lấy tên việc, gắn dự án · category · khách hàng, và đính link về việc.
 - Việc đã có lịch: dòng việc hiện giờ đã đặt (ví dụ "Thứ Năm 9:00"); chạm vào đó mở sự kiện; đổi giờ hoặc xóa lịch ngay tại đây.
 - Bằng chat/voice: "book 2 tiếng cho việc pitch deck thứ Năm".
 - Đóng việc → hỏi có xóa block còn lại trên lịch không.
@@ -271,7 +275,7 @@ Chạm vào một dự án trên màn Dự án (ví dụ Circle) → mở **màn
 **Phần đầu**
 - Tên, màu, số việc đang mở / quá hạn / đến hạn 7 ngày tới.
 - **Không hiện dòng mô tả dự án** ("Tư vấn AI — Bangkok, HCMC, Tokyo"). Bỏ ở cả màn chi tiết dự án và màn Quản lý; dự án chỉ cần tên và màu.
-- Nút nhanh: book block làm việc cho dự án, mở Quản lý.
+- Nút nhanh: mở Quản lý.
 
 **Ô "+ Thêm việc" — đầy đủ trường, gõ hoặc nói**
 - Chạm vào ô → mở rộng thành form gọn với các trường: **Tên việc · Ghi chú · Category · Khách hàng/đối tác · Deadline · Ưu tiên**; dự án tự điền theo màn đang mở. Tất cả hiện sẵn, không giấu sau nút "thêm chi tiết".
@@ -399,10 +403,29 @@ Ví dụ: *"Ký lại hợp đồng website"* → **Circle · Hợp đồng · K
 - **Lịch đích theo quy tắc:** Mai đặt mặc định theo dự án (ví dụ Circle → Lark Calendar, Cá nhân / Học tập → Google Calendar); thẻ xem trước luôn hiện lịch đích và cho đổi một chạm.
 - **Không tạo trùng:** một sự kiện chỉ được book vào một lịch đích. Nếu Mai đã tự đồng bộ hai lịch với nhau (đăng ký lịch chéo), app nhận ra bản sao và không tính trùng hai lần.
 - Link họp online: Google Meet khi book vào Google Calendar, Lark Meeting (Lark VC) khi book vào Lark Calendar.
-- Tìm slot trống có tính múi giờ, thời gian di chuyển, và "vùng bảo vệ" (deep work, nghỉ).
-- **Time-blocking**: tự đặt block cho task lớn trước deadline.
+- Tìm slot trống có tính múi giờ, thời gian di chuyển và giờ nghỉ.
+- **Họp online thì không tính giờ đi.** Sự kiện được coi là họp online khi địa điểm là một link họp, hoặc là chữ như "Zoom", "Google Meet", "Teams", "Online", kể cả dạng mô tả như "Link Zoom trong email". Khi đó:
+  - Màn Hôm nay **không hiện thẻ "Tính giờ đi"** cho sự kiện đó.
+  - Màn chi tiết sự kiện có nút **"Mở link họp"** thay cho "Mở Maps"; nếu link nằm trong email hoặc ghi chú thì nút mở đúng email/ghi chú đó.
+  - Chuỗi chỉ còn **một block Chuẩn bị, mặc định 20 phút**; app không hỏi phương tiện hay điểm xuất phát.
+- **Sự kiện có địa chỉ thật vẫn tính giờ đi như cũ**, kể cả khi Google tự gắn thêm link Meet vào sự kiện. Địa chỉ thật thắng link họp.
 - **Mọi hành động ghi lịch đều cần Mai bấm duyệt** ở v1; cho phép tự động hóa dần theo từng loại (ví dụ: routine cá nhân được tự đặt).
 - Đặt lịch với người khác: soạn tin đề xuất giờ, Mai duyệt trước khi gửi.
+
+**Không gợi ý deep work.** App không tự đề nghị giữ chỗ làm việc: bỏ bong bóng "giữ chỗ deep work" ở Hôm nay, câu mời trong Weekly review, và nút "Book block làm việc" ở màn dự án. Các block deep work app đã tự tạo trước đây (ví dụ "Deep work: Circle") được gỡ khỏi lịch khi cập nhật. Mai vẫn tự đặt block bất cứ lúc nào bằng nút Book lịch trên một việc hoặc bằng chat/voice.
+
+**Tạo link họp online và mời người khác**
+- **Link họp:** bật "Tạo link họp" trên thẻ xem trước → Google Meet nếu book vào lịch Google, Lark Meeting nếu book vào lịch Lark. Link hiện luôn trên thẻ và trong chi tiết sự kiện. Mai cũng dán được link có sẵn (Zoom…).
+- **Mời người:** gõ tên hoặc email, hoặc nói tên ("mời anh Tuấn bên OKR và chị Linh"). Lowtechie khớp tên với **danh bạ liên hệ** và điền sẵn email.
+- **Chưa có trong danh bạ** → hỏi đúng một lần: "Email của anh Tuấn là gì?" → lưu lại, lần sau chỉ cần nói tên. **Trùng tên** → hiện 2 lựa chọn gần nhất kèm công ty để Mai chọn.
+- **Danh bạ liên hệ hình thành từ:** người Mai đã mời trước đó, người gửi/nhận trong Gmail và Lark Mail, thành viên group Lark, người liên hệ của khách hàng/đối tác (5.3.2). Mỗi liên hệ lưu: tên, tên gọi khác, email, công ty, khách hàng/dự án liên quan, lần dùng gần nhất. Mai sửa, gộp, xóa được ở màn Quản lý.
+- **Thẻ xem trước luôn hiện rõ** danh sách người mời kèm email và dòng "Sẽ gửi email mời cho N người"; bỏ bớt ai đó bằng một chạm.
+- **Gửi lời mời luôn cần Mai xác nhận riêng**, kể cả khi đã bật book thẳng cho loại lịch khác.
+- **Thư mời** mặc định tiếng Anh với người ngoài, tiếng Việt khi liên hệ dùng tiếng Việt; Mai sửa tiêu đề và lời nhắn trước khi gửi.
+- **Sau khi gửi:** chi tiết sự kiện hiện ai đã nhận, từ chối, chưa trả lời; người chưa trả lời sau một khoảng thời gian → Lowtechie nhắc Mai follow-up.
+- **Đổi giờ hoặc hủy** sự kiện có người mời → soạn thông báo cập nhật, Mai duyệt rồi mới gửi.
+- **Email sai hoặc gửi lỗi** → báo lại cho Mai kèm tên người đó, không im lặng.
+- Email liên hệ là dữ liệu mức Riêng tư/Dự án: bot không bao giờ đọc email của ai trong group chat.
 
 **Tạo lịch trong app → xem trước → book lên Google Calendar**
 Mai tạo lịch bằng chat, voice hoặc form trong app (ví dụ *"Thứ Năm 2 giờ chiều họp với Đô thị ở Thonglor, mời anh Tuấn"*). Lowtechie **không ghi gì lên Google Calendar** cho đến khi Mai xem **thẻ xem trước** và bấm Book.
@@ -418,7 +441,7 @@ Mai tạo lịch bằng chat, voice hoặc form trong app (ví dụ *"Thứ Năm
 - Lịch đích: Google Calendar hoặc Lark Calendar (và lịch con cụ thể), theo quy tắc mặc định của dự án
 - Ghi chú mô tả và file đính kèm (nếu có)
 - **Chuỗi block đi kèm** (5.4.1): Chuẩn bị → Di chuyển → sự kiện, hiện riêng từng block, mỗi block bật/tắt được
-- **Cảnh báo:** trùng lịch, nằm trong vùng bảo vệ (deep work), rơi vào ngày bay, hoặc không kịp di chuyển từ cuộc hẹn trước
+- **Cảnh báo:** trùng lịch, rơi vào ngày bay, hoặc không kịp di chuyển từ cuộc hẹn trước
 
 *Nút:* **Book** · **Sửa** · **Hủy**. Xác nhận hoặc sửa bằng chat/voice cũng được ("ok book đi", "đổi sang 3 giờ", "bỏ block di chuyển", "đừng mời anh Tuấn").
 
@@ -661,6 +684,13 @@ Lark là kênh **chính thức và dễ tích hợp nhất** trong các kênh ch
 5. Sự kiện "nhận được tin nhắn" đã được đăng ký cho đúng phiên bản app đang dùng chưa.
 6. Đúng miền chưa: bản quốc tế (larksuite) và bản Trung Quốc (feishu) dùng endpoint khác nhau.
 7. Bot đã thực sự nằm trong danh sách thành viên của group chưa.
+
+**Ngôn ngữ của bot: mặc định tiếng Anh**
+- Bot nói **tiếng Anh** trong mọi tình huống: tin chào khi vào group, câu xác nhận, câu từ chối chuyện riêng tư, thẻ tóm tắt cuối ngày, tin nhắn giao việc cho cộng sự.
+- Bot **hiểu cả tiếng Anh lẫn tiếng Việt** (và tiếng Thái): "@Mai Lowtechie add task: send the proposal to Do Thi Friday", "assign this to Linh, due Wednesday", "summarize the last 2 days", "ghi việc: gửi proposal cho Đô Thị thứ Sáu".
+- **Ngày giờ tiếng Anh** được đọc đúng ở mọi nơi, kể cả thẻ trong Hộp duyệt: Friday · tomorrow 3pm · Sep 30 · next Monday · end of month; quy đổi theo ngày giờ thực và múi giờ của Mai.
+- **Đổi theo từng group:** ở màn Kết nối, mỗi group có tùy chọn **"Bot nói: English / Tiếng Việt"**. Đổi ngôn ngữ chỉ đổi lời bot nói, không ảnh hưởng ngôn ngữ trong app của Mai.
+- Nội dung do người dùng viết (tên việc, ghi chú, trích dẫn tin gốc) giữ nguyên ngôn ngữ gốc, không dịch.
 
 **Tóm tắt và chốt việc ngay trong Lark**
 - Cuối ngày (giờ Mai chọn) bot gửi vào group hoặc nhắn riêng cho Mai một **thẻ tương tác Lark**: tóm tắt trao đổi, danh sách việc đề xuất (mỗi việc có người làm, hạn, dự án/category/khách hàng), quyết định đã chốt, câu hỏi chưa ai trả lời.
@@ -946,7 +976,7 @@ Thanh điều hướng 5 mục: **Hôm nay** · **Dự án** · **Bông mai** (g
 | Dự án | Thấy phân bổ thời gian | Vòng tiến độ thời gian thật so với mục tiêu, cảnh báo dự án bị bỏ đói; mỗi dự án một ô |
 | Chi tiết dự án | Xem mọi việc bên trong | Tab Theo category / Theo khách hàng / Theo hạn, thêm việc ngay trong category, lịch và decision log của dự án |
 | Kết nối | Quản lý tài khoản | Danh sách tài khoản Google/Lark, bật tắt Lịch · Mail · Drive, chọn lịch đích theo dự án |
-| Lịch | Xem và đặt giờ có kiểm soát | Chế độ Ngày / Tuần / Tháng / Danh sách, cuộn không giới hạn quá khứ và tương lai, tìm kiếm toàn bộ lịch; 3 khung đề xuất kèm lý do khi đặt giờ |
+| Lịch | Xem và đặt giờ có kiểm soát | Chế độ Ngày / Tuần / Tháng / Danh sách, cuộn không giới hạn quá khứ và tương lai, tìm kiếm toàn bộ lịch |
 | Họp | Ghi và recap | Thanh ghi âm, recap 4 phần, Lưu việc / Gửi recap |
 | Chuyến đi | Không quên gì khi bay | Checklist tick được theo điểm đến, việc trước khi bay theo mốc, chuỗi lịch ngày bay |
 | Weekly review | Giúp nói "không" | Biểu đồ thời gian vs mục tiêu, việc dời nhiều lần, Bỏ / Giao / Hoãn |
@@ -1032,6 +1062,8 @@ Ghi chú lựa chọn:
 - `projects` (id, name, weight, goal, members, linked_channels)
 - `projects` bổ sung: color, icon, sort_order, keywords, status (active / archived)
 - `categories` (id, project_id, name, sort_order, is_default, status)
+- `contacts` (name, aliases, email, company, client_id, source: invite/mail/lark_group/manual, last_used_at, use_count)
+- `event_invitees` (event_id, contact_id, email, response: accepted/declined/tentative/no_reply, sent_at)
 - `clients` (id, sort_order, name, name_normalized, aliases (tên gọi khác, học thêm từ các lần Mai sửa), last_used_at, use_count, type: khách hàng/đối tác/nhà cung cấp, aliases, contacts, status, linked_channels, notes)
 - `client_projects` (client_id, project_id)
 - `tasks` bổ sung: client_id, due_date, due_time (tùy chọn), due_type (cứng / mềm / không hạn), due_source (từ nguồn / Mai điền), due_quote

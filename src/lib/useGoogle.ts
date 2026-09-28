@@ -67,6 +67,8 @@ export interface GcalEvent extends Omit<CalEvent, "id" | "kind"> {
   /** Sự kiện lặp: id của cả chuỗi. */
   seriesId?: string;
   attendees?: string[];
+  /** Ai nhận/từ chối/chưa trả lời (Google, §5.4 v3.9). */
+  guestStatus?: { name: string; email?: string; response: string }[];
   meetUrl?: string;
   openUrl?: string;
   description?: string;
@@ -229,9 +231,16 @@ export function useGoogleEvents(fromMs: number, toMs: number, enabled: boolean) 
  * Trả về id sự kiện + tài khoản đã ghi để lưu kèm block (xóa đúng nơi).
  */
 export async function createGcalEvent(
-  ev: { title: string; startAt: string; endAt: string; description?: string; location?: string },
+  ev: { title: string; startAt: string; endAt: string; description?: string; location?: string; meet?: boolean },
   accountId?: string,
-): Promise<{ gcalId: string; accountId?: string } | null> {
+): Promise<{
+  gcalId: string;
+  accountId?: string;
+  provider?: "google" | "lark";
+  calendarId?: string;
+  /** Link Meet / Lark Meeting vừa tạo (khi `meet`, §5.4 v3.9). */
+  meetUrl?: string;
+} | null> {
   try {
     const res = await fetch("/api/calendar/events", {
       method: "POST",
@@ -239,8 +248,91 @@ export async function createGcalEvent(
       body: JSON.stringify({ ...ev, accountId }),
     });
     if (!res.ok) return null;
-    const d = (await res.json()) as { gcalId?: string; accountId?: string };
-    return d.gcalId ? { gcalId: d.gcalId, accountId: d.accountId } : null;
+    const d = (await res.json()) as {
+      gcalId?: string;
+      accountId?: string;
+      provider?: "google" | "lark";
+      calendarId?: string;
+      meetUrl?: string;
+    };
+    return d.gcalId
+      ? { gcalId: d.gcalId, accountId: d.accountId, provider: d.provider, calendarId: d.calendarId, meetUrl: d.meetUrl }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Kết quả gửi mời từng người — email sai/gửi lỗi báo lại kèm tên (§5.4 v3.9). */
+export interface InviteResult {
+  email?: string;
+  openId?: string;
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * GỬI LỜI MỜI — chỉ gọi từ bước Mai xác nhận riêng. Lỗi mạng → mọi người
+ * đều "chưa gửi được" (không im lặng).
+ */
+export async function sendInvites(
+  gcalId: string,
+  body: {
+    account?: string;
+    calendarId?: string;
+    title?: string;
+    message?: string;
+    attendees: { email?: string; openId?: string; name?: string }[];
+  },
+): Promise<{ results: InviteResult[]; detailsOk?: boolean; error?: string }> {
+  const failAll = (error: string) => ({
+    results: body.attendees.map((a) => ({ email: a.email, openId: a.openId, ok: false, error })),
+    error,
+  });
+  try {
+    const res = await fetch(`/api/calendar/events/${encodeURIComponent(gcalId)}/invite`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = (await res.json().catch(() => ({}))) as { results?: InviteResult[]; detailsOk?: boolean; error?: string };
+    if (!res.ok || !d.results) return failAll(d.error === "not-connected" ? "chưa nối lịch — vào Kết nối" : d.error ?? `lỗi ${res.status}`);
+    return { results: d.results, detailsOk: d.detailsOk };
+  } catch {
+    return failAll("mất mạng — thử lại sau");
+  }
+}
+
+/** Ai đã nhận/từ chối/chưa trả lời (đọc lại từ Google/Lark). */
+export async function fetchInviteStatus(
+  gcalId: string,
+  account?: string,
+  calendarId?: string,
+): Promise<{ attendees: { email?: string; openId?: string; name?: string; response: string }[]; meetUrl?: string } | null> {
+  try {
+    const p = new URLSearchParams();
+    if (account) p.set("account", account);
+    if (calendarId) p.set("calendar", calendarId);
+    const res = await fetch(`/api/calendar/events/${encodeURIComponent(gcalId)}?${p}`);
+    if (!res.ok) return null;
+    return (await res.json()) as { attendees: { email?: string; openId?: string; name?: string; response: string }[]; meetUrl?: string };
+  } catch {
+    return null;
+  }
+}
+
+/** Người gửi/nhận thư + thành viên group Lark → ứng viên danh bạ liên hệ (§5.4 v3.9). */
+export async function fetchContactCandidates(): Promise<{
+  people: { name: string; email?: string; company?: string; larkOpenId?: string; source: "mail" | "lark_group" }[];
+  notes?: string[];
+} | null> {
+  try {
+    const res = await fetch("/api/contacts/sync");
+    if (!res.ok) return null;
+    return (await res.json()) as {
+      people: { name: string; email?: string; company?: string; larkOpenId?: string; source: "mail" | "lark_group" }[];
+      notes?: string[];
+    };
   } catch {
     return null;
   }
@@ -291,6 +383,22 @@ export async function patchGcalEvent(
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+/** "＋ Tạo link họp" cho sự kiện đã có — trả link Meet/Lark Meeting, lỗi thì null. */
+export async function addMeetLink(gcalId: string, account?: string, calendarId?: string): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/calendar/events/${encodeURIComponent(gcalId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ account, calendarId, meet: true }),
+    });
+    if (!res.ok) return null;
+    const d = (await res.json()) as { meetUrl?: string };
+    return d.meetUrl ?? null;
+  } catch {
+    return null;
   }
 }
 
