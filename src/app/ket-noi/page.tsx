@@ -148,7 +148,9 @@ function OAuthNotice() {
       <div className="warn">
         Đã nối lại, nhưng Lark CHƯA cấp quyền mời người. Trên console Lark: Permissions &amp; Scopes → tab
         User token scopes phải có “Update event” (calendar:calendar.event:update) → Version Management &amp;
-        Release → tạo bản mới + phát hành, rồi quay lại bấm “Bật quyền mời người”.
+        Release → tạo bản mới + phát hành, rồi quay lại bấm “Bật quyền mời người”. Console đã đủ mà vẫn
+        vậy: Lark đang nhớ lần cho phép cũ — mở Lark → ảnh đại diện → Settings → Security → Authorized apps
+        → gỡ &ldquo;Mai Lowtechie&rdquo;, rồi bấm lại “Bật quyền mời người”.
       </div>
     );
   if (gok || lok) return <div className="warn" style={{ background: "var(--surface)" }}>Đã nối xong ✓</div>;
