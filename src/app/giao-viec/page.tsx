@@ -1430,6 +1430,15 @@ export default function CapturePage() {
                           {drafts.length > 0 && !booking && (
                             <span className="small muted">Gửi mời cần book lên lịch Google/Lark.</span>
                           )}
+                          {drafts.length > 0 && booking && acct?.provider === "lark" && !acct.invite && (
+                            <span className="small" style={{ color: "var(--note-ink)", background: "var(--note)", borderRadius: 10, padding: "4px 10px" }}>
+                              ⚠ Lịch Lark này chưa bật quyền mời người —{" "}
+                              <a href="/ket-noi" style={{ color: "inherit" }}>
+                                bật ở Kết nối
+                              </a>{" "}
+                              trước khi gửi mời.
+                            </span>
+                          )}
                         </div>
                       );
                     })()}

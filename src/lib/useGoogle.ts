@@ -82,6 +82,8 @@ export interface ConnectedAccount {
   email?: string;
   gmail: boolean;
   parts: { cal: boolean; mail: boolean; drive: boolean };
+  /** Lark: đã bật quyền mời người (§5.4 v3.9). */
+  invite?: boolean;
 }
 
 /** Kết quả "Đồng bộ ngay" một tài khoản (PRD v3.2). */

@@ -40,6 +40,11 @@ export interface LarkLink {
   at?: string;
   atExp?: number;
   parts?: AccountParts;
+  /**
+   * Phiên có quyền MỜI NGƯỜI (calendar:calendar.event:update, §5.4 v3.9) —
+   * theo danh sách scope Lark trả khi đăng nhập; thiếu = chưa rõ/chưa bật.
+   */
+  inv?: boolean;
 }
 
 export interface Account {
@@ -187,6 +192,15 @@ export function publicAccount(a: Account): {
   email?: string;
   gmail: boolean;
   parts: AccountParts;
+  /** Lark: đã bật quyền mời người chưa (Google luôn mời được bằng quyền lịch). */
+  invite?: boolean;
 } {
-  return { id: a.id, provider: a.provider, email: a.email, gmail: a.gm, parts: a.parts };
+  return {
+    id: a.id,
+    provider: a.provider,
+    email: a.email,
+    gmail: a.gm,
+    parts: a.parts,
+    ...(a.provider === "lark" ? { invite: (a.link as LarkLink).inv === true } : {}),
+  };
 }

@@ -163,6 +163,9 @@ export function EventDetail({
   /** Mời người được khi sự kiện đã nằm trên Google/Lark và Mai là người tạo. */
   const canInvite = Boolean(live.gcalId) && !readOnly;
   const inviteProvider = (isRemoteOnly ? remote?.provider : bookedAcct?.provider) ?? "google";
+  /** Lịch Lark chưa bật quyền mời người → báo TRƯỚC khi gửi, kèm lối tới Kết nối. */
+  const inviteAcct = accts.accounts.find((a) => a.id === (isRemoteOnly ? remote?.account : (live.calAccount ?? "g0")));
+  const larkNoInvite = inviteProvider === "lark" && inviteAcct?.provider === "lark" && !inviteAcct.invite;
   const followUp = followUpsDue([live], new Date())[0];
 
   const pool = useMemo(() => {
@@ -570,6 +573,16 @@ export function EventDetail({
                 Ghi việc follow-up
               </button>
             </span>
+          </div>
+        )}
+
+        {larkNoInvite && (inviteMode === "add" || inviteMode === "confirm" || unsentInvitees.length > 0) && (
+          <div className="note-box small">
+            ⚠ Lịch Lark này chưa bật quyền mời người —{" "}
+            <a href="/ket-noi" style={{ color: "inherit" }}>
+              bật ở Kết nối
+            </a>{" "}
+            rồi quay lại gửi mời.
           </div>
         )}
 

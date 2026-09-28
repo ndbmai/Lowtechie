@@ -43,15 +43,35 @@ export function larkRedirectUri(origin: string): string {
 const LARK_USER_SCOPES =
   "offline_access calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:create calendar:calendar.event:delete";
 
-export function larkAuthUrl(origin: string, state: string): string {
+/**
+ * Quyền MỜI NGƯỜI vào sự kiện Lark (API "Create event invitees") + gắn
+ * Lark Meeting vào sự kiện đã có (§5.4 v3.9). Chỉ xin khi Mai bấm "Bật quyền
+ * mời người" ở Kết nối — xin scope app CHƯA khai là Lark chặn đăng nhập
+ * (20027), nên không đưa vào bộ mặc định.
+ */
+export const LARK_INVITE_SCOPE = "calendar:calendar.event:update";
+
+/** Scope xin khi đăng nhập: bộ mặc định (hoặc LARK_OAUTH_SCOPES) + quyền mời người nếu Mai bật. */
+export function larkRequestedScopes(invite = false): string {
+  const base = (process.env.LARK_OAUTH_SCOPES || LARK_USER_SCOPES).trim();
+  return invite && !base.split(/\s+/).includes(LARK_INVITE_SCOPE) ? `${base} ${LARK_INVITE_SCOPE}` : base;
+}
+
+export function larkAuthUrl(origin: string, state: string, opts: { invite?: boolean } = {}): string {
   const p = new URLSearchParams({
     client_id: process.env.LARK_APP_ID ?? "",
     redirect_uri: larkRedirectUri(origin),
     response_type: "code",
     state,
-    scope: process.env.LARK_OAUTH_SCOPES || LARK_USER_SCOPES,
+    scope: larkRequestedScopes(Boolean(opts.invite)),
   });
   return `${ACCOUNTS_BASE}/open-apis/authen/v1/authorize?${p}`;
+}
+
+/** Phiên Lark có quyền mời người không — Lark không trả danh sách scope thì chưa biết. */
+export function larkScopeHasInvite(scope: string | undefined): boolean | undefined {
+  if (!scope) return undefined;
+  return scope.split(/[\s,]+/).includes(LARK_INVITE_SCOPE);
 }
 
 interface LarkTokenResponse {

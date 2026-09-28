@@ -4,6 +4,7 @@ import {
   LARK_STATE_COOKIE,
   larkExchangeCode,
   larkScopeHasCalendar,
+  larkScopeHasInvite,
   larkUserInfo,
 } from "@/lib/larkServer";
 
@@ -14,7 +15,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const origin = req.nextUrl.origin;
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
-  const savedState = req.cookies.get(LARK_STATE_COOKIE)?.value;
+  const [savedState, intent] = (req.cookies.get(LARK_STATE_COOKIE)?.value ?? "").split(":");
+  const wantInvite = intent === "inv";
+  const larkError = req.nextUrl.searchParams.get("error");
 
   const back = (q: string) => {
     const res = NextResponse.redirect(`${origin}/ket-noi?${q}`);
@@ -22,6 +25,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return res;
   };
 
+  // Mai bấm Từ chối / Lark báo lỗi ngay ở màn đồng ý → nói đúng lỗi, không phải "state".
+  if (larkError && !code) return back(`lerr=${encodeURIComponent(larkError)}`);
   if (!code || !state || state !== savedState) return back("lerr=state");
 
   const result = await larkExchangeCode(code, origin);
@@ -33,6 +38,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const existing = (await readAccounts(req)).find(
     (a) => a.provider === "lark" && (email ? a.email === email : true),
   );
+  // Quyền mời người (§5.4 v3.9): đọc từ danh sách scope Lark THẬT SỰ cấp.
+  const inv = larkScopeHasInvite(result.scope);
   const link: LarkLink = {
     rt: result.rt,
     at: result.at,
@@ -40,10 +47,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     email,
     openId: who?.openId,
     parts: existing?.parts,
+    inv,
   };
   // Lark có thể nhớ lần cho phép CŨ và cấp phiên KHÔNG kèm quyền lịch —
   // vẫn cất cookie (mail/phần khác còn dùng được) nhưng báo rõ ở Kết nối.
-  const res = back(larkScopeHasCalendar(result.scope) ? "lok=1" : "lerr=noscope");
+  const res = back(
+    !larkScopeHasCalendar(result.scope)
+      ? "lerr=noscope"
+      : wantInvite
+        ? `lok=1&linv=${inv === false ? "0" : "1"}`
+        : "lok=1",
+  );
   await writeAccount(res, origin, existing?.id ?? newSlotId(), "lark", link);
   return res;
 }

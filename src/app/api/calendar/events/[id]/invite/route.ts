@@ -47,7 +47,7 @@ function googleError(status: number, detail: string): string {
 function larkError(raw: string): string {
   const code = raw.match(/lark-(\w+)/)?.[1] ?? raw;
   if (code.startsWith("99991") || code === "403")
-    return `Lark chưa cho mời người — thêm quyền sửa sự kiện (calendar:calendar.event:update) ở tab User token scopes, phát hành rồi Kết nối lại (mã ${code})`;
+    return `Lark chưa cho mời người — vào Kết nối bấm “Bật quyền mời người” (cần quyền “Update event” · calendar:calendar.event:update ở tab User token scopes, đã phát hành) (mã ${code})`;
   if (code === "190003" || code === "193001")
     return `email/người dùng không hợp lệ (mã ${code})`;
   return `Lark báo lỗi (mã ${code})`;

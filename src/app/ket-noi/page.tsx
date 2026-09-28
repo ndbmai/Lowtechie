@@ -83,7 +83,12 @@ function AccountRow({
           <a
             className="btn ghost small"
             style={{ textDecoration: "none" }}
-            href={account.provider === "google" ? "/api/google/auth?add=1" : "/api/lark/auth"}
+            // Kết nối lại Lark GIỮ quyền mời người nếu đã bật (không thì phiên mới mất quyền).
+            href={
+              account.provider === "google"
+                ? "/api/google/auth?add=1"
+                : `/api/lark/auth${account.invite ? "?invite=1" : ""}`
+            }
           >
             Kết nối lại
           </a>
@@ -102,6 +107,25 @@ function AccountRow({
           </button>
         </span>
       </div>
+      {account.provider === "lark" &&
+        (account.invite ? (
+          <span className="small" style={{ color: "var(--leaf)" }}>
+            ✉️ Mời người qua lịch Lark: đã bật ✓
+          </span>
+        ) : (
+          <div className="small" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              ✉️ Mời người qua lịch Lark: chưa bật
+              <a className="btn small" style={{ textDecoration: "none" }} href="/api/lark/auth?invite=1">
+                Bật quyền mời người
+              </a>
+            </span>
+            <span className="muted">
+              Cần quyền “Update event” (calendar:calendar.event:update) ở tab User token scopes và đã phát hành bản
+              mới trên console Lark.
+            </span>
+          </div>
+        ))}
     </div>
   );
 }
@@ -112,6 +136,21 @@ function OAuthNotice() {
   const lok = sp.get("lok");
   const gerr = sp.get("gerr");
   const lerr = sp.get("lerr");
+  const linv = sp.get("linv");
+  if (lok && linv === "1")
+    return (
+      <div className="warn" style={{ background: "var(--surface)" }}>
+        Đã bật quyền mời người qua lịch Lark ✓ — giờ Mai gửi mời được từ thẻ lịch và chi tiết sự kiện.
+      </div>
+    );
+  if (lok && linv === "0")
+    return (
+      <div className="warn">
+        Đã nối lại, nhưng Lark CHƯA cấp quyền mời người. Trên console Lark: Permissions &amp; Scopes → tab
+        User token scopes phải có “Update event” (calendar:calendar.event:update) → Version Management &amp;
+        Release → tạo bản mới + phát hành, rồi quay lại bấm “Bật quyền mời người”.
+      </div>
+    );
   if (gok || lok) return <div className="warn" style={{ background: "var(--surface)" }}>Đã nối xong ✓</div>;
   if (gerr === "config") return <div className="warn">Server chưa có GOOGLE_CLIENT_ID/SECRET.</div>;
   if (lerr === "config") return <div className="warn">Server chưa có LARK_APP_ID/LARK_APP_SECRET (Vercel → Environment Variables).</div>;
